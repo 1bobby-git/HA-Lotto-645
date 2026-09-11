@@ -1,0 +1,31 @@
+{
+  "title": "Lotto 6/45 Analysis",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Lotto 6/45 Analysis",
+        "description": "Analyze all official first-prize results and create selectable deterministic recommendations."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only one Lotto 6/45 Analysis instance can be configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Recommendation methods and Home Assistant AI",
+        "description": "Select one or more local analysis methods. Public formulas are common statistical filters and do not increase the mathematical winning probability. When no AI Task entity is selected, Home Assistant's preferred data-generation AI Task is used.",
+        "data": {
+          "selected_methods": "Recommendation methods (multiple selection)",
+          "enable_ai_recommendation": "Enable Home Assistant AI recommendation",
+          "ai_task_entity_id": "AI Task entity (optional; blank uses the preferred data AI Task)",
+          "ai_auto_generate": "Automatically generate AI recommendation for a new draw"
+        }
+      }
+    },
+    "error": {
+      "select_at_least_one": "Select at least one recommendation method."
+    }
+  }
+}
