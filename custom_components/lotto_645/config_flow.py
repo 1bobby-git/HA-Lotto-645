@@ -41,7 +41,12 @@ from .methods import (
     method_selector_options,
     normalize_method_ids,
 )
-from .myungri import SajuProfileError, extract_saju_profile, validate_saju_profile
+from .myungri import (
+    SajuProfileError,
+    extract_saju_profile,
+    has_complete_saju_profile,
+    validate_saju_profile,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,96 +62,31 @@ def _method_selector() -> selector.SelectSelector:
     )
 
 
-def _suggested_marker(key: str, options: dict[str, Any]) -> vol.Marker:
-    """Return an optional marker while never serializing suggested_value=None."""
+def _optional_text_marker(key: str, options: dict[str, Any]) -> vol.Marker:
+    """Return a plain optional text marker with a string default when present."""
     value = options.get(key)
     if value in (None, ""):
         return vol.Optional(key)
-    return vol.Optional(key, description={"suggested_value": value})
+    return vol.Optional(key, default=str(value))
 
 
-def _options_schema(options: dict[str, Any]) -> vol.Schema:
-    """Build one stable options form including the personal Saju profile fields.
+def _required_text_marker(key: str, options: dict[str, Any]) -> vol.Marker:
+    """Return a required text marker without invalid blank defaults."""
+    value = str(options.get(key, "") or "").strip()
+    if value:
+        return vol.Required(key, default=value)
+    return vol.Required(key)
 
-    Earlier versions moved to a second OptionsFlow step only after the user
-    selected the Saju method.  Some HA frontend versions surfaced that step
-    transition as a generic ``Unknown error occurred``.  Keeping the optional
-    birth fields in the same form removes that fragile transition and also makes
-    it obvious where personal Saju information is entered.
-    """
+
+def _recommendation_schema(options: dict[str, Any]) -> vol.Schema:
+    """Build the small, stable recommendation/AI/source options form."""
     selected = list(
         normalize_method_ids(options.get(CONF_SELECTED_METHODS, DEFAULT_METHOD_IDS))
     )
-    ai_entity_marker = _suggested_marker(CONF_AI_TASK_ENTITY_ID, options)
-    birth_date_marker = _suggested_marker(CONF_SAJU_BIRTH_DATE, options)
-    birth_time_marker = _suggested_marker(CONF_SAJU_BIRTH_TIME, options)
-    birth_place_marker = _suggested_marker(CONF_SAJU_BIRTH_PLACE, options)
-    longitude_marker = _suggested_marker(CONF_SAJU_LONGITUDE, options)
-
+    ai_entity_marker = _optional_text_marker(CONF_AI_TASK_ENTITY_ID, options)
     return vol.Schema(
         {
             vol.Required(CONF_SELECTED_METHODS, default=selected): _method_selector(),
-
-            # Personal Saju / Four Pillars profile.  These fields are always
-            # visible, but they are only required when METHOD_MYUNGRI_HETU is
-            # actually selected.  This keeps the UX explicit and avoids a
-            # second-step frontend transition.
-            vol.Optional(
-                CONF_SAJU_CALENDAR,
-                default=str(options.get(CONF_SAJU_CALENDAR, DEFAULT_SAJU_CALENDAR)),
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        {"value": "solar", "label": "양력"},
-                        {"value": "lunar", "label": "음력"},
-                    ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            birth_date_marker: selector.DateSelector(),
-            birth_time_marker: selector.TimeSelector(),
-            vol.Optional(
-                CONF_SAJU_GENDER,
-                default=str(options.get(CONF_SAJU_GENDER, "male")),
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        {"value": "male", "label": "남성"},
-                        {"value": "female", "label": "여성"},
-                    ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            birth_place_marker: selector.TextSelector(),
-            vol.Optional(
-                CONF_SAJU_TIMEZONE,
-                default=str(
-                    options.get(CONF_SAJU_TIMEZONE, DEFAULT_SAJU_TIMEZONE)
-                    or DEFAULT_SAJU_TIMEZONE
-                ),
-            ): selector.TextSelector(),
-            vol.Optional(
-                CONF_SAJU_LUNAR_LEAP_MONTH,
-                default=bool(options.get(CONF_SAJU_LUNAR_LEAP_MONTH, False)),
-            ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_SAJU_TRUE_SOLAR_TIME,
-                default=bool(
-                    options.get(
-                        CONF_SAJU_TRUE_SOLAR_TIME,
-                        DEFAULT_SAJU_TRUE_SOLAR_TIME,
-                    )
-                ),
-            ): selector.BooleanSelector(),
-            longitude_marker: selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=-180,
-                    max=180,
-                    step=0.0001,
-                    mode=selector.NumberSelectorMode.BOX,
-                )
-            ),
-
             vol.Optional(
                 CONF_ENABLE_AI,
                 default=bool(options.get(CONF_ENABLE_AI, DEFAULT_ENABLE_AI)),
@@ -169,6 +109,65 @@ def _options_schema(options: dict[str, Any]) -> vol.Schema:
                     )
                 ),
             ): selector.BooleanSelector(),
+        }
+    )
+
+
+def _saju_schema(options: dict[str, Any]) -> vol.Schema:
+    """Build a compatibility-first personal Saju form.
+
+    Birth date/time/longitude deliberately use TextSelector instead of the more
+    specialized date/time/number selectors.  The integration validates and
+    parses the values locally after submission.  This keeps the Options Flow
+    serializable across Home Assistant frontend versions and avoids a 400 while
+    the flow is being created.
+    """
+    calendar = str(options.get(CONF_SAJU_CALENDAR, DEFAULT_SAJU_CALENDAR))
+    gender = str(options.get(CONF_SAJU_GENDER, "male") or "male")
+    timezone = str(
+        options.get(CONF_SAJU_TIMEZONE, DEFAULT_SAJU_TIMEZONE)
+        or DEFAULT_SAJU_TIMEZONE
+    )
+    longitude_marker = _optional_text_marker(CONF_SAJU_LONGITUDE, options)
+
+    return vol.Schema(
+        {
+            vol.Required(CONF_SAJU_CALENDAR, default=calendar): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": "solar", "label": "양력"},
+                        {"value": "lunar", "label": "음력"},
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            _required_text_marker(CONF_SAJU_BIRTH_DATE, options): selector.TextSelector(),
+            _required_text_marker(CONF_SAJU_BIRTH_TIME, options): selector.TextSelector(),
+            vol.Required(CONF_SAJU_GENDER, default=gender): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": "male", "label": "남성"},
+                        {"value": "female", "label": "여성"},
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            _required_text_marker(CONF_SAJU_BIRTH_PLACE, options): selector.TextSelector(),
+            vol.Required(CONF_SAJU_TIMEZONE, default=timezone): selector.TextSelector(),
+            vol.Optional(
+                CONF_SAJU_LUNAR_LEAP_MONTH,
+                default=bool(options.get(CONF_SAJU_LUNAR_LEAP_MONTH, False)),
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_SAJU_TRUE_SOLAR_TIME,
+                default=bool(
+                    options.get(
+                        CONF_SAJU_TRUE_SOLAR_TIME,
+                        DEFAULT_SAJU_TRUE_SOLAR_TIME,
+                    )
+                ),
+            ): selector.BooleanSelector(),
+            longitude_marker: selector.TextSelector(),
         }
     )
 
@@ -214,10 +213,19 @@ class Lotto645OptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Show and save all user-facing options on one stable form."""
+        """Show a schema-free menu so opening Configure cannot fail on selectors."""
+        del user_input
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["recommendations", "saju"],
+        )
+
+    async def async_step_recommendations(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit recommendation methods, AI and cautious source settings."""
         errors: dict[str, str] = {}
         form_values = dict(self._options)
-
         if user_input is not None:
             form_values.update(user_input)
             try:
@@ -230,30 +238,78 @@ class Lotto645OptionsFlow(OptionsFlow):
                     pending = dict(self._options)
                     pending.update(user_input)
                     pending[CONF_SELECTED_METHODS] = list(normalized)
-
                     if not pending.get(CONF_AI_TASK_ENTITY_ID):
                         pending.pop(CONF_AI_TASK_ENTITY_ID, None)
-                    if pending.get(CONF_SAJU_CALENDAR) != "lunar":
-                        pending[CONF_SAJU_LUNAR_LEAP_MONTH] = False
-                    if not pending.get(CONF_SAJU_TRUE_SOLAR_TIME):
-                        pending.pop(CONF_SAJU_LONGITUDE, None)
 
                     if METHOD_MYUNGRI_HETU in normalized:
                         profile = extract_saju_profile(pending)
-                        try:
-                            validate_saju_profile(profile)
-                        except SajuProfileError as err:
-                            _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
-                            errors["base"] = "invalid_saju_profile"
+                        if not has_complete_saju_profile(profile):
+                            errors["base"] = "saju_profile_required"
+                        else:
+                            try:
+                                validate_saju_profile(profile)
+                            except SajuProfileError as err:
+                                _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
+                                errors["base"] = "invalid_saju_profile"
 
                     if not errors:
                         return self.async_create_entry(title="", data=pending)
-            except Exception as err:  # Keep the options dialog usable on HA UI.
-                _LOGGER.exception("로또 옵션 처리 중 예상하지 못한 오류: %s", err)
+            except (TypeError, ValueError) as err:
+                _LOGGER.exception("추천 방식 옵션 처리 중 오류: %s", err)
                 errors["base"] = "options_error"
 
         return self.async_show_form(
-            step_id="init",
-            data_schema=_options_schema(form_values),
+            step_id="recommendations",
+            data_schema=_recommendation_schema(form_values),
+            errors=errors,
+        )
+
+    async def async_step_saju(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit and validate the personal Four Pillars profile independently."""
+        errors: dict[str, str] = {}
+        form_values = dict(self._options)
+        if user_input is not None:
+            form_values.update(user_input)
+            pending = dict(self._options)
+            pending.update(user_input)
+            pending[CONF_SAJU_BIRTH_DATE] = str(
+                pending.get(CONF_SAJU_BIRTH_DATE, "") or ""
+            ).strip()
+            pending[CONF_SAJU_BIRTH_TIME] = str(
+                pending.get(CONF_SAJU_BIRTH_TIME, "") or ""
+            ).strip()
+            pending[CONF_SAJU_BIRTH_PLACE] = str(
+                pending.get(CONF_SAJU_BIRTH_PLACE, "") or ""
+            ).strip()
+            pending[CONF_SAJU_TIMEZONE] = str(
+                pending.get(CONF_SAJU_TIMEZONE, DEFAULT_SAJU_TIMEZONE)
+                or DEFAULT_SAJU_TIMEZONE
+            ).strip()
+            if pending.get(CONF_SAJU_CALENDAR) != "lunar":
+                pending[CONF_SAJU_LUNAR_LEAP_MONTH] = False
+            if not pending.get(CONF_SAJU_TRUE_SOLAR_TIME):
+                pending.pop(CONF_SAJU_LONGITUDE, None)
+            elif pending.get(CONF_SAJU_LONGITUDE) not in (None, ""):
+                pending[CONF_SAJU_LONGITUDE] = str(
+                    pending[CONF_SAJU_LONGITUDE]
+                ).strip()
+
+            try:
+                validate_saju_profile(extract_saju_profile(pending))
+            except SajuProfileError as err:
+                _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
+                errors["base"] = "invalid_saju_profile"
+            except (TypeError, ValueError) as err:
+                _LOGGER.exception("개인 사주정보 처리 중 오류: %s", err)
+                errors["base"] = "options_error"
+            else:
+                return self.async_create_entry(title="", data=pending)
+            form_values = pending
+
+        return self.async_show_form(
+            step_id="saju",
+            data_schema=_saju_schema(form_values),
             errors=errors,
         )
