@@ -7,9 +7,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DISCLAIMER, FIRST_PRIZE_ODDS, SOURCE_NAME, SOURCE_RESULT_URL
+from .const import (
+    DISCLAIMER,
+    FIRST_PRIZE_ODDS,
+    PUBLIC_FORMULA_NOTICE,
+    SOURCE_NAME,
+    SOURCE_RESULT_URL,
+)
 from .coordinator import Lotto645Coordinator
 from .entity import Lotto645Entity
+from .methods import METHODS_BY_ID
 
 PARALLEL_UPDATES = 0
 
@@ -25,12 +32,17 @@ async def async_setup_entry(
         LottoRecommendationsSensor(coordinator),
         LottoLatestDrawSensor(coordinator),
     ]
-    entities.extend(LottoGameSensor(coordinator, index) for index in range(5))
+    entities.extend(
+        LottoGameSensor(coordinator, method_id)
+        for method_id in coordinator.selected_method_ids
+    )
+    if coordinator.ai_enabled:
+        entities.append(LottoAiRecommendationSensor(coordinator))
     async_add_entities(entities)
 
 
 class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
-    """Summary sensor for all five games."""
+    """Summary sensor for all selected games."""
 
     _attr_name = "추천 요약"
     _attr_icon = "mdi:ticket-confirmation-outline"
@@ -47,6 +59,9 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data
         analysis = data.analysis
+        games = [item.as_attributes() for item in analysis.recommendations]
+        if data.ai_recommendation is not None:
+            games.append(data.ai_recommendation.as_attributes())
         return {
             "target_round": analysis.target_round,
             "based_on_round": analysis.based_on_round,
@@ -55,41 +70,121 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
             "source_status": data.source_status,
             "data_source": SOURCE_NAME,
             "source_url": SOURCE_RESULT_URL,
-            "games": [rec.as_attributes() for rec in analysis.recommendations],
+            "selected_method_ids": list(self.coordinator.selected_method_ids),
+            "selected_method_count": len(self.coordinator.selected_method_ids),
+            "games": games,
             "analysis_summary": analysis.summary,
+            "ai_enabled": self.coordinator.ai_enabled,
+            "ai_status": data.ai_status,
+            "ai_error": data.ai_error,
+            "ai_generated_at": (
+                data.ai_generated_at.isoformat()
+                if data.ai_generated_at
+                else None
+            ),
             "first_prize_odds": FIRST_PRIZE_ODDS,
+            "public_formula_notice": PUBLIC_FORMULA_NOTICE,
             "disclaimer": DISCLAIMER,
         }
 
 
 class LottoGameSensor(Lotto645Entity, SensorEntity):
-    """One of the five recommended games."""
+    """Recommendation produced by one selected method."""
 
     _attr_icon = "mdi:numeric"
 
-    def __init__(self, coordinator: Lotto645Coordinator, index: int) -> None:
+    def __init__(
+        self, coordinator: Lotto645Coordinator, method_id: str
+    ) -> None:
         super().__init__(coordinator)
-        self.index = index
-        self._attr_name = f"추천 게임 {index + 1}"
-        self._attr_unique_id = f"{coordinator.entry.entry_id}_game_{index + 1}"
+        self.method_id = method_id
+        method = METHODS_BY_ID[method_id]
+        self._attr_name = method.label
+        self._attr_unique_id = (
+            f"{coordinator.entry.entry_id}_method_{method_id}"
+        )
 
     @property
-    def native_value(self) -> str:
-        recommendation = self.coordinator.data.analysis.recommendations[self.index]
+    def available(self) -> bool:
+        return (
+            super().available
+            and self.coordinator.data.analysis.recommendation_by_method(
+                self.method_id
+            )
+            is not None
+        )
+
+    @property
+    def native_value(self) -> str | None:
+        recommendation = (
+            self.coordinator.data.analysis.recommendation_by_method(
+                self.method_id
+            )
+        )
+        if recommendation is None:
+            return None
         return ", ".join(str(number) for number in recommendation.numbers)
 
     @property
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data
-        recommendation = data.analysis.recommendations[self.index]
+        recommendation = data.analysis.recommendation_by_method(self.method_id)
+        if recommendation is None:
+            return {}
         return {
             **recommendation.as_attributes(),
             "target_round": data.analysis.target_round,
             "based_on_round": data.analysis.based_on_round,
             "history_draws": data.history_count,
             "first_prize_odds": FIRST_PRIZE_ODDS,
+            "public_formula_notice": PUBLIC_FORMULA_NOTICE,
             "disclaimer": DISCLAIMER,
         }
+
+
+class LottoAiRecommendationSensor(Lotto645Entity, SensorEntity):
+    """Validated recommendation generated by the preferred HA AI Task."""
+
+    _attr_name = "Home Assistant AI 추천"
+    _attr_icon = "mdi:creation-outline"
+
+    def __init__(self, coordinator: Lotto645Coordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_ai_recommendation"
+
+    @property
+    def native_value(self) -> str:
+        data = self.coordinator.data
+        if data.ai_recommendation is not None:
+            return ", ".join(
+                str(number) for number in data.ai_recommendation.numbers
+            )
+        return data.ai_status
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        data = self.coordinator.data
+        attributes = {
+            "status": data.ai_status,
+            "error": data.ai_error,
+            "generated_at": (
+                data.ai_generated_at.isoformat()
+                if data.ai_generated_at
+                else None
+            ),
+            "configured_ai_task_entity": (
+                self.coordinator.configured_ai_entity_id
+                or "HA preferred data AI Task"
+            ),
+            "auto_generate": self.coordinator.ai_auto_generate,
+            "target_round": data.analysis.target_round,
+            "based_on_round": data.analysis.based_on_round,
+            "first_prize_odds": FIRST_PRIZE_ODDS,
+            "disclaimer": DISCLAIMER,
+        }
+        if data.ai_recommendation is not None:
+            attributes.update(data.ai_recommendation.as_attributes())
+        return attributes
 
 
 class LottoLatestDrawSensor(Lotto645Entity, SensorEntity):
