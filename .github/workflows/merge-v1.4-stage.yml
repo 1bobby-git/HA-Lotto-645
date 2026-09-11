@@ -1,0 +1,28 @@
+name: Merge v1.4 Stage
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/merge-v1.4-stage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge prepared v1.4 stage
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin v1.4-stage:v1.4-stage
+          git merge --no-ff v1.4-stage -m "feat: merge v1.4 recommendation and branding improvements"
+          git push origin main
