@@ -75,7 +75,8 @@ jobs:
 
       - name: Commit mirror only when changed
         run: |
-          if git diff --quiet -- data/lotto645-history.json custom_components/lotto_645/history_seed.json; then
+          CHANGES="$(git status --porcelain -- data/lotto645-history.json custom_components/lotto_645/history_seed.json)"
+          if [ -z "$CHANGES" ]; then
             echo "Mirror unchanged"
             exit 0
           fi
