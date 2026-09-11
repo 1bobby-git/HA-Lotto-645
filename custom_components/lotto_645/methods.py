@@ -3,6 +3,10 @@
 The entries described as public formulas are commonly published filtering or
 ranking heuristics. They are not mathematical prediction formulas and do not
 change the probability of an individual six-number combination.
+
+The traditional metaphysics profile uses reproducible East Asian calendrical
+and five-element rules. It is culturally/traditionally established, not
+scientifically validated as a lottery prediction method.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ class MethodDefinition:
     balance_weight: float = 0.0
     delta_weight: float = 0.0
     carryover_weight: float = 0.0
+    myungri_weight: float = 0.0
     pool_size: int = 22
 
 
@@ -38,6 +43,7 @@ METHOD_BALANCE: Final = "balance_formula"
 METHOD_DELTA: Final = "delta_system"
 METHOD_CARRYOVER: Final = "carryover_formula"
 METHOD_PUBLIC_ENSEMBLE: Final = "public_ensemble"
+METHOD_MYUNGRI_HETU: Final = "myungri_hetu_day_pillar"
 
 METHODS: Final[tuple[MethodDefinition, ...]] = (
     MethodDefinition(
@@ -202,6 +208,30 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         diversity_weight=0.10,
         pool_size=24,
     ),
+    MethodDefinition(
+        METHOD_MYUNGRI_HETU,
+        "명리 권장 · 일진 오행·하도 수리",
+        "전통 명리 권장",
+        (
+            "다음 추첨일의 60갑자 일주 천간(日干/Day Master)·지지 오행과 "
+            "하도(河圖) 수리오행을 결합합니다. 전통 명리에서 대표적이고 "
+            "계산 규칙이 명확한 체계를 사용하지만 당첨 확률 상승이 과학적으로 "
+            "검증된 방식은 아닙니다."
+        ),
+        {
+            "myungri_resonance": 0.60,
+            "graph_strength": 0.12,
+            "transition": 0.10,
+            "gap_balance": 0.08,
+            "frequency_100": 0.05,
+            "long_neutral": 0.05,
+        },
+        pair_weight=0.08,
+        balance_weight=0.10,
+        diversity_weight=0.06,
+        myungri_weight=0.34,
+        pool_size=20,
+    ),
 )
 
 METHODS_BY_ID: Final = {method.method_id: method for method in METHODS}
@@ -212,10 +242,17 @@ DEFAULT_METHOD_IDS: Final[tuple[str, ...]] = (
     METHOD_WEIGHTED_FREQUENCY,
     METHOD_PAIR_COOCCURRENCE,
     METHOD_PUBLIC_ENSEMBLE,
+    METHOD_MYUNGRI_HETU,
 )
 
 PUBLIC_METHOD_IDS: Final[tuple[str, ...]] = tuple(
-    method.method_id for method in METHODS if method.category != "독창 분석"
+    method.method_id
+    for method in METHODS
+    if method.category in {"공개 분석식", "추천 공개 분석식"}
+)
+
+TRADITIONAL_METHOD_IDS: Final[tuple[str, ...]] = tuple(
+    method.method_id for method in METHODS if method.category == "전통 명리 권장"
 )
 
 

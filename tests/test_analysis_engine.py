@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 import importlib.util
 from pathlib import Path
 import random
@@ -34,19 +35,22 @@ def _load(name: str) -> types.ModuleType:
 const = _load("const")
 models = _load("models")
 methods = _load("methods")
+myungri = _load("myungri")
 analysis = _load("analysis")
 
 
 def _history(count: int = 180):
     rng = random.Random(645)
     rows = []
+    start = date(2022, 1, 1)
     for round_no in range(1, count + 1):
         numbers = tuple(sorted(rng.sample(range(1, 46), 6)))
         remaining = [number for number in range(1, 46) if number not in numbers]
+        draw_date = start.fromordinal(start.toordinal() + (round_no - 1) * 7)
         rows.append(
             models.LottoDraw(
                 round=round_no,
-                draw_date=f"2026-01-{((round_no - 1) % 28) + 1:02d}",
+                draw_date=draw_date.isoformat(),
                 numbers=numbers,
                 bonus=rng.choice(remaining),
             )
@@ -54,11 +58,30 @@ def _history(count: int = 180):
     return rows
 
 
-def test_catalog_exposes_original_and_public_methods():
-    assert len(methods.METHODS) == 10
+def test_catalog_exposes_original_public_and_traditional_methods():
+    assert len(methods.METHODS) == 11
     assert len(methods.PUBLIC_METHOD_IDS) == 8
+    assert len(methods.TRADITIONAL_METHOD_IDS) == 1
     assert methods.METHOD_PUBLIC_ENSEMBLE in methods.DEFAULT_METHOD_IDS
+    assert methods.METHOD_MYUNGRI_HETU in methods.DEFAULT_METHOD_IDS
     assert len(set(methods.DEFAULT_METHOD_IDS)) == len(methods.DEFAULT_METHOD_IDS)
+
+
+def test_sexagenary_anchor_and_hetu_mapping():
+    anchor = myungri.sexagenary_day(date(1949, 10, 1))
+    assert anchor["name"] == "갑자(甲子)"
+    assert anchor["cycle_position"] == 1
+
+    assert myungri.number_element(1) == "water"
+    assert myungri.number_element(6) == "water"
+    assert myungri.number_element(2) == "fire"
+    assert myungri.number_element(7) == "fire"
+    assert myungri.number_element(3) == "wood"
+    assert myungri.number_element(8) == "wood"
+    assert myungri.number_element(4) == "metal"
+    assert myungri.number_element(9) == "metal"
+    assert myungri.number_element(5) == "earth"
+    assert myungri.number_element(10) == "earth"
 
 
 def test_selected_methods_keep_order_and_exclude_past_exact_winners():
@@ -67,6 +90,7 @@ def test_selected_methods_keep_order_and_exclude_past_exact_winners():
         methods.METHOD_PHASE_RESIDUAL,
         methods.METHOD_WEIGHTED_FREQUENCY,
         methods.METHOD_PUBLIC_ENSEMBLE,
+        methods.METHOD_MYUNGRI_HETU,
     )
     result = analysis.build_analysis(history, selected)
     assert [item.method_id for item in result.recommendations] == list(selected)
@@ -79,12 +103,21 @@ def test_selected_methods_keep_order_and_exclude_past_exact_winners():
         assert recommendation.numbers not in past
         assert recommendation.details["exact_past_first_prize_match"] is False
 
+    traditional = result.recommendation_by_method(methods.METHOD_MYUNGRI_HETU)
+    assert traditional is not None
+    assert traditional.details["traditional_method"].startswith("60갑자")
+    assert traditional.details["target_draw_date"]
+    assert traditional.details["sexagenary_day"]
+    assert traditional.details["day_master_element"] in {"목", "화", "토", "금", "수"}
+    assert sum(traditional.details["five_element_counts"].values()) == 6
+
 
 def test_same_history_and_options_are_deterministic():
     history = _history(120)
     selected = (
         methods.METHOD_TRANSITION_GAP,
         methods.METHOD_PAIR_COOCCURRENCE,
+        methods.METHOD_MYUNGRI_HETU,
     )
     first = analysis.build_analysis(history, selected)
     second = analysis.build_analysis(history, selected)

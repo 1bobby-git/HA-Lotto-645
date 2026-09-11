@@ -1,8 +1,12 @@
 """Deterministic, selectable Lotto 6/45 heuristic analysis engine.
 
 The engine converts complete historical results into residual, transition,
-co-occurrence, gap, balance, delta, and carry-over features. Public-formula
-profiles are common analysis or filtering rules, not predictive mathematics.
+co-occurrence, gap, balance, delta, carry-over, and optional traditional
+East-Asian calendrical/five-element features.
+
+Public-formula and traditional-metaphysics profiles are heuristic filters, not
+predictive mathematics. They do not change the probability of an individual
+six-number combination.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from .methods import (
     METHOD_CARRYOVER,
     METHOD_DELTA,
     METHOD_HOT_NUMBERS,
+    METHOD_MYUNGRI_HETU,
     METHOD_OVERDUE_GAP,
     METHOD_PAIR_COOCCURRENCE,
     METHOD_PHASE_RESIDUAL,
@@ -32,6 +37,11 @@ from .methods import (
     normalize_method_ids,
 )
 from .models import AnalysisResult, LottoDraw, Recommendation
+from .myungri import (
+    build_myungri_context,
+    combo_myungri_details,
+    combo_myungri_score,
+)
 
 NUMBERS = tuple(range(1, 46))
 DRAW_SIZE = 6
@@ -147,6 +157,7 @@ def _feature_maps(
             number: _z_residual(counts[size][number], trials, NUMBER_PROBABILITY)
             for number in NUMBERS
         }
+
     z_long = {
         number: _z_residual(count_long[number], n, NUMBER_PROBABILITY)
         for number in NUMBERS
@@ -191,6 +202,7 @@ def _feature_maps(
 
     transition = _transition_scores(history)
     pair_graph, graph_strength = _pair_graph(history)
+    myungri = build_myungri_context(history[-1].draw_date)
 
     raw_features = {
         "counter_phase": counter_phase,
@@ -214,6 +226,7 @@ def _feature_maps(
         "frequency_30": z30,
         "frequency_100": z100,
         "frequency_long": z_long,
+        "myungri_resonance": dict(myungri["number_resonance"]),
     }
     ranked = {
         name: _rank01(values) for name, values in raw_features.items()
@@ -231,6 +244,7 @@ def _feature_maps(
         "pair_graph": pair_graph,
         "graph_strength_raw": graph_strength,
         "ranked": ranked,
+        "myungri": myungri,
     }
     return ranked, context
 
@@ -293,7 +307,9 @@ def _delta_score(combo: tuple[int, ...]) -> float:
     uniqueness = len(set(deltas)) / len(deltas)
     repeated_penalty = max(0, max(Counter(deltas).values()) - 2) / 4
     max_delta_score = max(0.0, 1.0 - abs(max(deltas) - 11) / 18)
-    range_score = max(0.0, 1.0 - abs((combo[-1] - combo[0]) - 34) / 30)
+    range_score = max(
+        0.0, 1.0 - abs((combo[-1] - combo[0]) - 34) / 30
+    )
     return max(
         0.0,
         0.42 * within_15
@@ -340,6 +356,7 @@ def _score_components(
         "balance": _balance_score(combo),
         "delta": _delta_score(combo),
         "carryover": _carryover_score(combo, latest_numbers),
+        "myungri": combo_myungri_score(combo, context["myungri"]),
     }
 
 
@@ -375,6 +392,7 @@ def _combo_score(
         + method.balance_weight * components["balance"]
         + method.delta_weight * components["delta"]
         + method.carryover_weight * components["carryover"]
+        + method.myungri_weight * components["myungri"]
         - penalty
     )
     components["historical_similarity_penalty"] = penalty
@@ -443,6 +461,7 @@ def _select_candidate(
                 for previous in selected
             ):
                 return combo, score, components
+
     if not scored:
         raise ValueError("추천 가능한 조합을 생성하지 못했습니다")
     return scored[0][1], scored[0][0], scored[0][2]
@@ -483,49 +502,61 @@ def _recommendation_reason(
     overdue_leaders = sorted(combo, key=lambda n: (-gap[n], n))[:2]
     pair, pair_value = _strongest_pair(combo, context)
 
-    reasons = {
-        METHOD_PHASE_RESIDUAL: (
-            f"장·단기 잔차 방향 변화가 큰 {phase_leaders[0]}·{phase_leaders[1]}, "
-            f"전이 상위 {transition_leaders[0]}, 강한 연결 {pair[0]}-{pair[1]} 반영"
-        ),
-        METHOD_TRANSITION_GAP: (
-            f"다음 회차 전이 상위 {transition_leaders[0]}·{transition_leaders[1]}와 "
-            f"미출현 간격·시간축 곡률, {pair[0]}-{pair[1]} 연결을 결합"
-        ),
-        METHOD_WEIGHTED_FREQUENCY: (
-            f"최근 10·30·100회 및 전체 빈도를 가중 합산하고 "
-            f"{pair[0]}-{pair[1]} 동반출현과 구간 균형을 보정"
-        ),
-        METHOD_HOT_NUMBERS: (
-            f"최근 출현 상승세가 큰 {phase_leaders[0]}·{phase_leaders[1]}를 중심으로 "
-            f"핫넘버 집중과 번호대 쏠림을 함께 제어"
-        ),
-        METHOD_OVERDUE_GAP: (
-            f"현재 미출현 간격이 긴 {overdue_leaders[0]}·{overdue_leaders[1]}를 포함하되 "
-            f"콜드넘버 과집중과 장기 극단값을 제한"
-        ),
-        METHOD_PAIR_COOCCURRENCE: (
-            f"전체+최근 120회 동반출현 그래프 중심 조합이며 "
-            f"가장 강한 내부 연결은 {pair[0]}-{pair[1]}"
-        ),
-        METHOD_BALANCE: (
-            f"번호합 {sum(combo)}, 홀수 {sum(n % 2 for n in combo)}개, "
-            f"저구간 {sum(n <= 22 for n in combo)}개와 번호대 분산을 균형화"
-        ),
-        METHOD_DELTA: (
-            "오름차순 번호 간 델타의 크기·반복·전체 범위를 공개 델타 규칙으로 "
-            f"평가하고 {pair[0]}-{pair[1]} 연결을 보조 반영"
-        ),
-        METHOD_CARRYOVER: (
-            f"직전 회차와 {len(set(combo) & set(context['latest_numbers']))}개 이월을 "
-            f"허용하고 전이 상위 {transition_leaders[0]}·{transition_leaders[1]}를 결합"
-        ),
-        METHOD_PUBLIC_ENSEMBLE: (
-            f"가중 빈도·미출현·동반출현·균형·델타·이월수의 합의 점수를 적용; "
-            f"핵심 연결 {pair[0]}-{pair[1]}, 번호합 {sum(combo)}"
-        ),
-    }
-    details = {
+    if method.method_id == METHOD_MYUNGRI_HETU:
+        meta = context["myungri"]
+        reason = (
+            f"{meta.get('target_draw_date') or '다음 추첨일'} "
+            f"{meta.get('sexagenary_day') or '일진'}의 일간 "
+            f"{meta.get('day_master_element_ko') or '오행'}과 "
+            "하도 수리오행의 상생·동기 관계, 오행 분산·음양 균형을 중심으로 "
+            f"{pair[0]}-{pair[1]} 통계 연결을 보조 반영"
+        )
+    else:
+        reasons = {
+            METHOD_PHASE_RESIDUAL: (
+                f"장·단기 잔차 방향 변화가 큰 {phase_leaders[0]}·{phase_leaders[1]}, "
+                f"전이 상위 {transition_leaders[0]}, 강한 연결 {pair[0]}-{pair[1]} 반영"
+            ),
+            METHOD_TRANSITION_GAP: (
+                f"다음 회차 전이 상위 {transition_leaders[0]}·{transition_leaders[1]}와 "
+                f"미출현 간격·시간축 곡률, {pair[0]}-{pair[1]} 연결을 결합"
+            ),
+            METHOD_WEIGHTED_FREQUENCY: (
+                f"최근 10·30·100회 및 전체 빈도를 가중 합산하고 "
+                f"{pair[0]}-{pair[1]} 동반출현과 구간 균형을 보정"
+            ),
+            METHOD_HOT_NUMBERS: (
+                f"최근 출현 상승세가 큰 {phase_leaders[0]}·{phase_leaders[1]}를 중심으로 "
+                "핫넘버 집중과 번호대 쏠림을 함께 제어"
+            ),
+            METHOD_OVERDUE_GAP: (
+                f"현재 미출현 간격이 긴 {overdue_leaders[0]}·{overdue_leaders[1]}를 포함하되 "
+                "콜드넘버 과집중과 장기 극단값을 제한"
+            ),
+            METHOD_PAIR_COOCCURRENCE: (
+                "전체+최근 120회 동반출현 그래프 중심 조합이며 "
+                f"가장 강한 내부 연결은 {pair[0]}-{pair[1]}"
+            ),
+            METHOD_BALANCE: (
+                f"번호합 {sum(combo)}, 홀수 {sum(n % 2 for n in combo)}개, "
+                f"저구간 {sum(n <= 22 for n in combo)}개와 번호대 분산을 균형화"
+            ),
+            METHOD_DELTA: (
+                "오름차순 번호 간 델타의 크기·반복·전체 범위를 공개 델타 규칙으로 "
+                f"평가하고 {pair[0]}-{pair[1]} 연결을 보조 반영"
+            ),
+            METHOD_CARRYOVER: (
+                f"직전 회차와 {len(set(combo) & set(context['latest_numbers']))}개 이월을 "
+                f"허용하고 전이 상위 {transition_leaders[0]}·{transition_leaders[1]}를 결합"
+            ),
+            METHOD_PUBLIC_ENSEMBLE: (
+                "가중 빈도·미출현·동반출현·균형·델타·이월수의 합의 점수를 적용; "
+                f"핵심 연결 {pair[0]}-{pair[1]}, 번호합 {sum(combo)}"
+            ),
+        }
+        reason = reasons[method.method_id]
+
+    details: dict[str, Any] = {
         "method_description": method.description,
         "method_category": method.category,
         "phase_leaders": phase_leaders,
@@ -540,7 +571,9 @@ def _recommendation_reason(
             set(combo) & set(context["latest_numbers"])
         ),
     }
-    return reasons[method.method_id], details
+    if method.method_id == METHOD_MYUNGRI_HETU:
+        details.update(combo_myungri_details(combo, context["myungri"]))
+    return reason, details
 
 
 def build_analysis(
@@ -611,8 +644,9 @@ def build_analysis(
     transition = context["transition_raw"]
     velocity = context["velocity"]
     graph_strength = context["graph_strength_raw"]
+    myungri = context["myungri"]
     summary = {
-        "algorithm": "selectable_multi_formula_v2",
+        "algorithm": "selectable_multi_formula_v3",
         "history_draws": len(history),
         "selected_method_ids": list(selected_method_ids),
         "selected_methods": [
@@ -633,6 +667,16 @@ def build_analysis(
         "top_graph_strength": sorted(
             NUMBERS, key=lambda n: (-graph_strength[n], n)
         )[:6],
+        "myungri_context": {
+            "status": myungri.get("status"),
+            "target_draw_date": myungri.get("target_draw_date"),
+            "sexagenary_day": myungri.get("sexagenary_day"),
+            "day_master": myungri.get("day_master"),
+            "day_master_element": myungri.get("day_master_element_ko"),
+            "day_branch": myungri.get("day_branch"),
+            "day_branch_element": myungri.get("day_branch_element_ko"),
+            "notice": myungri.get("notice"),
+        },
         "first_prize_odds": FIRST_PRIZE_ODDS,
         "public_formula_notice": PUBLIC_FORMULA_NOTICE,
         "disclaimer": DISCLAIMER,
