@@ -14,42 +14,59 @@
   "options": {
     "step": {
       "init": {
-        "title": "Recommendation methods, personal Four Pillars, AI, and data source",
-        "description": "All settings are shown on one screen. If Personal Four Pillars is selected, fill every [Saju] required field below before saving. If it is not selected, those fields may be left empty.",
+        "title": "Lotto 6/45 settings",
+        "description": "Choose which settings to edit. Recommendation settings and personal Four Pillars data are separated so the Configure dialog remains compatible and reliable.",
+        "menu_options": {
+          "recommendations": "Recommendation methods, AI, and data source",
+          "saju": "Personal Four Pillars profile"
+        }
+      },
+      "recommendations": {
+        "title": "Recommendation methods, AI, and data source",
+        "description": "Select one or more methods. To enable Personal Four Pillars, first save the birth profile from the previous menu. Detailed explanations are available on the Recommendation Method Guide sensor.",
         "data": {
           "selected_methods": "Recommendation methods (multiple selection)",
-          "saju_calendar": "[Saju] Birth calendar",
-          "saju_birth_date": "[Saju] Birth date",
-          "saju_birth_time": "[Saju] Birth time",
-          "saju_gender": "[Saju] Gender (luck-cycle direction)",
-          "saju_birth_place": "[Saju] Birth place",
-          "saju_timezone": "[Saju] Birth timezone (IANA)",
-          "saju_lunar_leap_month": "[Saju] Lunar leap month",
-          "saju_true_solar_time": "[Saju] Use true solar time correction",
-          "saju_longitude": "[Saju] Birth longitude",
           "enable_ai_recommendation": "Enable Home Assistant AI recommendation",
           "ai_task_entity_id": "AI Task entity (optional; blank uses the preferred data AI Task)",
           "ai_auto_generate": "Automatically generate AI recommendation for a new draw",
           "allow_official_direct_fallback": "Allow limited direct Donghaeng Lottery fallback"
         },
         "data_description": {
-          "selected_methods": "Multiple methods can be selected. When Personal Four Pillars is selected, provide calendar, birth date/time, gender, birth place and timezone in the [Saju] fields below. None of these methods changes the mathematical winning probability.",
-          "saju_birth_date": "Required only when the Personal Four Pillars method is selected.",
-          "saju_birth_time": "Required only when the Personal Four Pillars method is selected.",
-          "saju_birth_place": "Required only when the Personal Four Pillars method is selected. No external geocoding request is made.",
-          "saju_timezone": "For births in Korea, Asia/Seoul is normally used.",
-          "saju_lunar_leap_month": "Used only for a lunar-calendar birth date.",
-          "saju_true_solar_time": "When enabled, the hour pillar time is corrected using timezone meridian, longitude and equation of time.",
-          "saju_longitude": "Only needed when true solar time correction is enabled.",
+          "selected_methods": "Multiple methods can be selected. Personal Four Pillars can only be enabled after the personal profile has been saved. None of these methods changes the mathematical winning probability.",
           "enable_ai_recommendation": "AI is independent from local methods. Manual Refresh / Regenerate does not regenerate the AI recommendation.",
           "ai_auto_generate": "Only generates AI automatically when a new official draw is detected. Manual local regeneration suppresses AI generation.",
           "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed."
+        }
+      },
+      "saju": {
+        "title": "Personal Four Pillars profile",
+        "description": "Save personal birth information before using the Four Pillars recommendation. Enter the birth date as YYYY-MM-DD and birth time as HH:MM. Raw birth values remain in Home Assistant and are not sent to the lottery mirror or HA AI prompts.",
+        "data": {
+          "saju_calendar": "Birth calendar",
+          "saju_birth_date": "Birth date (YYYY-MM-DD)",
+          "saju_birth_time": "Birth time (HH:MM)",
+          "saju_gender": "Gender (luck-cycle direction)",
+          "saju_birth_place": "Birth place",
+          "saju_timezone": "Birth timezone (IANA)",
+          "saju_lunar_leap_month": "Lunar leap month",
+          "saju_true_solar_time": "Use true solar time correction",
+          "saju_longitude": "Birth longitude (optional)"
+        },
+        "data_description": {
+          "saju_birth_date": "Example: 1982-03-15",
+          "saju_birth_time": "Example: 14:30. Use the actual birth time when available.",
+          "saju_birth_place": "Example: Seoul, South Korea. No external geocoding request is made.",
+          "saju_timezone": "For births in Korea, Asia/Seoul is normally used.",
+          "saju_lunar_leap_month": "Used only for lunar-calendar birth dates.",
+          "saju_true_solar_time": "When enabled, the hour pillar time is corrected using timezone meridian, longitude and equation of time.",
+          "saju_longitude": "Only needed when true solar time correction is enabled."
         }
       }
     },
     "error": {
       "select_at_least_one": "Select at least one recommendation method.",
-      "invalid_saju_profile": "Personal Four Pillars is selected, but the required [Saju] birth profile is missing or invalid.",
+      "saju_profile_required": "Save the Personal Four Pillars profile from the previous menu before enabling this recommendation method.",
+      "invalid_saju_profile": "The Four Pillars profile is missing or invalid. Check all required birth fields.",
       "options_error": "An error occurred while processing the options. Check the entered values and try again."
     }
   }
