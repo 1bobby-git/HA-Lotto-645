@@ -1,0 +1,58 @@
+name: Render Local Brand Assets
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - images/logo-horizontal.svg
+      - images/icon-square.svg
+      - scripts/render_brand.py
+      - .github/workflows/render-brand.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lotto-brand-render
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install SVG renderer
+        run: python -m pip install --disable-pip-version-check "CairoSVG>=2.7,<3"
+
+      - name: Render Home Assistant brand PNGs
+        run: python scripts/render_brand.py
+
+      - name: Commit rendered PNGs when changed
+        run: |
+          PATHS=(
+            custom_components/lotto_645/brand/logo.png
+            custom_components/lotto_645/brand/logo@2x.png
+            custom_components/lotto_645/brand/icon.png
+            custom_components/lotto_645/brand/icon@2x.png
+            images/logo-horizontal.png
+            images/icon-square.png
+          )
+          git add "${PATHS[@]}"
+          if git diff --cached --quiet; then
+            echo "Brand assets already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: render Home Assistant brand PNGs [skip release]"
+          git push

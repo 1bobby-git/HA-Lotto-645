@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Lotto 6/45 Analysis",
-        "description": "Analyze Lotto 6/45 history using the release-bundled snapshot and a shared GitHub mirror, then create selectable deterministic recommendations."
+        "description": "Analyze Lotto 6/45 history using the release-bundled snapshot and a shared GitHub mirror, then create selectable recommendation games."
       }
     },
     "abort": {
@@ -15,7 +15,7 @@
     "step": {
       "init": {
         "title": "Recommendation methods, AI, and data source",
-        "description": "Select one or more local analysis methods. The default data path uses the shared GitHub mirror and bundled snapshot so each Home Assistant installation does not crawl Donghaeng Lottery. Direct official incremental fallback is optional and disabled by default.",
+        "description": "Select one or more methods. Each option includes its calculation idea after the method name. A separate Method Guide sensor exposes the full catalog. The default data path uses the shared GitHub mirror and bundled snapshot so each Home Assistant installation does not crawl Donghaeng Lottery.",
         "data": {
           "selected_methods": "Recommendation methods (multiple selection)",
           "enable_ai_recommendation": "Enable Home Assistant AI recommendation",
@@ -24,6 +24,9 @@
           "allow_official_direct_fallback": "Allow limited direct Donghaeng Lottery fallback"
         },
         "data_description": {
+          "selected_methods": "Creative profiles, public statistical heuristics, an ensemble recommendation, and a traditional calendrical/Five-Elements profile can be mixed. These do not change the mathematical winning probability.",
+          "enable_ai_recommendation": "AI is independent from local methods. The manual Refresh / Regenerate button does not regenerate the AI recommendation.",
+          "ai_auto_generate": "Only generates AI automatically when a new official draw is detected. Manual local regeneration suppresses AI generation.",
           "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed."
         }
       }

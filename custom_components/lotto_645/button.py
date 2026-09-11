@@ -16,7 +16,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up refresh and optional AI buttons."""
+    """Set up local-regeneration and optional AI buttons."""
     coordinator: Lotto645Coordinator = entry.runtime_data
     entities: list[ButtonEntity] = [LottoRefreshButton(coordinator)]
     if coordinator.ai_enabled:
@@ -25,9 +25,9 @@ async def async_setup_entry(
 
 
 class LottoRefreshButton(Lotto645Entity, ButtonEntity):
-    """Request an immediate official-result refresh."""
+    """Refresh history and regenerate all non-AI recommendations."""
 
-    _attr_name = "즉시 새로고침"
+    _attr_name = "즉시 새로고침 · 번호 재생성"
     _attr_icon = "mdi:refresh"
 
     def __init__(self, coordinator: Lotto645Coordinator) -> None:
@@ -35,7 +35,7 @@ class LottoRefreshButton(Lotto645Entity, ButtonEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_refresh"
 
     async def async_press(self) -> None:
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh_and_regenerate()
 
 
 class LottoAiRecommendationButton(Lotto645Entity, ButtonEntity):
@@ -50,10 +50,7 @@ class LottoAiRecommendationButton(Lotto645Entity, ButtonEntity):
 
     @property
     def available(self) -> bool:
-        return (
-            super().available
-            and self.coordinator.data.ai_status != "generating"
-        )
+        return super().available and self.coordinator.data.ai_status != "generating"
 
     async def async_press(self) -> None:
         await self.coordinator.async_generate_ai_recommendation()

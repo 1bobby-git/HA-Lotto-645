@@ -33,7 +33,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         async def _handle_refresh(call: ServiceCall) -> None:
             del call
-            await entry.runtime_data.async_request_refresh()
+            await entry.runtime_data.async_refresh_and_regenerate()
 
         hass.services.async_register(DOMAIN, SERVICE_REFRESH, _handle_refresh)
 

@@ -1,6 +1,6 @@
 refresh:
-  name: Refresh Lotto 6/45 data
-  description: Check the official source immediately and rebuild selected local recommendations when a new draw exists.
+  name: Refresh data and regenerate local numbers
+  description: Refresh the shared Lotto history and regenerate every selected non-AI recommendation from a different high-scoring candidate. The AI recommendation is not regenerated.
 
 generate_ai_recommendation:
   name: Generate Home Assistant AI recommendation

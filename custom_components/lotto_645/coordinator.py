@@ -50,7 +50,7 @@ class AiRecommendationError(HomeAssistantError):
 
 
 class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
-    """Coordinate safe history updates, local analysis, and optional AI Tasks."""
+    """Coordinate safe history updates, local regeneration, and optional AI Tasks."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(
@@ -71,6 +71,9 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         self._needs_storage_save = False
         self._cached_ai_recommendation: Recommendation | None = None
         self._cached_ai_generated_at: datetime | None = None
+        self._local_generation_nonce = 0
+        self._local_generated_at: datetime | None = None
+        self._suppress_ai_generation_once = False
 
     @property
     def selected_method_ids(self) -> tuple[str, ...]:
@@ -103,6 +106,14 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             )
         )
 
+    @property
+    def local_generation_sequence(self) -> int:
+        return self._local_generation_nonce
+
+    @property
+    def local_generated_at(self) -> datetime | None:
+        return self._local_generated_at
+
     async def _async_setup(self) -> None:
         """Load HA cache first, then the release-bundled last-known-good seed."""
         payload = await self._store.async_load()
@@ -117,6 +128,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 ):
                     self.history = draws
                     self._startup_source = "storage_cache"
+                self._local_generation_nonce = max(
+                    0, int(payload.get("local_generation_sequence", 0))
+                )
+                local_generated = payload.get("local_generated_at")
+                if local_generated:
+                    self._local_generated_at = datetime.fromisoformat(str(local_generated))
                 ai_payload = payload.get("ai_recommendation")
                 if self.history and isinstance(ai_payload, dict):
                     recommendation = Recommendation.from_storage(ai_payload)
@@ -129,14 +146,14 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 self.history = []
                 self._cached_ai_recommendation = None
                 self._cached_ai_generated_at = None
+                self._local_generation_nonce = 0
+                self._local_generated_at = None
                 _LOGGER.warning("로또 로컬 캐시를 읽지 못했습니다: %s", err)
 
         if self.history:
             return
         try:
-            draws, _metadata = await self.hass.async_add_executor_job(
-                load_bundled_history
-            )
+            draws, _metadata = await self.hass.async_add_executor_job(load_bundled_history)
         except LottoHistoryError as err:
             _LOGGER.error("번들 로또 이력을 읽지 못했습니다: %s", err)
             return
@@ -149,6 +166,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             {
                 "latest_round": self.history[-1].round if self.history else 0,
                 "draws": [draw.to_storage() for draw in self.history],
+                "local_generation_sequence": self._local_generation_nonce,
+                "local_generated_at": (
+                    self._local_generated_at.isoformat()
+                    if self._local_generated_at
+                    else None
+                ),
                 "ai_recommendation": (
                     self._cached_ai_recommendation.to_storage()
                     if self._cached_ai_recommendation
@@ -167,7 +190,10 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
     def _history_changed(left: list[LottoDraw], right: list[LottoDraw]) -> bool:
         if len(left) != len(right):
             return True
-        return any(a.to_storage() != b.to_storage() for a, b in zip(left, right, strict=True))
+        return any(
+            a.to_storage() != b.to_storage()
+            for a, b in zip(left, right, strict=True)
+        )
 
     async def _async_update_data(self) -> Lotto645Data:
         """Prefer the shared mirror; never crawl official history from HA clients."""
@@ -176,6 +202,8 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         old_latest_round = self.history[-1].round if self.history else 0
         mirror_ok = False
         mirror_error: LottoApiError | None = None
+        suppress_ai_generation = self._suppress_ai_generation_once
+        self._suppress_ai_generation_once = False
 
         try:
             mirror_history, mirror_meta = await self.client.async_fetch_shared_mirror()
@@ -204,8 +232,6 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             )
             _LOGGER.debug("공유 로또 미러 사용 불가, 로컬 이력 유지: %s", err)
 
-        # Optional emergency path. It is deliberately disabled by default and can
-        # only fill one or two recent rounds; it can never bootstrap full history.
         if not mirror_ok and self.allow_official_fallback and self.history:
             self.client.begin_update_cycle()
             try:
@@ -240,6 +266,9 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         if self.history[-1].round != old_latest_round:
             self._cached_ai_recommendation = None
             self._cached_ai_generated_at = None
+            self._local_generation_nonce = 0
+            self._local_generated_at = datetime.now(UTC)
+            self._needs_storage_save = True
 
         if changed or self._needs_storage_save:
             await self._save_storage()
@@ -248,26 +277,46 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             configured = tuple(
                 self.data.analysis.summary.get("selected_method_ids", [])
             )
-            if configured == self.selected_method_ids:
+            generated_sequence = int(
+                self.data.analysis.summary.get("generation_sequence", 0)
+            )
+            if (
+                configured == self.selected_method_ids
+                and generated_sequence == self._local_generation_nonce
+            ):
                 if self.data.source_status == source_status:
                     return self.data
                 return replace(self.data, source_status=source_status)
 
         try:
             analysis = await self.hass.async_add_executor_job(
-                build_analysis, self.history, self.selected_method_ids
+                build_analysis,
+                self.history,
+                self.selected_method_ids,
+                self._local_generation_nonce,
             )
         except ValueError as err:
             raise UpdateFailed(f"로또 분석 실패: {err}") from err
 
+        if self._local_generated_at is None:
+            self._local_generated_at = datetime.now(UTC)
+            self._needs_storage_save = True
+
         ai_recommendation = self._cached_ai_recommendation if self.ai_enabled else None
         ai_generated_at = self._cached_ai_generated_at if self.ai_enabled else None
-        ai_status = "ready" if ai_recommendation is not None else (
-            "idle" if self.ai_enabled else "disabled"
+        ai_status = (
+            "ready"
+            if ai_recommendation is not None
+            else ("idle" if self.ai_enabled else "disabled")
         )
         ai_error: str | None = None
 
-        if self.ai_enabled and self.ai_auto_generate and ai_recommendation is None:
+        if (
+            self.ai_enabled
+            and self.ai_auto_generate
+            and ai_recommendation is None
+            and not suppress_ai_generation
+        ):
             try:
                 ai_recommendation = await self._async_create_ai_recommendation(
                     analysis, self.configured_ai_entity_id
@@ -276,11 +325,14 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 self._cached_ai_recommendation = ai_recommendation
                 self._cached_ai_generated_at = ai_generated_at
                 ai_status = "ready"
-                await self._save_storage()
+                self._needs_storage_save = True
             except (AiRecommendationError, HomeAssistantError, KeyError) as err:
                 ai_status = "error"
                 ai_error = str(err)
                 _LOGGER.warning("AI 로또 추천 자동 생성 실패: %s", err)
+
+        if self._needs_storage_save:
+            await self._save_storage()
 
         return Lotto645Data(
             latest_draw=self.history[-1],
@@ -293,6 +345,14 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             ai_error=ai_error,
             ai_generated_at=ai_generated_at,
         )
+
+    async def async_refresh_and_regenerate(self) -> None:
+        """Refresh history and rotate all local recommendations, leaving AI untouched."""
+        self._local_generation_nonce += 1
+        self._local_generated_at = datetime.now(UTC)
+        self._needs_storage_save = True
+        self._suppress_ai_generation_once = True
+        await self.async_request_refresh()
 
     def _ai_structure(self) -> vol.Schema:
         number_selector = selector.NumberSelector(
@@ -320,7 +380,8 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         summary = analysis.summary
         retry_text = (
             "이전 결과가 중복 번호, 범위 오류 또는 과거 1등 완전일치로 거절되었습니다. 반드시 다른 유효 조합을 만드세요."
-            if attempt > 1 else ""
+            if attempt > 1
+            else ""
         )
         return f"""당신은 로또 6/45 통계 해석 보조 엔진입니다.
 아래 데이터만 참고해 {analysis.target_round}회용 번호 6개와 핵심 근거를 생성하세요.
@@ -338,6 +399,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
 위상 변화 상위: {summary.get('top_phase_change')}
 다음 회차 전이 상위: {summary.get('top_transition')}
 번호쌍 그래프 상위: {summary.get('top_graph_strength')}
+삼중 동반출현 상위: {summary.get('top_triplet_strength')}
 로컬 추천:
 {local_games}
 
@@ -348,7 +410,9 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         if not isinstance(data, dict):
             raise AiRecommendationError("AI Task가 구조화된 객체를 반환하지 않았습니다")
         try:
-            numbers = tuple(sorted(int(data[f"number_{index}"]) for index in range(1, 7)))
+            numbers = tuple(
+                sorted(int(data[f"number_{index}"]) for index in range(1, 7))
+            )
         except (KeyError, TypeError, ValueError) as err:
             raise AiRecommendationError("AI Task 추천 번호를 해석할 수 없습니다") from err
         if len(numbers) != 6 or len(set(numbers)) != 6:
@@ -406,7 +470,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 return self._parse_ai_result(result.data, analysis)
             except (AiRecommendationError, HomeAssistantError, KeyError) as err:
                 last_error = err
-                _LOGGER.debug("AI 추천 검증 실패 (%s/%s): %s", attempt, AI_MAX_ATTEMPTS, err)
+                _LOGGER.debug(
+                    "AI 추천 검증 실패 (%s/%s): %s",
+                    attempt,
+                    AI_MAX_ATTEMPTS,
+                    err,
+                )
         raise AiRecommendationError(
             f"유효한 AI 추천을 생성하지 못했습니다: {last_error}"
         ) from last_error
@@ -416,14 +485,17 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
     ) -> Recommendation:
         """Generate, validate, cache, and publish an AI recommendation."""
         if not self.ai_enabled:
-            raise AiRecommendationError("통합 옵션에서 Home Assistant AI 추천을 먼저 활성화하세요")
+            raise AiRecommendationError(
+                "통합 옵션에서 Home Assistant AI 추천을 먼저 활성화하세요"
+            )
         if self.data is None:
             raise AiRecommendationError("로또 분석 데이터가 아직 준비되지 않았습니다")
         self.data = replace(self.data, ai_status="generating", ai_error=None)
         self.async_update_listeners()
         try:
             recommendation = await self._async_create_ai_recommendation(
-                self.data.analysis, entity_id or self.configured_ai_entity_id
+                self.data.analysis,
+                entity_id or self.configured_ai_entity_id,
             )
         except (AiRecommendationError, HomeAssistantError, KeyError) as err:
             self.data = replace(self.data, ai_status="error", ai_error=str(err))
