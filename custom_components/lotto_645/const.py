@@ -15,7 +15,7 @@ SERVICE_REFRESH = "refresh"
 SERVICE_GENERATE_AI = "generate_ai_recommendation"
 
 CONF_SELECTED_METHODS = "selected_methods"
-CONF_ENABLE_AI = "enable_ai_recommendendation" if False else "enable_ai_recommendation"
+CONF_ENABLE_AI = "enable_ai_recommendation"
 CONF_AI_TASK_ENTITY_ID = "ai_task_entity_id"
 CONF_AI_AUTO_GENERATE = "ai_auto_generate"
 CONF_ALLOW_OFFICIAL_FALLBACK = "allow_official_direct_fallback"
