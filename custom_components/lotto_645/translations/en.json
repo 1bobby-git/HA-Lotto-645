@@ -1,0 +1,20 @@
+{
+  "title": "Lotto 6/45 Analysis",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Lotto 6/45 Analysis",
+        "description": "Analyzes winning numbers from draw 1 through the latest confirmed draw and exposes five deterministic heuristic games. The complete history is synchronized once during first setup."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only one instance can be configured."
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Refresh Lotto data",
+      "description": "Check for a new draw and refresh the analysis."
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "domain": "lotto_645",
+  "name": "Lotto 6/45 Analysis",
+  "codeowners": ["@1bobby-git"],
+  "config_flow": true,
+  "documentation": "https://github.com/1bobby-git/HA-Lotto-645",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/1bobby-git/HA-Lotto-645/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "1.0.0"
+}
