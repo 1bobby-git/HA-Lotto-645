@@ -4,7 +4,7 @@ from datetime import timedelta
 
 DOMAIN = "lotto_645"
 NAME = "Lotto 6/45 Analysis"
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 
 PLATFORMS = ["sensor", "button"]
 
@@ -39,9 +39,4 @@ DISCLAIMER = (
 PUBLIC_FORMULA_NOTICE = (
     "공개 공식이라는 명칭은 널리 알려진 빈도·간격·균형·델타·이월수 등의 "
     "분석 규칙을 뜻하며 검증된 당첨 공식이라는 의미가 아닙니다."
-)
-TRADITIONAL_METHOD_NOTICE = (
-    "명리·오행 방식은 60갑자와 하도 수리오행처럼 전통적으로 정형화되어 있고 "
-    "재현 가능한 계산 규칙을 사용합니다. 이는 문화·역술 체계 내부의 검증 가능성을 "
-    "뜻하며 로또 당첨 확률 상승이 과학적으로 입증되었다는 의미는 아닙니다."
 )

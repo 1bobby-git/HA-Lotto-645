@@ -8,7 +8,7 @@ Home Assistant용 **로또 6/45 전체 회차 분석 · 선택형 번호 추천 
 
 > 로또 추첨은 독립적인 무작위 사건입니다. 아래 방식은 과거 데이터를 분류하거나 조합 후보를 고르는 휴리스틱일 뿐이며 당첨을 보장하거나 실제 당첨 확률을 높이지 않습니다. 모든 6개 조합의 1등 확률은 동일하게 **1 / 8,145,060**입니다.
 
-## v1.2.0 주요 기능
+## v1.2.1 주요 기능
 
 - 동행복권 **1회부터 최신 확정 회차까지** 1등 본번호 6개 동기화
 - 최초 전체 동기화 후 Home Assistant `.storage`에 캐시, 이후 새 회차만 증분 동기화
@@ -33,7 +33,7 @@ Home Assistant용 **로또 6/45 전체 회차 분석 · 선택형 번호 추천 
   - `custom_components/lotto_645/brand/logo.png`
   - `custom_components/lotto_645/brand/icon.png`
 
-정사각 아이콘은 제공된 가로 로고의 **왼쪽 복주머니 아이콘만** 사용합니다.
+가로 로고는 사용자가 제공한 원본 PNG의 투명 배경과 색상을 유지하고 불필요한 바깥 여백만 정리한 파일을 사용합니다. 정사각 아이콘은 왼쪽 복주머니 아이콘만 사용합니다.
 
 ## 선택 가능한 추천 방식
 
@@ -135,30 +135,25 @@ AI 자동 생성은 새 회차 확인 때마다 AI 제공자 사용량 또는 �
 
 실제 `entity_id`는 Home Assistant의 언어 및 기존 엔티티 이름에 따라 달라질 수 있습니다.
 
-### 명리 추천 센서 속성 예시
+### 추천 게임 속성 예시
 
 ```yaml
-method_id: myungri_hetu_day_pillar
-label: "명리 권장 · 일진 오행·하도 수리"
-method: "전통 명리 권장"
-target_draw_date: "2026-09-12"
-sexagenary_day: "..."
-day_master: "..."
-day_master_element: "..."
-number_five_elements:
-  "1": "수"
-  "8": "목"
-five_element_counts:
-  목: 1
-  화: 1
-  토: 1
-  금: 1
-  수: 2
-traditional_method: "60갑자 일진(日柱) + 하도(河圖) 수리오행"
+state: "1, 17, 28, 32, 33, 40"
+method_id: public_ensemble
+label: "공식 탐색 ③ · 공개공식 종합형"
+method: "추천 공개 분석식"
+numbers: [1, 17, 28, 32, 33, 40]
+core_reason: "가중 빈도·미출현·동반출현·균형·델타·이월수의 합의 점수..."
+analysis_score: 0.7421
+strongest_pair: [33, 40]
 exact_past_first_prize_match: false
+max_numbers_matching_any_past_first_prize: 4
+latest_draw_overlap: 1
+target_round: 1241
+based_on_round: 1240
 ```
 
-위 값은 **속성 구조 예시**이며 실제 일진과 추천번호는 설치 시점의 최신 공식 추첨일 기준으로 계산합니다.
+위 번호와 회차는 **표시 구조 예시**입니다. 실제 설치 시점의 최신 공식 데이터를 기준으로 다시 계산합니다.
 
 ## 서비스
 
@@ -197,7 +192,7 @@ data:
 - 회차 목록: `https://www.dhlottery.co.kr/lt645/selectPstLt645InfoNew.do`
 - 단일 회차 보완: `https://www.dhlottery.co.kr/lt645/selectPstLt645Info.do`
 
-동행복권 사이트 내부 JSON 응답은 공식 Open API 계약이 아니므로 향후 사이트 개편 때 변경될 수 있습니다.
+동행복권 사이트 내부 JSON 응답은 공식 Open API 계약이 아니므로 향후 사이트 개편 시 변경될 수 있습니다.
 
 ## 라이선스
 
