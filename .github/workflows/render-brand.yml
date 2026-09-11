@@ -5,8 +5,7 @@ on:
     branches:
       - main
     paths:
-      - images/logo-horizontal.svg
-      - images/icon-square.svg
+      - images/logo-horizontal.png
       - scripts/render_brand.py
       - .github/workflows/render-brand.yml
   workflow_dispatch:
@@ -31,20 +30,19 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install SVG renderer
-        run: python -m pip install --disable-pip-version-check "CairoSVG>=2.7,<3"
+      - name: Install image dependency
+        run: python -m pip install --disable-pip-version-check "Pillow>=10,<12"
 
-      - name: Render Home Assistant brand PNGs
+      - name: Crop Home Assistant brand assets from canonical PNG
         run: python scripts/render_brand.py
 
-      - name: Commit rendered PNGs when changed
+      - name: Commit cropped PNGs when changed
         run: |
           PATHS=(
             custom_components/lotto_645/brand/logo.png
             custom_components/lotto_645/brand/logo@2x.png
             custom_components/lotto_645/brand/icon.png
             custom_components/lotto_645/brand/icon@2x.png
-            images/logo-horizontal.png
             images/icon-square.png
           )
           git add "${PATHS[@]}"
@@ -54,5 +52,5 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "fix: render Home Assistant brand PNGs [skip release]"
+          git commit -m "fix: crop Home Assistant brand icons from supplied logo [skip release]"
           git push
