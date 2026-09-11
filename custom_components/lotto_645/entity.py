@@ -18,6 +18,6 @@ class Lotto645Entity(CoordinatorEntity[Lotto645Coordinator]):
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
             name=NAME,
             manufacturer="HA-Lotto-645",
-            model="Lotto 6/45 deterministic analysis",
+            model="Selectable Lotto 6/45 analysis + HA AI Task",
             sw_version=VERSION,
         )
