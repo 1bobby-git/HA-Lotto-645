@@ -1,3 +1,15 @@
 refresh:
-  name: 로또 데이터 즉시 새로고침
-  description: 동행복권의 최신 회차를 확인하고 새 회차가 있으면 전체 분석 결과를 갱신합니다.
+  name: Refresh Lotto 6/45 data
+  description: Check the official source immediately and rebuild selected local recommendations when a new draw exists.
+
+generate_ai_recommendation:
+  name: Generate Home Assistant AI recommendation
+  description: Generate and validate one recommendation using a Home Assistant data-generation AI Task.
+  fields:
+    entity_id:
+      name: AI Task entity
+      description: Optional AI Task entity. Leave blank to use the preferred data-generation AI Task configured in Home Assistant Settings > AI.
+      required: false
+      selector:
+        entity:
+          domain: ai_task
