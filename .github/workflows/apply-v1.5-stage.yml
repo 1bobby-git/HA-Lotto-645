@@ -29,7 +29,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add custom_components/lotto_645/analysis.py custom_components/lotto_645/sensor.py custom_components/lotto_645/strings.json custom_components/lotto_645/translations/en.json custom_components/lotto_645/translations/ko.json .github/workflows/validate.yml tests/test_analysis_engine.py README.md CHANGELOG.md docs/FORMULAS.md
+          git add custom_components/lotto_645/analysis.py custom_components/lotto_645/sensor.py custom_components/lotto_645/strings.json custom_components/lotto_645/translations/en.json custom_components/lotto_645/translations/ko.json tests/test_analysis_engine.py README.md CHANGELOG.md docs/FORMULAS.md
           if git diff --cached --quiet; then
             echo "No patch changes"
             exit 0
