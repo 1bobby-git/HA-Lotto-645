@@ -1,22 +1,10 @@
 name: Render Local Brand Assets
 
 on:
-  push:
-    branches:
-      - main
-      - v1.5.1-fix
-    paths:
-      - images/logo-horizontal.png
-      - scripts/render_brand.py
-      - .github/workflows/render-brand.yml
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: lotto-brand-render-${{ github.ref }}
-  cancel-in-progress: false
+  contents: read
 
 jobs:
   render:
@@ -24,30 +12,26 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - name: Install image dependency
         run: python -m pip install --disable-pip-version-check "Pillow>=10,<12"
-      - name: Crop Home Assistant brand assets from canonical PNG
+      - name: Validate and render brand assets locally
         run: python scripts/render_brand.py
-      - name: Commit cropped/resized PNGs when changed
+      - name: Verify generated PNGs
         run: |
-          PATHS=(
-            custom_components/lotto_645/brand/logo.png
-            custom_components/lotto_645/brand/logo@2x.png
-            custom_components/lotto_645/brand/icon.png
-            custom_components/lotto_645/brand/icon@2x.png
-            images/icon-square.png
-          )
-          git add "${PATHS[@]}"
-          if git diff --cached --quiet; then
-            echo "Brand assets already current"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "fix: crop supplied-logo icon and size HA brand assets [skip release]"
-          git push
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          paths = [
+              Path('images/logo-horizontal.png'),
+              Path('images/icon-square.png'),
+              Path('custom_components/lotto_645/brand/logo.png'),
+              Path('custom_components/lotto_645/brand/icon.png'),
+          ]
+          for path in paths:
+              with Image.open(path) as image:
+                  image.verify()
+              print(f'valid PNG: {path}')
+          PY
