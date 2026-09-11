@@ -1,0 +1,38 @@
+name: Apply v1.5 Stage Patch
+
+on:
+  push:
+    branches:
+      - v1.5-stage
+    paths:
+      - scripts/apply_v15_remaining.py
+      - .github/workflows/apply-v1.5-stage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.5-stage
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Apply remaining v1.5 edits
+        run: python scripts/apply_v15_remaining.py
+      - name: Commit generated edits
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/lotto_645/analysis.py custom_components/lotto_645/sensor.py custom_components/lotto_645/strings.json custom_components/lotto_645/translations/en.json custom_components/lotto_645/translations/ko.json .github/workflows/validate.yml tests/test_analysis_engine.py README.md CHANGELOG.md docs/FORMULAS.md
+          if git diff --cached --quiet; then
+            echo "No patch changes"
+            exit 0
+          fi
+          git commit -m "feat: complete v1.5 personal Saju upgrade"
+          git push origin v1.5-stage
