@@ -37,35 +37,50 @@ jobs:
       - name: Update shared history mirror
         run: python scripts/update_lotto_mirror.py
 
-      - name: Validate mirror JSON
-        if: hashFiles('data/lotto645-history.json') != ''
+      - name: Validate mirror JSON and bundled seed
         run: |
           python - <<'PY'
+          import hashlib
           import json
           from pathlib import Path
-          p = Path('data/lotto645-history.json')
-          d = json.loads(p.read_text(encoding='utf-8'))
-          rows = d['draws']
-          assert rows
-          assert d['latest_round'] == len(rows)
-          assert [int(x['round']) for x in rows] == list(range(1, len(rows) + 1))
-          for row in rows:
-              nums = [int(x) for x in row['numbers']]
-              assert len(nums) == 6 and len(set(nums)) == 6
-              assert all(1 <= x <= 45 for x in nums)
-              bonus = int(row['bonus'])
-              assert 1 <= bonus <= 45 and bonus not in nums
-          print(f"validated mirror through round {d['latest_round']}")
+
+          paths = [
+              Path('data/lotto645-history.json'),
+              Path('custom_components/lotto_645/history_seed.json'),
+          ]
+          for path in paths:
+              assert path.exists(), f'missing {path}'
+              d = json.loads(path.read_text(encoding='utf-8'))
+              rows = d['draws']
+              assert rows
+              assert d['latest_round'] == len(rows)
+              assert d['draw_count'] == len(rows)
+              assert [int(x['round']) for x in rows] == list(range(1, len(rows) + 1))
+              for row in rows:
+                  nums = [int(x) for x in row['numbers']]
+                  assert len(nums) == 6 and len(set(nums)) == 6
+                  assert all(1 <= x <= 45 for x in nums)
+                  bonus = int(row['bonus'])
+                  assert 1 <= bonus <= 45 and bonus not in nums
+              canonical = json.dumps(
+                  rows,
+                  ensure_ascii=False,
+                  separators=(',', ':'),
+                  sort_keys=True,
+              ).encode('utf-8')
+              assert hashlib.sha256(canonical).hexdigest() == d['draws_sha256']
+              print(f"validated {path}: round {d['latest_round']}")
+          assert paths[0].read_bytes() == paths[1].read_bytes()
           PY
 
       - name: Commit mirror only when changed
         run: |
-          if git diff --quiet -- data/lotto645-history.json; then
+          if git diff --quiet -- data/lotto645-history.json custom_components/lotto_645/history_seed.json; then
             echo "Mirror unchanged"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/lotto645-history.json
+          git add data/lotto645-history.json custom_components/lotto_645/history_seed.json
           git commit -m "data: update lotto history mirror [skip release]"
           git push
