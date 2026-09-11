@@ -108,15 +108,31 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_method_guide"
 
     @property
-    def native_value(self) -> int:
-        return len(METHODS_BY_ID)
+    def available(self) -> bool:
+        """The static method catalog does not depend on lottery network data."""
+        return True
+
+    @property
+    def native_value(self) -> str:
+        """Show a human-readable count instead of the ambiguous bare number 16."""
+        return f"{len(METHODS_BY_ID)}개 추천 방식"
 
     @property
     def extra_state_attributes(self) -> dict:
+        catalog = method_catalog()
         return {
             "method_count": len(METHODS_BY_ID),
             "selected_method_ids": list(self.coordinator.selected_method_ids),
-            "methods": method_catalog(),
+            "selected_method_names": [
+                METHODS_BY_ID[method_id].label
+                for method_id in self.coordinator.selected_method_ids
+            ],
+            "methods": catalog,
+            "how_to_view": (
+                "이 엔티티의 상세 속성에서 methods 목록을 확인하거나, 각 추천번호 엔티티의 "
+                "method_description 속성에서 해당 방식의 설명을 확인하세요. Home Assistant에서 "
+                "속성이 접혀 보이면 개발자 도구 > 상태에서 '추천 방식 안내' 엔티티를 선택하면 전체 목록을 볼 수 있습니다."
+            ),
             "usage": "통합 구성에서 여러 방식을 동시에 선택할 수 있으며, 각 방식은 6개 번호 1게임과 핵심 근거를 생성합니다.",
             "refresh_behavior": "즉시 새로고침은 선택된 비AI 추천을 고득점 후보군 안에서 다시 선택합니다.",
             "public_formula_notice": PUBLIC_FORMULA_NOTICE,
@@ -135,6 +151,11 @@ class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_saju_profile"
 
     @property
+    def available(self) -> bool:
+        """Profile configuration remains inspectable even if draw data is offline."""
+        return True
+
+    @property
     def native_value(self) -> str:
         return "준비됨" if self.coordinator.saju_profile_ready else "설정 필요"
 
@@ -144,11 +165,16 @@ class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
             "status": self.coordinator.saju_profile_status,
             "required_before_use": True,
             "required_fields": ["양력/음력", "생년월일", "출생시간", "성별", "출생지", "시간대"],
+            "where_to_enter": "설정 > 기기 및 서비스 > Lotto 6/45 Analysis > 구성 화면의 [명리] 입력 항목",
             "privacy": "입력값은 Home Assistant 구성에 로컬 저장되며 로또 미러와 HA AI 추천 프롬프트에 원본 생년월일·출생시간·출생지를 보내지 않습니다.",
         }
-        recommendation = self.coordinator.data.analysis.recommendation_by_method(METHOD_MYUNGRI_HETU)
+        data = self.coordinator.data
+        if data is None:
+            base["message"] = "통합 구성 화면에서 [명리] 개인 사주정보를 입력하세요."
+            return base
+        recommendation = data.analysis.recommendation_by_method(METHOD_MYUNGRI_HETU)
         if recommendation is None:
-            base["message"] = "통합 구성을 열어 개인 사주정보를 입력하면 명리 권장 추천이 활성화됩니다."
+            base["message"] = "통합 구성 화면의 [명리] 입력 항목을 완료하면 명리 권장 추천이 활성화됩니다."
             return base
         details = recommendation.details
         for key in (
@@ -199,8 +225,11 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
         recommendation = data.analysis.recommendation_by_method(self.method_id)
         if recommendation is None:
             return {}
+        method = METHODS_BY_ID[self.method_id]
         return {
             **recommendation.as_attributes(),
+            "method_category": method.category,
+            "method_description": method.description,
             "target_round": data.analysis.target_round,
             "based_on_round": data.analysis.based_on_round,
             "history_draws": data.history_count,
