@@ -15,7 +15,7 @@
     "step": {
       "init": {
         "title": "Recommendation methods, AI, and data source",
-        "description": "Select one or more methods. Each option includes its calculation idea after the method name. A separate Method Guide sensor exposes the full catalog. The default data path uses the shared GitHub mirror and bundled snapshot so each Home Assistant installation does not crawl Donghaeng Lottery.",
+        "description": "Select one or more methods. Selecting the personal Four Pillars method requires completing the birth-profile step before it can be activated.",
         "data": {
           "selected_methods": "Recommendation methods (multiple selection)",
           "enable_ai_recommendation": "Enable Home Assistant AI recommendation",
@@ -29,10 +29,26 @@
           "ai_auto_generate": "Only generates AI automatically when a new official draw is detected. Manual local regeneration suppresses AI generation.",
           "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed."
         }
+      },
+      "saju": {
+        "title": "Personal Four Pillars profile",
+        "description": "Required before the personal Saju method can run. Raw birth values remain in Home Assistant and are not sent to the lottery mirror or to HA AI prompts.",
+        "data": {
+          "saju_calendar": "Birth calendar",
+          "saju_birth_date": "Birth date",
+          "saju_birth_time": "Birth time",
+          "saju_gender": "Gender (luck-cycle direction)",
+          "saju_birth_place": "Birth place",
+          "saju_timezone": "Birth timezone (IANA)",
+          "saju_lunar_leap_month": "Lunar leap month",
+          "saju_true_solar_time": "Use true solar time correction",
+          "saju_longitude": "Birth longitude"
+        }
       }
     },
     "error": {
-      "select_at_least_one": "Select at least one recommendation method."
+      "select_at_least_one": "Select at least one recommendation method.",
+      "invalid_saju_profile": "The Four Pillars profile is missing or invalid. Check all required birth fields."
     }
   }
 }
