@@ -15,7 +15,7 @@
     "step": {
       "init": {
         "title": "Recommendation methods, AI, and data source",
-        "description": "Select one or more methods. Selecting the personal Four Pillars method requires completing the birth-profile step before it can be activated.",
+        "description": "Select one or more methods. If Personal Four Pillars is selected, press Confirm and the next screen will request the required birth profile. Other methods save without a Saju profile.",
         "data": {
           "selected_methods": "Recommendation methods (multiple selection)",
           "enable_ai_recommendation": "Enable Home Assistant AI recommendation",
@@ -24,7 +24,7 @@
           "allow_official_direct_fallback": "Allow limited direct Donghaeng Lottery fallback"
         },
         "data_description": {
-          "selected_methods": "Creative profiles, public statistical heuristics, an ensemble recommendation, and a traditional calendrical/Five-Elements profile can be mixed. These do not change the mathematical winning probability.",
+          "selected_methods": "If Personal Four Pillars is selected, the next step requests solar/lunar calendar, birth date/time, gender, birth place, and timezone. Other selected methods do not require birth data. None of these methods changes the mathematical winning probability.",
           "enable_ai_recommendation": "AI is independent from local methods. The manual Refresh / Regenerate button does not regenerate the AI recommendation.",
           "ai_auto_generate": "Only generates AI automatically when a new official draw is detected. Manual local regeneration suppresses AI generation.",
           "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed."
@@ -32,7 +32,7 @@
       },
       "saju": {
         "title": "Personal Four Pillars profile",
-        "description": "Required before the personal Saju method can run. Raw birth values remain in Home Assistant and are not sent to the lottery mirror or to HA AI prompts.",
+        "description": "This required step appears only when the Personal Four Pillars recommendation is selected. Raw birth values remain in Home Assistant and are not sent to the lottery mirror or to HA AI prompts.",
         "data": {
           "saju_calendar": "Birth calendar",
           "saju_birth_date": "Birth date",
@@ -48,7 +48,8 @@
     },
     "error": {
       "select_at_least_one": "Select at least one recommendation method.",
-      "invalid_saju_profile": "The Four Pillars profile is missing or invalid. Check all required birth fields."
+      "invalid_saju_profile": "The Four Pillars profile is missing or invalid. Check all required birth fields.",
+      "options_error": "An error occurred while processing the options. Check the entered values and try again."
     }
   }
 }

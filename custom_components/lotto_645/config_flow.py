@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, override
 
 import voluptuous as vol
@@ -42,8 +43,11 @@ from .methods import (
 )
 from .myungri import SajuProfileError, extract_saju_profile, validate_saju_profile
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def _method_selector() -> selector.SelectSelector:
+    """Return the multiple recommendation-method selector."""
     return selector.SelectSelector(
         selector.SelectSelectorConfig(
             options=method_selector_options(),
@@ -54,10 +58,16 @@ def _method_selector() -> selector.SelectSelector:
 
 
 def _options_schema(options: dict[str, Any]) -> vol.Schema:
-    selected = list(normalize_method_ids(options.get(CONF_SELECTED_METHODS, DEFAULT_METHOD_IDS)))
+    """Build the main options form."""
+    selected = list(
+        normalize_method_ids(options.get(CONF_SELECTED_METHODS, DEFAULT_METHOD_IDS))
+    )
     ai_entity = options.get(CONF_AI_TASK_ENTITY_ID)
-    marker: vol.Marker = (
-        vol.Optional(CONF_AI_TASK_ENTITY_ID, description={"suggested_value": ai_entity})
+    ai_marker: vol.Marker = (
+        vol.Optional(
+            CONF_AI_TASK_ENTITY_ID,
+            description={"suggested_value": ai_entity},
+        )
         if ai_entity
         else vol.Optional(CONF_AI_TASK_ENTITY_ID)
     )
@@ -66,28 +76,54 @@ def _options_schema(options: dict[str, Any]) -> vol.Schema:
             vol.Required(CONF_SELECTED_METHODS, default=selected): _method_selector(),
             vol.Optional(
                 CONF_ENABLE_AI,
-                default=options.get(CONF_ENABLE_AI, DEFAULT_ENABLE_AI),
+                default=bool(options.get(CONF_ENABLE_AI, DEFAULT_ENABLE_AI)),
             ): selector.BooleanSelector(),
-            marker: selector.EntitySelector(selector.EntitySelectorConfig(domain="ai_task")),
+            ai_marker: selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="ai_task")
+            ),
             vol.Optional(
                 CONF_AI_AUTO_GENERATE,
-                default=options.get(CONF_AI_AUTO_GENERATE, DEFAULT_AI_AUTO_GENERATE),
+                default=bool(
+                    options.get(CONF_AI_AUTO_GENERATE, DEFAULT_AI_AUTO_GENERATE)
+                ),
             ): selector.BooleanSelector(),
             vol.Optional(
                 CONF_ALLOW_OFFICIAL_FALLBACK,
-                default=options.get(CONF_ALLOW_OFFICIAL_FALLBACK, DEFAULT_ALLOW_OFFICIAL_FALLBACK),
+                default=bool(
+                    options.get(
+                        CONF_ALLOW_OFFICIAL_FALLBACK,
+                        DEFAULT_ALLOW_OFFICIAL_FALLBACK,
+                    )
+                ),
             ): selector.BooleanSelector(),
         }
     )
 
 
+def _optional_suggested_number(key: str, options: dict[str, Any]) -> vol.Marker:
+    """Create a number marker without serializing suggested_value=None.
+
+    Home Assistant frontends are stricter about selector metadata than plain
+    voluptuous schemas.  Omitting the suggestion entirely when no value exists
+    avoids a generic `Unknown error occurred` while entering the Saju step.
+    """
+    value = options.get(key)
+    if value in (None, ""):
+        return vol.Optional(key)
+    return vol.Optional(key, description={"suggested_value": value})
+
+
 def _saju_schema(options: dict[str, Any]) -> vol.Schema:
+    """Build the required personal Four Pillars input form."""
     calendar = str(options.get(CONF_SAJU_CALENDAR, DEFAULT_SAJU_CALENDAR))
     gender = str(options.get(CONF_SAJU_GENDER, "male"))
     birth_date = str(options.get(CONF_SAJU_BIRTH_DATE, "") or "")
     birth_time = str(options.get(CONF_SAJU_BIRTH_TIME, "") or "")
     birth_place = str(options.get(CONF_SAJU_BIRTH_PLACE, "") or "")
-    timezone = str(options.get(CONF_SAJU_TIMEZONE, DEFAULT_SAJU_TIMEZONE) or DEFAULT_SAJU_TIMEZONE)
+    timezone = str(
+        options.get(CONF_SAJU_TIMEZONE, DEFAULT_SAJU_TIMEZONE)
+        or DEFAULT_SAJU_TIMEZONE
+    )
 
     date_marker: vol.Marker = (
         vol.Required(CONF_SAJU_BIRTH_DATE, default=birth_date)
@@ -104,6 +140,7 @@ def _saju_schema(options: dict[str, Any]) -> vol.Schema:
         if birth_place
         else vol.Required(CONF_SAJU_BIRTH_PLACE)
     )
+    longitude_marker = _optional_suggested_number(CONF_SAJU_LONGITUDE, options)
 
     return vol.Schema(
         {
@@ -135,12 +172,14 @@ def _saju_schema(options: dict[str, Any]) -> vol.Schema:
             ): selector.BooleanSelector(),
             vol.Optional(
                 CONF_SAJU_TRUE_SOLAR_TIME,
-                default=bool(options.get(CONF_SAJU_TRUE_SOLAR_TIME, DEFAULT_SAJU_TRUE_SOLAR_TIME)),
+                default=bool(
+                    options.get(
+                        CONF_SAJU_TRUE_SOLAR_TIME,
+                        DEFAULT_SAJU_TRUE_SOLAR_TIME,
+                    )
+                ),
             ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_SAJU_LONGITUDE,
-                description={"suggested_value": options.get(CONF_SAJU_LONGITUDE)},
-            ): selector.NumberSelector(
+            longitude_marker: selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=-180,
                     max=180,
@@ -150,6 +189,17 @@ def _saju_schema(options: dict[str, Any]) -> vol.Schema:
             ),
         }
     )
+
+
+def _normalize_submitted_methods(raw_methods: object) -> tuple[str, ...]:
+    """Validate a frontend multiple-select payload without assuming list type."""
+    if not isinstance(raw_methods, (list, tuple)) or not raw_methods:
+        return ()
+    submitted = [str(value) for value in raw_methods]
+    normalized = normalize_method_ids(submitted)
+    if len(normalized) != len(dict.fromkeys(submitted)):
+        return ()
+    return normalized
 
 
 class Lotto645ConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -183,16 +233,16 @@ class Lotto645OptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Select recommendation methods and optional AI/source behavior."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            raw_methods = user_input.get(CONF_SELECTED_METHODS)
-            if not isinstance(raw_methods, list) or not raw_methods:
+            normalized = _normalize_submitted_methods(
+                user_input.get(CONF_SELECTED_METHODS)
+            )
+            if not normalized:
                 errors[CONF_SELECTED_METHODS] = "select_at_least_one"
             else:
-                normalized = normalize_method_ids(raw_methods)
-                if not normalized:
-                    errors[CONF_SELECTED_METHODS] = "select_at_least_one"
-                else:
+                try:
                     pending = dict(self._options)
                     pending.update(user_input)
                     pending[CONF_SELECTED_METHODS] = list(normalized)
@@ -200,8 +250,15 @@ class Lotto645OptionsFlow(OptionsFlow):
                         pending.pop(CONF_AI_TASK_ENTITY_ID, None)
                     self._pending_options = pending
                     if METHOD_MYUNGRI_HETU in normalized:
+                        # This is intentionally a second step.  Birth information
+                        # is never requested unless the user selected 명리 권장.
                         return await self.async_step_saju()
+                    self._pending_options = None
                     return self.async_create_entry(title="", data=pending)
+                except (TypeError, ValueError) as err:
+                    _LOGGER.exception("로또 옵션 저장 준비 중 오류: %s", err)
+                    errors["base"] = "options_error"
+
         return self.async_show_form(
             step_id="init",
             data_schema=_options_schema(self._options),
@@ -220,8 +277,12 @@ class Lotto645OptionsFlow(OptionsFlow):
         if user_input is not None:
             pending = dict(source)
             clean = dict(user_input)
-            clean[CONF_SAJU_BIRTH_DATE] = str(clean.get(CONF_SAJU_BIRTH_DATE, ""))
-            clean[CONF_SAJU_BIRTH_TIME] = str(clean.get(CONF_SAJU_BIRTH_TIME, ""))
+            clean[CONF_SAJU_BIRTH_DATE] = str(
+                clean.get(CONF_SAJU_BIRTH_DATE, "") or ""
+            )
+            clean[CONF_SAJU_BIRTH_TIME] = str(
+                clean.get(CONF_SAJU_BIRTH_TIME, "") or ""
+            )
             if clean.get(CONF_SAJU_CALENDAR) != "lunar":
                 clean[CONF_SAJU_LUNAR_LEAP_MONTH] = False
             if not clean.get(CONF_SAJU_TRUE_SOLAR_TIME):
@@ -230,8 +291,12 @@ class Lotto645OptionsFlow(OptionsFlow):
             profile = extract_saju_profile(pending)
             try:
                 validate_saju_profile(profile)
-            except SajuProfileError:
+            except SajuProfileError as err:
+                _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
                 errors["base"] = "invalid_saju_profile"
+            except (TypeError, ValueError) as err:
+                _LOGGER.exception("개인 사주정보 처리 중 오류: %s", err)
+                errors["base"] = "options_error"
             else:
                 self._pending_options = None
                 return self.async_create_entry(title="", data=pending)
