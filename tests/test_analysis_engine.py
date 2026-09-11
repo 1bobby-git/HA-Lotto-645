@@ -22,9 +22,7 @@ sys.modules.setdefault("custom_components.lotto_645", package)
 
 def _load(name: str) -> types.ModuleType:
     full_name = f"custom_components.lotto_645.{name}"
-    spec = importlib.util.spec_from_file_location(
-        full_name, PACKAGE_PATH / f"{name}.py"
-    )
+    spec = importlib.util.spec_from_file_location(full_name, PACKAGE_PATH / f"{name}.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[full_name] = module
@@ -58,20 +56,24 @@ def _history(count: int = 180):
     return rows
 
 
-def test_catalog_exposes_original_public_and_traditional_methods():
-    assert len(methods.METHODS) == 11
-    assert len(methods.PUBLIC_METHOD_IDS) == 8
+def test_catalog_exposes_expanded_methods_without_numbered_names():
+    assert len(methods.METHODS) == 16
+    assert len(methods.PUBLIC_METHOD_IDS) == 12
     assert len(methods.TRADITIONAL_METHOD_IDS) == 1
     assert methods.METHOD_PUBLIC_ENSEMBLE in methods.DEFAULT_METHOD_IDS
     assert methods.METHOD_MYUNGRI_HETU in methods.DEFAULT_METHOD_IDS
     assert len(set(methods.DEFAULT_METHOD_IDS)) == len(methods.DEFAULT_METHOD_IDS)
+    for method in methods.METHODS:
+        assert "①" not in method.label
+        assert "②" not in method.label
+        assert "③" not in method.label
+        assert method.description and len(method.description) >= 25
 
 
 def test_sexagenary_anchor_and_hetu_mapping():
     anchor = myungri.sexagenary_day(date(1949, 10, 1))
     assert anchor["name"] == "갑자(甲子)"
     assert anchor["cycle_position"] == 1
-
     assert myungri.number_element(1) == "water"
     assert myungri.number_element(6) == "water"
     assert myungri.number_element(2) == "fire"
@@ -88,7 +90,8 @@ def test_selected_methods_keep_order_and_exclude_past_exact_winners():
     history = _history()
     selected = (
         methods.METHOD_PHASE_RESIDUAL,
-        methods.METHOD_WEIGHTED_FREQUENCY,
+        methods.METHOD_RECENCY_DECAY,
+        methods.METHOD_TRIPLET_COOCCURRENCE,
         methods.METHOD_PUBLIC_ENSEMBLE,
         methods.METHOD_MYUNGRI_HETU,
     )
@@ -102,6 +105,7 @@ def test_selected_methods_keep_order_and_exclude_past_exact_winners():
         assert all(1 <= number <= 45 for number in recommendation.numbers)
         assert recommendation.numbers not in past
         assert recommendation.details["exact_past_first_prize_match"] is False
+        assert recommendation.details["method_description"]
 
     traditional = result.recommendation_by_method(methods.METHOD_MYUNGRI_HETU)
     assert traditional is not None
@@ -112,18 +116,37 @@ def test_selected_methods_keep_order_and_exclude_past_exact_winners():
     assert sum(traditional.details["five_element_counts"].values()) == 6
 
 
-def test_same_history_and_options_are_deterministic():
+def test_same_history_options_and_nonce_are_deterministic():
     history = _history(120)
     selected = (
         methods.METHOD_TRANSITION_GAP,
-        methods.METHOD_PAIR_COOCCURRENCE,
-        methods.METHOD_MYUNGRI_HETU,
+        methods.METHOD_BAYESIAN_SHRINKAGE,
+        methods.METHOD_CYCLE_RHYTHM,
     )
-    first = analysis.build_analysis(history, selected)
-    second = analysis.build_analysis(history, selected)
+    first = analysis.build_analysis(history, selected, 4)
+    second = analysis.build_analysis(history, selected, 4)
     assert [item.numbers for item in first.recommendations] == [
         item.numbers for item in second.recommendations
     ]
-    assert [item.reason for item in first.recommendations] == [
-        item.reason for item in second.recommendations
-    ]
+    assert first.summary["generation_sequence"] == 4
+
+
+def test_manual_generation_nonce_rotates_local_candidates():
+    history = _history(120)
+    selected = (
+        methods.METHOD_PHASE_RESIDUAL,
+        methods.METHOD_WEIGHTED_FREQUENCY,
+        methods.METHOD_PUBLIC_ENSEMBLE,
+    )
+    baseline = analysis.build_analysis(history, selected, 0)
+    regenerated = analysis.build_analysis(history, selected, 1)
+    again = analysis.build_analysis(history, selected, 2)
+    baseline_numbers = [item.numbers for item in baseline.recommendations]
+    regenerated_numbers = [item.numbers for item in regenerated.recommendations]
+    again_numbers = [item.numbers for item in again.recommendations]
+    assert regenerated_numbers != baseline_numbers
+    assert again_numbers != regenerated_numbers
+    past = {draw.numbers for draw in history}
+    for result in (regenerated, again):
+        for item in result.recommendations:
+            assert item.numbers not in past
