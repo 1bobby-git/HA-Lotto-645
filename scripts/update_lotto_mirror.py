@@ -1,55 +1,48 @@
 #!/usr/bin/env python3
-"""Build and incrementally update the HA-Lotto-645 shared history mirror.
+"""Build/update the shared Lotto 6/45 history mirror conservatively.
 
-The Home Assistant integration should not make every installation crawl the
-Donghaeng Lottery website.  This script centralizes that work in one GitHub
-Actions job and deliberately keeps official traffic very small:
+Goal: Home Assistant clients should not individually crawl Donghaeng Lottery.
+The weekly GitHub Actions job obtains the historical set from a current public
+GitHub dataset in one archive download, then cross-checks the current tail with
+Donghaeng Lottery using at most a few sequential requests.
 
-* normal week with no new draw: one official request;
-* new draw: normally two official requests;
-* bootstrap: use a pinned public historical SQLite snapshot, verify its tail
-  against Donghaeng Lottery, then request only the missing recent window.
-
-There is no proxy rotation, CAPTCHA bypass, IP evasion, concurrency, or rapid
-retry.  HTTP 403/429 stops the job immediately so the previous mirror remains
-available.
+No proxy rotation, CAPTCHA bypass, IP evasion, concurrency, or rapid retries are
+used. HTTP 403/429 stops the job immediately and the last valid mirror remains.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
+import hashlib
+import io
 import json
 from pathlib import Path
-import sqlite3
-import tempfile
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MIRROR_PATH = ROOT / "data" / "lotto645-history.json"
+BUNDLED_SEED_PATH = ROOT / "custom_components" / "lotto_645" / "history_seed.json"
 
 MAIN_INFO_URL = "https://www.dhlottery.co.kr/selectMainInfo.do"
 HISTORY_URL = "https://www.dhlottery.co.kr/lt645/selectPstLt645InfoNew.do"
 SINGLE_DRAW_URL = "https://www.dhlottery.co.kr/lt645/selectPstLt645Info.do"
+OFFICIAL_RESULT_URL = "https://www.dhlottery.co.kr/lt645/result"
 
-# Bootstrap-only factual history seed.  It is pinned so an upstream change
-# cannot silently alter our historical base.  Recent rows are cross-checked
-# against Donghaeng Lottery before the mirror is accepted.
-SEED_COMMIT = "78e55c13463b41567e11d8e7217d0b175d577443"
-SEED_DB_URL = (
-    "https://raw.githubusercontent.com/happylie/lotto_data/"
-    f"{SEED_COMMIT}/lotto_data.db"
-)
+COMMUNITY_REPO = "Utopia-ZEN/hotnumber"
+COMMUNITY_ARCHIVE_URL = f"https://github.com/{COMMUNITY_REPO}/archive/refs/heads/main.zip"
+FIRST_DRAW_DATE = date(2002, 12, 7)
 
-MIN_OFFICIAL_INTERVAL_SECONDS = 2.5
-MAX_OFFICIAL_REQUESTS = 12
+MIN_OFFICIAL_INTERVAL_SECONDS = 3.0
+MAX_OFFICIAL_REQUESTS = 4
 TIMEOUT_SECONDS = 20
 USER_AGENT = (
-    "HA-Lotto-645-Mirror/1.0 "
+    "HA-Lotto-645-Mirror/1.1 "
     "(+https://github.com/1bobby-git/HA-Lotto-645; weekly shared cache)"
 )
 
@@ -87,9 +80,8 @@ class OfficialClient:
 
     def _wait(self) -> None:
         elapsed = time.monotonic() - self._last_request_at
-        wait = MIN_OFFICIAL_INTERVAL_SECONDS - elapsed
-        if wait > 0:
-            time.sleep(wait)
+        if elapsed < MIN_OFFICIAL_INTERVAL_SECONDS:
+            time.sleep(MIN_OFFICIAL_INTERVAL_SECONDS - elapsed)
 
     def get_json(self, url: str, params: dict[str, Any] | None = None) -> Any:
         if self.requests >= MAX_OFFICIAL_REQUESTS:
@@ -97,23 +89,19 @@ class OfficialClient:
                 f"official request safety limit reached ({MAX_OFFICIAL_REQUESTS})"
             )
         self._wait()
-        target = url
-        if params:
-            target = f"{url}?{urlencode(params)}"
+        target = url if not params else f"{url}?{urlencode(params)}"
         request = Request(
             target,
             headers={
                 "Accept": "application/json, text/plain, */*",
                 "User-Agent": USER_AGENT,
-                "Referer": "https://www.dhlottery.co.kr/lt645/result",
+                "Referer": OFFICIAL_RESULT_URL,
             },
         )
         try:
             with urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-                status = int(getattr(response, "status", 200))
                 raw = response.read()
         except HTTPError as err:
-            # Do not hammer or attempt to bypass access controls.
             if err.code in (403, 429):
                 raise MirrorUpdateError(
                     f"Donghaeng Lottery returned HTTP {err.code}; stop without retry"
@@ -127,8 +115,6 @@ class OfficialClient:
             self.requests += 1
             self._last_request_at = time.monotonic()
 
-        if status >= 400:
-            raise MirrorUpdateError(f"official request returned HTTP {status}")
         try:
             return json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as err:
@@ -153,22 +139,22 @@ class OfficialClient:
         return parse_official_list(payload)
 
     def single(self, round_no: int) -> Draw | None:
-        payload = self.get_json(
-            SINGLE_DRAW_URL, {"srchLtEpsd": int(round_no)}
-        )
+        payload = self.get_json(SINGLE_DRAW_URL, {"srchLtEpsd": int(round_no)})
         for draw in parse_official_list(payload):
             if draw.round == round_no:
                 return draw
         return None
 
 
-def normalize_date(value: Any) -> str:
+def normalize_date(value: Any, round_no: int) -> str:
     text = str(value or "").strip().replace(".", "-").replace("/", "-")
     if len(text) == 8 and text.isdigit():
         return f"{text[:4]}-{text[4:6]}-{text[6:]}"
     parts = [part for part in text.split("-") if part]
     if len(parts) == 3 and all(part.isdigit() for part in parts):
         return f"{int(parts[0]):04d}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+    if round_no >= 1:
+        return (FIRST_DRAW_DATE + timedelta(days=(round_no - 1) * 7)).isoformat()
     return text
 
 
@@ -185,9 +171,10 @@ def validate_draw(draw: Draw) -> None:
 
 def parse_official_item(item: dict[str, Any]) -> Draw:
     try:
+        round_no = int(item["ltEpsd"])
         draw = Draw(
-            round=int(item["ltEpsd"]),
-            draw_date=normalize_date(item.get("ltRflYmd", "")),
+            round=round_no,
+            draw_date=normalize_date(item.get("ltRflYmd", ""), round_no),
             numbers=tuple(
                 sorted(int(item[f"tm{i}WnNo"]) for i in range(1, 7))
             ),  # type: ignore[arg-type]
@@ -220,46 +207,55 @@ def parse_official_list(payload: Any) -> list[Draw]:
     return sorted({row.round: row for row in rows}.values(), key=lambda row: row.round)
 
 
-def download_seed_db() -> Path:
-    request = Request(SEED_DB_URL, headers={"User-Agent": USER_AGENT})
+def download_community_history() -> list[Draw]:
+    """Download one GitHub archive instead of issuing 1,200+ HTTP requests."""
+    request = Request(COMMUNITY_ARCHIVE_URL, headers={"User-Agent": USER_AGENT})
     try:
-        with urlopen(request, timeout=30) as response:
-            raw = response.read()
+        with urlopen(request, timeout=45) as response:
+            archive = response.read()
     except (HTTPError, URLError, TimeoutError) as err:
-        raise MirrorUpdateError(f"bootstrap seed download failed: {err}") from err
-    if not raw.startswith(b"SQLite format 3\x00"):
-        raise MirrorUpdateError("bootstrap seed is not a SQLite database")
-    temp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    temp.write(raw)
-    temp.close()
-    return Path(temp.name)
+        raise MirrorUpdateError(f"community mirror archive download failed: {err}") from err
 
-
-def load_seed_history() -> list[Draw]:
-    path = download_seed_db()
+    draws: dict[int, Draw] = {}
     try:
-        with sqlite3.connect(path) as connection:
-            rows = connection.execute(
-                'SELECT round, date, "1st", "2nd", "3rd", "4th", "5th", "6th", bonus '
-                "FROM tb_lotto_list ORDER BY round"
-            ).fetchall()
-    except sqlite3.Error as err:
-        raise MirrorUpdateError(f"bootstrap seed database error: {err}") from err
-    finally:
-        path.unlink(missing_ok=True)
+        with zipfile.ZipFile(io.BytesIO(archive)) as zf:
+            for name in zf.namelist():
+                parts = Path(name).parts
+                if len(parts) < 4 or parts[-3] != "lotto_data":
+                    continue
+                if not parts[-2].replace("-", "").isdigit():
+                    continue
+                if not parts[-1].endswith(".lotto"):
+                    continue
+                stem = Path(parts[-1]).stem
+                if not stem.isdigit():
+                    continue
+                data = json.loads(zf.read(name).decode("utf-8"))
+                round_no = int(data["round"])
+                draw = Draw(
+                    round=round_no,
+                    draw_date=normalize_date(data.get("date", ""), round_no),
+                    numbers=tuple(sorted(int(v) for v in data["numbers"])),  # type: ignore[arg-type]
+                    bonus=int(data["bonus"]),
+                    first_prize_winners=(
+                        int(data["winners"])
+                        if data.get("winners") is not None
+                        else None
+                    ),
+                    first_prize_amount=(
+                        int(data["amount_per_winner"])
+                        if data.get("amount_per_winner") is not None
+                        else None
+                    ),
+                )
+                validate_draw(draw)
+                draws[round_no] = draw
+    except (zipfile.BadZipFile, KeyError, TypeError, ValueError, json.JSONDecodeError) as err:
+        raise MirrorUpdateError(f"community mirror archive is invalid: {err}") from err
 
-    draws: list[Draw] = []
-    for row in rows:
-        draw = Draw(
-            round=int(row[0]),
-            draw_date=normalize_date(row[1]),
-            numbers=tuple(sorted(int(value) for value in row[2:8])),  # type: ignore[arg-type]
-            bonus=int(row[8]),
-        )
-        validate_draw(draw)
-        draws.append(draw)
-    validate_contiguous(draws)
-    return draws
+    rows = [draws[index] for index in sorted(draws)]
+    validate_contiguous(rows)
+    return rows
 
 
 def load_existing_mirror() -> list[Draw]:
@@ -271,31 +267,29 @@ def load_existing_mirror() -> list[Draw]:
     except (OSError, KeyError, TypeError, json.JSONDecodeError) as err:
         raise MirrorUpdateError(f"existing mirror is invalid: {err}") from err
 
-    draws: list[Draw] = []
+    rows: list[Draw] = []
     for item in items:
-        try:
-            draw = Draw(
-                round=int(item["round"]),
-                draw_date=normalize_date(item.get("draw_date", "")),
-                numbers=tuple(sorted(int(value) for value in item["numbers"])),  # type: ignore[arg-type]
-                bonus=int(item["bonus"]),
-                first_prize_winners=(
-                    int(item["first_prize_winners"])
-                    if item.get("first_prize_winners") is not None
-                    else None
-                ),
-                first_prize_amount=(
-                    int(item["first_prize_amount"])
-                    if item.get("first_prize_amount") is not None
-                    else None
-                ),
-            )
-        except (KeyError, TypeError, ValueError) as err:
-            raise MirrorUpdateError("existing mirror row is invalid") from err
+        round_no = int(item["round"])
+        draw = Draw(
+            round=round_no,
+            draw_date=normalize_date(item.get("draw_date", ""), round_no),
+            numbers=tuple(sorted(int(v) for v in item["numbers"])),  # type: ignore[arg-type]
+            bonus=int(item["bonus"]),
+            first_prize_winners=(
+                int(item["first_prize_winners"])
+                if item.get("first_prize_winners") is not None
+                else None
+            ),
+            first_prize_amount=(
+                int(item["first_prize_amount"])
+                if item.get("first_prize_amount") is not None
+                else None
+            ),
+        )
         validate_draw(draw)
-        draws.append(draw)
-    validate_contiguous(draws)
-    return draws
+        rows.append(draw)
+    validate_contiguous(rows)
+    return rows
 
 
 def validate_contiguous(draws: list[Draw]) -> None:
@@ -306,110 +300,109 @@ def validate_contiguous(draws: list[Draw]) -> None:
         raise MirrorUpdateError("history must be contiguous from round 1")
 
 
-def verify_seed_tail(seed: list[Draw], client: OfficialClient) -> None:
-    """Cross-check seed rows visible in one official center window."""
-    tail_round = seed[-1].round
-    official = client.center(tail_round)
-    seed_by_round = {draw.round: draw for draw in seed}
-    overlaps = [draw for draw in official if draw.round in seed_by_round]
-    if not overlaps:
-        raise MirrorUpdateError("bootstrap seed could not be cross-checked")
-    for draw in overlaps:
-        seeded = seed_by_round[draw.round]
-        if seeded.numbers != draw.numbers or seeded.bonus != draw.bonus:
+def verify_with_official(draws: list[Draw], client: OfficialClient) -> None:
+    """Cross-check current community tail with a tiny official request budget."""
+    official_latest = client.latest_round()
+    if official_latest != draws[-1].round:
+        if official_latest < draws[-1].round:
             raise MirrorUpdateError(
-                f"bootstrap seed mismatch at round {draw.round}; refusing mirror"
+                f"community source is ahead of official latest ({draws[-1].round}>{official_latest})"
             )
-
-
-def fetch_missing(
-    history: list[Draw], latest_round: int, client: OfficialClient
-) -> list[Draw]:
-    by_round = {draw.round: draw for draw in history}
-    wanted = set(range(history[-1].round + 1, latest_round + 1))
-    while wanted - set(by_round):
-        missing = sorted(wanted - set(by_round))
-        pointer = missing[-1]
-        page = client.center(pointer)
-        before = len(by_round)
-        for draw in page:
-            if draw.round in wanted:
-                by_round[draw.round] = draw
-        if len(by_round) == before:
-            # One cautious single-round request can fill an endpoint edge case.
-            draw = client.single(pointer)
-            if draw is not None:
-                by_round[draw.round] = draw
-        if len(by_round) == before:
+        gap = official_latest - draws[-1].round
+        if gap > 1:
             raise MirrorUpdateError(
-                f"could not obtain missing round {pointer} without extra crawling"
+                f"community source is {gap} rounds behind official; keep previous mirror"
             )
+        # A one-round publication lag can be filled with one official single request.
+        missing = client.single(official_latest)
+        if missing is None:
+            raise MirrorUpdateError("latest official round could not be read safely")
+        draws.append(missing)
 
-    result = [by_round[index] for index in range(1, latest_round + 1)]
-    validate_contiguous(result)
-    return result
+    latest = draws[-1]
+    try:
+        official_window = client.center(latest.round)
+    except MirrorUpdateError:
+        # If the list endpoint times out, a single-round endpoint is a bounded fallback.
+        official_single = client.single(latest.round)
+        official_window = [official_single] if official_single is not None else []
+
+    match = next((row for row in official_window if row.round == latest.round), None)
+    if match is None:
+        raise MirrorUpdateError("latest round could not be cross-checked with official data")
+    if match.numbers != latest.numbers or match.bonus != latest.bonus:
+        raise MirrorUpdateError(
+            f"latest round {latest.round} disagrees with official Donghaeng Lottery data"
+        )
 
 
-def write_mirror(draws: list[Draw], client: OfficialClient, bootstrap: bool) -> None:
-    MIRROR_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "schema_version": 1,
+def draws_hash(draws: list[Draw]) -> str:
+    canonical = json.dumps(
+        [draw.as_dict() for draw in draws],
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def build_payload(draws: list[Draw], client: OfficialClient) -> dict[str, Any]:
+    return {
+        "schema_version": 2,
         "updated_at": datetime.now(UTC).isoformat(),
         "latest_round": draws[-1].round,
         "draw_count": len(draws),
-        "source": "Donghaeng Lottery verified shared mirror",
-        "official_url": "https://www.dhlottery.co.kr/lt645/result",
-        "bootstrap_seed": (
-            {
-                "repository": "happylie/lotto_data",
-                "commit": SEED_COMMIT,
-                "used": True,
-            }
-            if bootstrap
-            else {"used": False}
-        ),
+        "draws_sha256": draws_hash(draws),
+        "source": "shared GitHub mirror cross-checked with Donghaeng Lottery",
+        "official_url": OFFICIAL_RESULT_URL,
+        "community_source": {
+            "repository": COMMUNITY_REPO,
+            "role": "bulk historical transport",
+        },
         "official_requests_this_update": client.requests,
         "draws": [draw.as_dict() for draw in draws],
     }
-    MIRROR_PATH.write_text(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n",
-        encoding="utf-8",
-    )
+
+
+def write_payload(payload: dict[str, Any]) -> None:
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+    MIRROR_PATH.parent.mkdir(parents=True, exist_ok=True)
+    BUNDLED_SEED_PATH.parent.mkdir(parents=True, exist_ok=True)
+    MIRROR_PATH.write_text(text, encoding="utf-8")
+    BUNDLED_SEED_PATH.write_text(text, encoding="utf-8")
+
+
+def same_draws(existing: list[Draw], incoming: list[Draw]) -> bool:
+    return [d.as_dict() for d in existing] == [d.as_dict() for d in incoming]
 
 
 def main() -> int:
     existing = load_existing_mirror()
-    bootstrap = not existing
+    candidate = download_community_history()
+    print(f"community history through round {candidate[-1].round}")
+
     client = OfficialClient()
-
-    if bootstrap:
-        print("mirror missing: loading pinned historical bootstrap seed")
-        history = load_seed_history()
-        print(f"seed loaded through round {history[-1].round}")
-        verify_seed_tail(history, client)
-        print("seed tail verified against Donghaeng Lottery")
-    else:
-        history = existing
-        print(f"existing mirror through round {history[-1].round}")
-
-    latest = client.latest_round()
-    print(f"official latest round: {latest}")
-    if latest < history[-1].round:
-        raise MirrorUpdateError(
-            "official latest round is behind the mirror; keeping existing mirror"
-        )
-    if latest == history[-1].round:
-        print(
-            f"mirror already current; official requests={client.requests}; no file change"
-        )
-        return 0
-
-    updated = fetch_missing(history, latest, client)
-    write_mirror(updated, client, bootstrap)
+    verify_with_official(candidate, client)
+    validate_contiguous(candidate)
     print(
-        f"mirror updated: {history[-1].round} -> {updated[-1].round}; "
+        f"official verification complete; latest={candidate[-1].round}; "
         f"official requests={client.requests}"
     )
+
+    if existing and same_draws(existing, candidate):
+        # Keep mirror updated_at stable, but make sure the release-bundled seed exists.
+        if not BUNDLED_SEED_PATH.exists():
+            BUNDLED_SEED_PATH.parent.mkdir(parents=True, exist_ok=True)
+            BUNDLED_SEED_PATH.write_bytes(MIRROR_PATH.read_bytes())
+            print("mirror unchanged; bundled seed created")
+        else:
+            print("mirror unchanged")
+        return 0
+
+    payload = build_payload(candidate, client)
+    write_payload(payload)
+    old = existing[-1].round if existing else 0
+    print(f"mirror updated: {old} -> {candidate[-1].round}")
     return 0
 
 
