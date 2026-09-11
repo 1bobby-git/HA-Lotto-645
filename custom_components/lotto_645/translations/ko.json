@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "로또 6/45 분석",
-        "description": "공식 1등 전체 회차를 분석하고 선택한 방식별 추천번호를 생성합니다."
+        "description": "릴리스에 포함된 이력 스냅샷과 GitHub 공유 미러를 사용해 1회부터 최신 회차까지 분석하고 선택한 방식별 추천번호를 생성합니다."
       }
     },
     "abort": {
@@ -14,13 +14,17 @@
   "options": {
     "step": {
       "init": {
-        "title": "추천 방식 및 Home Assistant AI 설정",
-        "description": "로컬 추천 방식을 하나 이상 복수 선택하세요. 공개 공식은 널리 알려진 통계 필터이며 실제 당첨 확률을 높이는 공식이 아닙니다. AI Task 엔티티를 비워두면 설정 > AI의 기본 데이터 생성 작업을 사용합니다.",
+        "title": "추천 방식·AI·데이터 수집 설정",
+        "description": "추천 방식을 하나 이상 복수 선택하세요. 기본 데이터 수집은 GitHub 공유 미러와 번들 스냅샷을 사용하므로 각 HA 설치가 동행복권 전체 회차를 반복 요청하지 않습니다. 동행복권 직접 증분 확인은 기본적으로 꺼져 있습니다.",
         "data": {
           "selected_methods": "번호 추천 방식(복수 선택)",
           "enable_ai_recommendation": "Home Assistant AI 추천 사용",
           "ai_task_entity_id": "AI Task 엔티티(선택 사항, 비우면 기본 데이터 생성 AI 사용)",
-          "ai_auto_generate": "새 회차 확인 시 AI 추천 자동 생성"
+          "ai_auto_generate": "새 회차 확인 시 AI 추천 자동 생성",
+          "allow_official_direct_fallback": "동행복권 제한적 직접 폴백 허용"
+        },
+        "data_description": {
+          "allow_official_direct_fallback": "공유 미러가 실패할 때만 사용합니다. 최근 1~2개 누락 회차만 순차·속도 제한으로 확인하며 전체 회차 크롤링은 하지 않습니다. 특별히 필요하지 않으면 끄는 것을 권장합니다."
         }
       }
     },

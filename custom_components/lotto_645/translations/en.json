@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Lotto 6/45 Analysis",
-        "description": "Analyze all official first-prize results and create selectable deterministic recommendations."
+        "description": "Analyze Lotto 6/45 history using the release-bundled snapshot and a shared GitHub mirror, then create selectable deterministic recommendations."
       }
     },
     "abort": {
@@ -14,13 +14,17 @@
   "options": {
     "step": {
       "init": {
-        "title": "Recommendation methods and Home Assistant AI",
-        "description": "Select one or more local analysis methods. Public formulas are common statistical filters and do not increase the mathematical winning probability. When no AI Task entity is selected, Home Assistant's preferred data-generation AI Task is used.",
+        "title": "Recommendation methods, AI, and data source",
+        "description": "Select one or more local analysis methods. The default data path uses the shared GitHub mirror and bundled snapshot so each Home Assistant installation does not crawl Donghaeng Lottery. Direct official incremental fallback is optional and disabled by default.",
         "data": {
           "selected_methods": "Recommendation methods (multiple selection)",
           "enable_ai_recommendation": "Enable Home Assistant AI recommendation",
           "ai_task_entity_id": "AI Task entity (optional; blank uses the preferred data AI Task)",
-          "ai_auto_generate": "Automatically generate AI recommendation for a new draw"
+          "ai_auto_generate": "Automatically generate AI recommendation for a new draw",
+          "allow_official_direct_fallback": "Allow limited direct Donghaeng Lottery fallback"
+        },
+        "data_description": {
+          "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed."
         }
       }
     },
