@@ -1,0 +1,71 @@
+name: Update Lotto Mirror
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/update_lotto_mirror.py
+      - .github/workflows/lotto-mirror.yml
+  schedule:
+    # Saturday 22:50 KST, comfortably after the ~20:35 draw.
+    - cron: "50 13 * * 6"
+    # Sunday 09:30 KST fallback in case publication or access was delayed.
+    - cron: "30 0 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lotto-history-mirror
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Update shared history mirror
+        run: python scripts/update_lotto_mirror.py
+
+      - name: Validate mirror JSON
+        if: hashFiles('data/lotto645-history.json') != ''
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('data/lotto645-history.json')
+          d = json.loads(p.read_text(encoding='utf-8'))
+          rows = d['draws']
+          assert rows
+          assert d['latest_round'] == len(rows)
+          assert [int(x['round']) for x in rows] == list(range(1, len(rows) + 1))
+          for row in rows:
+              nums = [int(x) for x in row['numbers']]
+              assert len(nums) == 6 and len(set(nums)) == 6
+              assert all(1 <= x <= 45 for x in nums)
+              bonus = int(row['bonus'])
+              assert 1 <= bonus <= 45 and bonus not in nums
+          print(f"validated mirror through round {d['latest_round']}")
+          PY
+
+      - name: Commit mirror only when changed
+        run: |
+          if git diff --quiet -- data/lotto645-history.json; then
+            echo "Mirror unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/lotto645-history.json
+          git commit -m "data: update lotto history mirror [skip release]"
+          git push
