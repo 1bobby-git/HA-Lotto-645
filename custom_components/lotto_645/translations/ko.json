@@ -3,18 +3,29 @@
   "config": {
     "step": {
       "user": {
-        "title": "로또 6/45 분석 설정",
-        "description": "동행복권 1회부터 최신 확정 회차까지의 당첨번호를 분석해 5게임을 제공합니다. 최초 설정 시 전체 회차를 한 번 동기화합니다."
+        "title": "로또 6/45 분석",
+        "description": "공식 1등 전체 회차를 분석하고 선택한 방식별 추천번호를 생성합니다."
       }
     },
     "abort": {
-      "single_instance_allowed": "이 통합은 한 번만 추가할 수 있습니다."
+      "single_instance_allowed": "로또 6/45 분석은 하나만 설정할 수 있습니다."
     }
   },
-  "services": {
-    "refresh": {
-      "name": "로또 데이터 즉시 새로고침",
-      "description": "최신 회차를 확인하고 추천 분석을 갱신합니다."
+  "options": {
+    "step": {
+      "init": {
+        "title": "추천 방식 및 Home Assistant AI 설정",
+        "description": "로컬 추천 방식을 하나 이상 복수 선택하세요. 공개 공식은 널리 알려진 통계 필터이며 실제 당첨 확률을 높이는 공식이 아닙니다. AI Task 엔티티를 비워두면 설정 > AI의 기본 데이터 생성 작업을 사용합니다.",
+        "data": {
+          "selected_methods": "번호 추천 방식(복수 선택)",
+          "enable_ai_recommendation": "Home Assistant AI 추천 사용",
+          "ai_task_entity_id": "AI Task 엔티티(선택 사항, 비우면 기본 데이터 생성 AI 사용)",
+          "ai_auto_generate": "새 회차 확인 시 AI 추천 자동 생성"
+        }
+      }
+    },
+    "error": {
+      "select_at_least_one": "번호 추천 방식을 하나 이상 선택하세요."
     }
   }
 }
