@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 768" role="img" aria-labelledby="title desc">
+  <title id="title">Lotto 6/45</title>
+  <desc id="desc">복주머니 아이콘과 Lotto 6/45 문자가 결합된 가로형 로고</desc>
+  <defs>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d8ff00"/><stop offset=".58" stop-color="#00a94f"/><stop offset="1" stop-color="#007b3f"/></linearGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff000"/><stop offset=".5" stop-color="#ff9b00"/><stop offset="1" stop-color="#ff5b00"/></linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00b7e8"/><stop offset=".55" stop-color="#0873ce"/><stop offset="1" stop-color="#00479f"/></linearGradient>
+    <linearGradient id="deepBlue" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#0a67bc"/><stop offset="1" stop-color="#003f9c"/></linearGradient>
+    <linearGradient id="lime" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b7e800"/><stop offset="1" stop-color="#75bd00"/></linearGradient>
+    <radialGradient id="redBall" cx="35%" cy="25%" r="70%"><stop stop-color="#ff786a"/><stop offset=".45" stop-color="#ff1c14"/><stop offset="1" stop-color="#d60000"/></radialGradient>
+    <radialGradient id="greenBall" cx="35%" cy="25%" r="70%"><stop stop-color="#8ee88b"/><stop offset=".45" stop-color="#13ad50"/><stop offset="1" stop-color="#00843f"/></radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="170%" height="170%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#003d88" flood-opacity=".42"/></filter>
+  </defs>
+
+  <g transform="translate(24 84)">
+    <path d="M86 66 171 30l66 31-14 145H102Z" fill="url(#green)"/>
+    <path d="M188 61 276 28l73 34-18 148H205Z" fill="url(#orange)"/>
+    <path d="M291 62 384 30l73 37-23 145H312Z" fill="url(#blue)"/>
+    <path d="M117 190h279c34 0 61 27 61 61v20H57v-20c0-34 27-61 60-61Z" fill="#075aa9"/>
+    <rect x="70" y="205" width="370" height="58" rx="29" fill="#fff" stroke="#0b65b7" stroke-width="15"/>
+    <path d="M66 258 3 363l29 93 64 67h166V258Z" fill="url(#green)"/>
+    <path d="M262 258H96l52 265h114Z" fill="url(#orange)"/>
+    <path d="M262 258h166l70 91-29 111-71 63H262Z" fill="url(#blue)"/>
+    <path d="M145 523h254" stroke="#0758a8" stroke-width="12" stroke-linecap="round" opacity=".25"/>
+
+    <g filter="url(#shadow)">
+      <circle cx="483" cy="143" r="78" fill="#0759a8"/>
+      <circle cx="483" cy="143" r="63" fill="url(#greenBall)"/>
+      <text x="483" y="173" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-size="86" font-weight="900" fill="#fff">6</text>
+      <circle cx="397" cy="246" r="88" fill="#0759a8"/>
+      <circle cx="397" cy="246" r="72" fill="url(#redBall)"/>
+      <text x="397" y="276" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-size="78" font-weight="900" fill="#fff">45</text>
+    </g>
+  </g>
+
+  <g font-family="Arial Black,Arial,sans-serif" font-weight="900" letter-spacing="-18">
+    <text x="570" y="560" font-size="390" fill="url(#deepBlue)">L</text>
+    <text x="755" y="560" font-size="390" fill="#08aee2">o</text>
+    <text x="1014" y="560" font-size="390" fill="url(#deepBlue)">t</text>
+    <text x="1170" y="560" font-size="390" fill="url(#deepBlue)">t</text>
+    <text x="1325" y="560" font-size="390" fill="url(#lime)">o</text>
+  </g>
+  <g font-family="Arial Black,Arial,sans-serif" font-weight="900" letter-spacing="-10">
+    <text x="1545" y="560" font-size="270" fill="url(#deepBlue)">6</text>
+    <text x="1690" y="560" font-size="270" fill="url(#lime)">/</text>
+    <text x="1795" y="560" font-size="270" fill="url(#deepBlue)">45</text>
+  </g>
+</svg>
