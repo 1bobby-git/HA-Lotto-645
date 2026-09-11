@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - v1.5.1-fix
     paths:
       - images/logo-horizontal.png
       - scripts/render_brand.py
@@ -14,7 +15,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: lotto-brand-render
+  group: lotto-brand-render-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -25,18 +26,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-
       - name: Install image dependency
         run: python -m pip install --disable-pip-version-check "Pillow>=10,<12"
-
       - name: Crop Home Assistant brand assets from canonical PNG
         run: python scripts/render_brand.py
-
-      - name: Commit cropped PNGs when changed
+      - name: Commit cropped/resized PNGs when changed
         run: |
           PATHS=(
             custom_components/lotto_645/brand/logo.png
@@ -52,5 +49,5 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "fix: crop Home Assistant brand icons from supplied logo [skip release]"
+          git commit -m "fix: crop supplied-logo icon and size HA brand assets [skip release]"
           git push
