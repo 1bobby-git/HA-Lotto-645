@@ -74,19 +74,11 @@ HA .storage 캐시
 
 ## 즉시 새로고침 · 번호 재생성
 
-버튼 또는 서비스:
-
 ```yaml
 action: lotto_645.refresh
 ```
 
-실행하면 다음 순서로 동작합니다.
-
-1. 공유 이력 미러를 확인합니다.
-2. 새 공식 회차가 있으면 데이터를 갱신합니다.
-3. 선택된 모든 **비AI 추천 방식**을 해당 방식의 고득점 후보군에서 다른 조합으로 재생성합니다.
-4. 과거 1등과 완전히 동일한 6개 조합은 계속 제외합니다.
-5. 기존 **Home Assistant AI 추천은 변경하지 않습니다.**
+실행하면 공유 이력 미러를 확인한 뒤 선택된 모든 **비AI 추천 방식**을 해당 방식의 고득점 후보군에서 다른 조합으로 재생성합니다. 과거 1등과 완전히 동일한 조합은 계속 제외하며 기존 **Home Assistant AI 추천은 변경하지 않습니다.**
 
 같은 이력에서 무작위로 아무 번호나 뽑는 것이 아니라 각 방식의 상위 후보군 안에서 재생성 순번에 따라 다른 후보를 선택합니다.
 
@@ -104,23 +96,10 @@ action: lotto_645.refresh
 
 ## Home Assistant AI 추천
 
-통합이 외부 AI API를 직접 호출하지 않고 Home Assistant의 **AI Task 데이터 생성 기능**을 사용합니다.
-
-1. **설정 → AI**에서 데이터 생성 작업 제공자를 선택합니다.
-2. 통합 **구성**에서 `Home Assistant AI 추천 사용`을 켭니다.
-3. AI Task 엔티티를 비우면 Home Assistant의 기본 데이터 생성 AI를 사용합니다.
-4. `AI 추천 생성` 버튼 또는 서비스를 실행합니다.
+통합이 외부 AI API를 직접 호출하지 않고 Home Assistant의 **AI Task 데이터 생성 기능**을 사용합니다. 설정 → AI에서 데이터 생성 제공자를 선택하고 통합 구성에서 AI 추천을 켜면 됩니다.
 
 ```yaml
 action: lotto_645.generate_ai_recommendation
-```
-
-특정 AI Task 지정:
-
-```yaml
-action: lotto_645.generate_ai_recommendation
-data:
-  entity_id: ai_task.google_ai_task
 ```
 
 AI 결과는 1~45 정수 6개, 중복 여부, 과거 1등 완전일치, 로컬 추천 완전복제, 근거 존재 여부를 로컬에서 다시 검증합니다.
@@ -138,16 +117,9 @@ README용 자산도 `images/logo-horizontal.png`, `images/icon-square.png`에 �
 
 ## 설치 / 업데이트
 
-### HACS
+HACS 사용자 저장소: `https://github.com/1bobby-git/HA-Lotto-645`
 
-1. HACS → Integrations → Custom repositories
-2. `https://github.com/1bobby-git/HA-Lotto-645` 등록
-3. Category: `Integration`
-4. 최신 Release 설치
-5. Home Assistant 재시작
-6. 설정 → 기기 및 서비스 → **Lotto 6/45 Analysis**
-
-브랜드 이미지는 프론트엔드 캐시가 남을 수 있으므로 업데이트 후 Home Assistant 재시작 및 앱/브라우저 화면 새로고침을 권장합니다.
+HACS에서 최신 Release를 설치한 뒤 Home Assistant를 재시작하세요. 브랜드 이미지는 프론트엔드 캐시가 남을 수 있으므로 모바일 앱을 완전히 종료 후 다시 열거나 브라우저 캐시를 새로고침하는 것을 권장합니다.
 
 ## 주요 엔티티
 
@@ -168,6 +140,8 @@ README용 자산도 `images/logo-horizontal.png`, `images/icon-square.png`에 �
 - 최신 데이터는 중앙 작업에서 동행복권 결과와 교차 검증
 
 보조 자료는 공식 원출처를 대체하는 신뢰 선언이 아니라 동행복권에 대량 요청을 보내지 않기 위한 벌크 운반 수단입니다. 공식 검증과 불일치하면 기존 정상 미러를 유지합니다.
+
+자세한 계산 설명은 [`docs/FORMULAS.md`](docs/FORMULAS.md)를 참고하세요.
 
 ## 라이선스
 
