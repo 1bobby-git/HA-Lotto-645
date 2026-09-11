@@ -45,6 +45,7 @@ METHOD_BALANCE: Final = "balance_formula"
 METHOD_DELTA: Final = "delta_system"
 METHOD_CARRYOVER: Final = "carryover_formula"
 METHOD_PUBLIC_ENSEMBLE: Final = "public_ensemble"
+# Keep the legacy ID for existing config-entry compatibility.
 METHOD_MYUNGRI_HETU: Final = "myungri_hetu_day_pillar"
 
 METHODS: Final[tuple[MethodDefinition, ...]] = (
@@ -206,35 +207,40 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
     ),
     MethodDefinition(
         METHOD_MYUNGRI_HETU,
-        "명리 권장 · 일진 오행·하도 수리",
-        "전통 명리 권장",
-        "다음 추첨일의 60갑자 일주 천간(日干/Day Master)·지지 오행과 하도(河圖) 수리오행을 결합합니다. 전통 체계의 계산 규칙은 재현 가능하지만 로또 당첨 확률 상승이 과학적으로 검증된 방식은 아닙니다.",
-        {"myungri_resonance": 0.60, "graph_strength": 0.12, "transition": 0.10, "gap_balance": 0.08, "frequency_100": 0.05, "long_neutral": 0.05},
-        pair_weight=0.08,
-        balance_weight=0.10,
-        diversity_weight=0.06,
-        myungri_weight=0.34,
-        pool_size=20,
+        "명리 권장 · 개인 사주 원국·대운·추첨일",
+        "개인 사주 명리 권장",
+        (
+            "사용자가 입력한 생년월일·출생시간·양/음력·성별·출생지/시간대로 사주 원국의 "
+            "연주·월주·일주·시주, 일간, 오행 강약, 십신, 지장간, 납음, 대운을 계산하고 "
+            "다음 추첨일의 사주와 천간합·충, 지지합·충·해·형 관계를 결합합니다. "
+            "하도 수리오행은 번호 오행 매핑에 사용하며 통계 신호는 보조로만 반영합니다. "
+            "개인 사주정보 입력 전에는 이 방식이 활성화되지 않습니다."
+        ),
+        {"myungri_resonance": 0.72, "graph_strength": 0.08, "transition": 0.07, "gap_balance": 0.05, "frequency_100": 0.04, "long_neutral": 0.04},
+        pair_weight=0.05,
+        balance_weight=0.06,
+        diversity_weight=0.05,
+        myungri_weight=0.52,
+        pool_size=22,
     ),
 )
 
 METHODS_BY_ID: Final = {method.method_id: method for method in METHODS}
 
+# Personal Saju is intentionally not selected by default. A user must explicitly
+# select it and complete the birth-profile step before the integration may use it.
 DEFAULT_METHOD_IDS: Final[tuple[str, ...]] = (
     METHOD_PHASE_RESIDUAL,
     METHOD_TRANSITION_GAP,
     METHOD_WEIGHTED_FREQUENCY,
     METHOD_PAIR_COOCCURRENCE,
     METHOD_PUBLIC_ENSEMBLE,
-    METHOD_MYUNGRI_HETU,
 )
 
 PUBLIC_METHOD_IDS: Final[tuple[str, ...]] = tuple(
     method.method_id for method in METHODS if method.category in {"공개 분석식", "추천 공개 분석식"}
 )
-TRADITIONAL_METHOD_IDS: Final[tuple[str, ...]] = tuple(
-    method.method_id for method in METHODS if method.category == "전통 명리 권장"
-)
+TRADITIONAL_METHOD_IDS: Final[tuple[str, ...]] = (METHOD_MYUNGRI_HETU,)
 
 
 def normalize_method_ids(value: object) -> tuple[str, ...]:
@@ -252,7 +258,14 @@ def normalize_method_ids(value: object) -> tuple[str, ...]:
 def method_selector_options() -> list[dict[str, str]]:
     """Return concise labels with enough context for the HA selector."""
     return [
-        {"value": method.method_id, "label": f"{method.label} — {method.description}"}
+        {
+            "value": method.method_id,
+            "label": (
+                f"{method.label} [사주정보 입력 필요] — {method.description}"
+                if method.method_id == METHOD_MYUNGRI_HETU
+                else f"{method.label} — {method.description}"
+            ),
+        }
         for method in METHODS
     ]
 
@@ -265,6 +278,11 @@ def method_catalog() -> list[dict[str, str]]:
             "name": method.label,
             "category": method.category,
             "description": method.description,
+            "requirements": (
+                "생년월일, 출생시간, 양력/음력, 성별, 출생지, 시간대"
+                if method.method_id == METHOD_MYUNGRI_HETU
+                else "없음"
+            ),
         }
         for method in METHODS
     ]

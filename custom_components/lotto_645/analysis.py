@@ -200,7 +200,10 @@ def _cycle_fit(history: list[LottoDraw], current_gaps: dict[int, int]) -> dict[i
     return result
 
 
-def _feature_maps(history: list[LottoDraw]) -> tuple[dict[str, dict[int, float]], dict[str, Any]]:
+def _feature_maps(
+    history: list[LottoDraw],
+    saju_profile: dict[str, Any] | None = None,
+) -> tuple[dict[str, dict[int, float]], dict[str, Any]]:
     n = len(history)
     windows = (10, 30, 100, 120, 260)
     counts = {size: _count_window(history, size) for size in windows}
@@ -239,7 +242,7 @@ def _feature_maps(history: list[LottoDraw]) -> tuple[dict[str, dict[int, float]]
     decay_frequency = _decayed_frequency(history)
     bayesian_60 = _bayesian_recent(history)
     cycle_fit = _cycle_fit(history, raw_gap)
-    myungri = build_myungri_context(history[-1].draw_date)
+    myungri = build_myungri_context(history[-1].draw_date, saju_profile)
 
     raw_features = {
         "counter_phase": counter_phase,
@@ -460,10 +463,15 @@ def _recommendation_reason(method: MethodDefinition, combo: tuple[int, ...], con
 
     if method.method_id == METHOD_MYUNGRI_HETU:
         meta = context["myungri"]
+        favorable = "·".join(meta.get("favorable_elements_ko", [])) or "보완오행"
+        interactions = meta.get("interactions", {})
+        positive_count = len(interactions.get("stem_harmony", [])) + len(interactions.get("branch_harmony", []))
+        negative_count = len(interactions.get("stem_clash", [])) + len(interactions.get("branch_clash_harm_punishment", []))
         reason = (
-            f"{meta.get('target_draw_date') or '다음 추첨일'} {meta.get('sexagenary_day') or '일진'}의 일간 "
-            f"{meta.get('day_master_element_ko') or '오행'}과 하도 수리오행의 상생·동기 관계, "
-            f"오행 분산·음양 균형을 중심으로 {pair[0]}-{pair[1]} 통계 연결을 보조 반영"
+            f"개인 원국 일간 {meta.get('day_master') or '-'}({meta.get('day_master_element_ko') or '-'}), "
+            f"{meta.get('strength') or '강약 미정'} 기준 보완오행 {favorable}; "
+            f"대운과 {meta.get('target_draw_date') or '다음 추첨일'} 사주의 합계열 {positive_count}건·충해형 {negative_count}건, "
+            f"하도 수리오행 및 {pair[0]}-{pair[1]} 통계 연결을 보조 반영"
         )
     else:
         reasons = {
@@ -503,7 +511,12 @@ def _recommendation_reason(method: MethodDefinition, combo: tuple[int, ...], con
     return reason, details
 
 
-def build_analysis(history: list[LottoDraw], method_ids: Sequence[str] | None = None, generation_nonce: int = 0) -> AnalysisResult:
+def build_analysis(
+    history: list[LottoDraw],
+    method_ids: Sequence[str] | None = None,
+    generation_nonce: int = 0,
+    saju_profile: dict[str, Any] | None = None,
+) -> AnalysisResult:
     """Build one recommendation per selected method.
 
     generation_nonce=0 returns the top deterministic candidates. Positive values
@@ -519,7 +532,12 @@ def build_analysis(history: list[LottoDraw], method_ids: Sequence[str] | None = 
         raise ValueError("1회부터 최신 회차까지 연속된 전체 데이터가 필요합니다")
 
     selected_method_ids = normalize_method_ids(method_ids if method_ids is not None else DEFAULT_METHOD_IDS)
-    ranked, context = _feature_maps(history)
+    ranked, context = _feature_maps(history, saju_profile)
+    if (
+        METHOD_MYUNGRI_HETU in selected_method_ids
+        and context["myungri"].get("status") != "ready"
+    ):
+        raise ValueError("명리 권장은 개인 사주정보 입력 후 사용할 수 있습니다")
     context["latest_numbers"] = list(history[-1].numbers)
     past_combos = {tuple(draw.numbers) for draw in history}
     quads, quints = _build_seen_subset_counts(history)
@@ -561,7 +579,7 @@ def build_analysis(history: list[LottoDraw], method_ids: Sequence[str] | None = 
     triplet_strength = context["triplet_strength_raw"]
     myungri = context["myungri"]
     summary = {
-        "algorithm": "selectable_multi_formula_v4",
+        "algorithm": "selectable_multi_formula_v5_personal_saju",
         "generation_sequence": generation_nonce,
         "history_draws": len(history),
         "selected_method_ids": list(selected_method_ids),
@@ -580,13 +598,16 @@ def build_analysis(history: list[LottoDraw], method_ids: Sequence[str] | None = 
         "top_triplet_strength": sorted(NUMBERS, key=lambda n: (-triplet_strength[n], n))[:6],
         "myungri_context": {
             "status": myungri.get("status"),
+            "profile_configured": myungri.get("status") == "ready",
             "target_draw_date": myungri.get("target_draw_date"),
-            "sexagenary_day": myungri.get("sexagenary_day"),
             "day_master": myungri.get("day_master"),
             "day_master_element": myungri.get("day_master_element_ko"),
-            "day_branch": myungri.get("day_branch"),
-            "day_branch_element": myungri.get("day_branch_element_ko"),
+            "day_master_strength": myungri.get("strength"),
+            "favorable_elements": myungri.get("favorable_elements_ko"),
+            "current_daewoon": myungri.get("luck_cycle", {}).get("current") if myungri.get("status") == "ready" else None,
+            "target_interactions": myungri.get("interactions"),
             "notice": myungri.get("notice"),
+            "privacy_notice": myungri.get("privacy_notice"),
         },
         "first_prize_odds": FIRST_PRIZE_ODDS,
         "public_formula_notice": PUBLIC_FORMULA_NOTICE,

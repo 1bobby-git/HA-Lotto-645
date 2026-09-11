@@ -39,8 +39,9 @@ from .const import (
     UPDATE_INTERVAL,
 )
 from .history import LottoHistoryError, load_bundled_history
-from .methods import DEFAULT_METHOD_IDS, normalize_method_ids
+from .methods import DEFAULT_METHOD_IDS, METHOD_MYUNGRI_HETU, normalize_method_ids
 from .models import AnalysisResult, Lotto645Data, LottoDraw, Recommendation
+from .myungri import extract_saju_profile, has_complete_saju_profile
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class AiRecommendationError(HomeAssistantError):
 
 
 class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
-    """Coordinate safe history updates, local regeneration, and optional AI Tasks."""
+    """Coordinate safe history updates, local regeneration, Saju and optional AI Tasks."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(
@@ -76,9 +77,35 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         self._suppress_ai_generation_once = False
 
     @property
-    def selected_method_ids(self) -> tuple[str, ...]:
+    def configured_method_ids(self) -> tuple[str, ...]:
+        """Return methods selected in options, including Saju if it awaits a profile."""
         return normalize_method_ids(
             self.entry.options.get(CONF_SELECTED_METHODS, DEFAULT_METHOD_IDS)
+        )
+
+    @property
+    def saju_profile(self) -> dict[str, Any]:
+        """Return the local personal Saju profile extracted from config options."""
+        return extract_saju_profile(dict(self.entry.options))
+
+    @property
+    def saju_profile_ready(self) -> bool:
+        return has_complete_saju_profile(self.saju_profile)
+
+    @property
+    def saju_profile_status(self) -> str:
+        if METHOD_MYUNGRI_HETU not in self.configured_method_ids:
+            return "not_selected"
+        return "ready" if self.saju_profile_ready else "profile_required"
+
+    @property
+    def selected_method_ids(self) -> tuple[str, ...]:
+        """Return active methods; personal Saju is blocked until its profile exists."""
+        configured = self.configured_method_ids
+        if self.saju_profile_ready:
+            return configured
+        return tuple(
+            method_id for method_id in configured if method_id != METHOD_MYUNGRI_HETU
         )
 
     @property
@@ -289,11 +316,13 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 return replace(self.data, source_status=source_status)
 
         try:
+            profile = self.saju_profile if self.saju_profile_ready else None
             analysis = await self.hass.async_add_executor_job(
                 build_analysis,
                 self.history,
                 self.selected_method_ids,
                 self._local_generation_nonce,
+                profile,
             )
         except ValueError as err:
             raise UpdateFailed(f"로또 분석 실패: {err}") from err
@@ -373,6 +402,8 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         )
 
     def _ai_prompt(self, analysis: AnalysisResult, attempt: int) -> str:
+        # Only derived local recommendation text is shared with the configured AI
+        # Task. Raw birth date/time/place/timezone values never enter this prompt.
         local_games = "\n".join(
             f"- {item.label}: {', '.join(map(str, item.numbers))} / {item.reason}"
             for item in analysis.recommendations
@@ -386,6 +417,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         return f"""당신은 로또 6/45 통계 해석 보조 엔진입니다.
 아래 데이터만 참고해 {analysis.target_round}회용 번호 6개와 핵심 근거를 생성하세요.
 추첨은 독립 무작위이며 당첨을 보장하거나 확률을 높인다고 표현하면 안 됩니다.
+개인 사주 원본 생년월일·출생시간·출생지는 제공되지 않으며 추정해서도 안 됩니다.
 
 필수 규칙:
 1. 1~45의 서로 다른 정수 정확히 6개

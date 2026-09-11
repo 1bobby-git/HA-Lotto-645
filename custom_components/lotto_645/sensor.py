@@ -16,7 +16,7 @@ from .const import (
 )
 from .coordinator import Lotto645Coordinator
 from .entity import Lotto645Entity
-from .methods import METHODS_BY_ID, method_catalog
+from .methods import METHOD_MYUNGRI_HETU, METHODS_BY_ID, method_catalog
 
 PARALLEL_UPDATES = 0
 
@@ -33,6 +33,8 @@ async def async_setup_entry(
         LottoMethodGuideSensor(coordinator),
         LottoLatestDrawSensor(coordinator),
     ]
+    if METHOD_MYUNGRI_HETU in coordinator.configured_method_ids:
+        entities.append(LottoSajuProfileSensor(coordinator))
     entities.extend(
         LottoGameSensor(coordinator, method_id)
         for method_id in coordinator.selected_method_ids
@@ -82,6 +84,7 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
             "selected_method_count": len(self.coordinator.selected_method_ids),
             "games": games,
             "analysis_summary": analysis.summary,
+            "saju_profile_status": self.coordinator.saju_profile_status,
             "ai_enabled": self.coordinator.ai_enabled,
             "ai_status": data.ai_status,
             "ai_error": data.ai_error,
@@ -119,6 +122,46 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
             "public_formula_notice": PUBLIC_FORMULA_NOTICE,
             "disclaimer": DISCLAIMER,
         }
+
+
+class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
+    """Show whether personal Saju is configured and expose derived natal context."""
+
+    _attr_name = "명리 사주 프로필"
+    _attr_icon = "mdi:yin-yang"
+
+    def __init__(self, coordinator: Lotto645Coordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_saju_profile"
+
+    @property
+    def native_value(self) -> str:
+        return "준비됨" if self.coordinator.saju_profile_ready else "설정 필요"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        base = {
+            "status": self.coordinator.saju_profile_status,
+            "required_before_use": True,
+            "required_fields": ["양력/음력", "생년월일", "출생시간", "성별", "출생지", "시간대"],
+            "privacy": "입력값은 Home Assistant 구성에 로컬 저장되며 로또 미러와 HA AI 추천 프롬프트에 원본 생년월일·출생시간·출생지를 보내지 않습니다.",
+        }
+        recommendation = self.coordinator.data.analysis.recommendation_by_method(METHOD_MYUNGRI_HETU)
+        if recommendation is None:
+            base["message"] = "통합 구성을 열어 개인 사주정보를 입력하면 명리 권장 추천이 활성화됩니다."
+            return base
+        details = recommendation.details
+        for key in (
+            "birth_profile", "four_pillars", "pillar_details", "day_master",
+            "day_master_element", "day_master_strength", "support_ratio",
+            "five_element_balance", "ten_god_element_roles", "favorable_elements",
+            "avoid_elements", "current_daewoon", "target_draw_date",
+            "target_draw_time", "target_draw_four_pillars", "target_interactions",
+            "traditional_notice", "privacy_notice",
+        ):
+            if key in details:
+                base[key] = details[key]
+        return base
 
 
 class LottoGameSensor(Lotto645Entity, SensorEntity):
