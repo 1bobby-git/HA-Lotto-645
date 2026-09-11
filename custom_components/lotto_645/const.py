@@ -4,7 +4,7 @@ from datetime import timedelta
 
 DOMAIN = "lotto_645"
 NAME = "Lotto 6/45 Analysis"
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 PLATFORMS = ["sensor", "button"]
 UPDATE_INTERVAL = timedelta(hours=6)
@@ -48,7 +48,7 @@ DISCLAIMER = (
     "높이는 공식은 없습니다. 모든 6개 조합의 1등 확률은 동일합니다."
 )
 PUBLIC_FORMULA_NOTICE = (
-    "공개 공식이라는 명칭은 널리 알려진 빈도·간격·균형·델타·이월수 등의 "
+    "공개 공식이라는 명칭은 널리 알려진 빈도·간격·균형·델타·이월수·동반출현 등의 "
     "분석 규칙을 뜻하며 검증된 당첨 공식이라는 의미가 아닙니다."
 )
 COLLECTION_POLICY = (
