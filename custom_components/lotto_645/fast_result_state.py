@@ -171,5 +171,4 @@ class FastResultState:
         # Official reconciliation is less frequent than the fast RSS path.
         if force or time.monotonic() - getattr(self, '_last_fast_mirror', 0) >= 300:
             self._last_fast_mirror = time.monotonic()
-            self._suppress_ai_generation_once = True
             await self.async_check_draw_result()

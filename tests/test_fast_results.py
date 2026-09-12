@@ -181,3 +181,18 @@ def test_corrupt_saved_snapshot_does_not_break_result_display():
     assert state_mod.evaluate_saved(obj,candidate().draw)['checked_game_count']==0
     obj=snapshot();obj['recommendations']=None
     assert state_mod.evaluate_saved(obj,candidate().draw)['checked_game_count']==0
+
+
+@pytest.mark.parametrize('field,value', [('round', 1240.5), ('bonus', 27.3), ('bonus', True),
+                                       ('numbers', [11, 13, 19, 20, 31, 44.5]),
+                                       ('numbers', ['11', 13, 19, 20, 31, 44])])
+def test_persisted_published_facts_never_coerce_invalid_values(field,value):
+    payload=candidate().as_dict()
+    payload['draw'][field]=value
+    with pytest.raises(ValueError):pub.PublishedDraw.from_dict(payload)
+
+
+def test_saved_source_timestamp_must_belong_to_result_week():
+    payload=candidate().as_dict()
+    payload['published_at']='2026-09-09T12:00:00+00:00'
+    with pytest.raises(ValueError):pub.PublishedDraw.from_dict(payload)

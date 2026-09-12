@@ -617,6 +617,7 @@ class Lotto645Coordinator(FastResultState, DataUpdateCoordinator[Lotto645Data]):
                     self.data.ai_generated_at,
                 )
             self._manual_result_refresh_requested = True
+            self._suppress_ai_generation_once = True
             await self.async_request_refresh()
 
     def _ai_structure(self) -> vol.Schema:

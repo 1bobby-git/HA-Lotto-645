@@ -18,6 +18,8 @@
   ],
   "version": "1.10.0",
   "dependencies": [
+    "frontend",
+    "http",
     "panel_custom",
     "websocket_api"
   ]

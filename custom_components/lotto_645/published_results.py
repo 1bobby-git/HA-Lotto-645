@@ -120,11 +120,21 @@ class PublishedDraw:
 
     @classmethod
     def from_dict(cls, data: dict) -> "PublishedDraw":
-        draw = LottoDraw.from_storage(data["draw"])
+        raw = data["draw"]
+        if not isinstance(raw, dict) or type(raw.get("round")) is not int:
+            raise ValueError("Invalid saved draw round")
+        numbers = raw.get("numbers")
+        if (not isinstance(numbers, list) or len(numbers) != 6
+                or any(type(n) is not int for n in numbers)
+                or type(raw.get("bonus")) is not int):
+            raise ValueError("Saved published numbers must be exact integers")
+        draw = LottoDraw.from_storage(raw)
         if draw.draw_date != draw_date(draw.round).isoformat() or not article_allowed(data["publisher"], data["url"]):
             raise ValueError("Invalid saved publisher evidence")
         parsedate = datetime.fromisoformat(data["published_at"])
-        if parsedate.tzinfo is None or parsedate < draw_cutoff(draw.round):
+        if (parsedate.tzinfo is None or parsedate < draw_cutoff(draw.round)
+                or parsedate > draw_cutoff(draw.round) + timedelta(days=3)
+                or parsedate > datetime.now(UTC) + timedelta(minutes=5)):
             raise ValueError("Invalid publication time")
         return cls(draw, data["publisher"], data["url"], data["published_at"])
 

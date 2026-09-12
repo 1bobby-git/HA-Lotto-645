@@ -113,7 +113,7 @@ async def main():
         sensor_module=importlib.import_module('custom_components.lotto_645.sensor')
         from homeassistant.helpers.storage import Store
         obj.hass=hass
-        obj.entry=types.SimpleNamespace(entry_id='purchase-smoke', options={
+        obj.entry=types.SimpleNamespace(entry_id='purchase-smoke', domain=const.DOMAIN, options={
             const.CONF_SELECTED_METHODS:['weighted_frequency'], 'saju_birth_date':'2000-01-01',
         }, runtime_data=obj)
         obj.purchase_book=purchase_module.PurchaseBook()
@@ -184,7 +184,9 @@ async def main():
         before_nonce=obj._local_generation_nonce
         before_ai=obj._cached_ai_recommendation
         calls=obj.async_request_refresh.await_count
+        obj._suppress_ai_generation_once=False
         await obj.async_check_draw_result()
+        assert obj._suppress_ai_generation_once is True
         assert obj._local_generation_nonce==before_nonce
         assert obj._cached_ai_recommendation is before_ai
         assert obj._manual_result_refresh_requested is True
@@ -220,7 +222,7 @@ async def main():
             raise AssertionError('QR endpoint permitted non-admin')
         connection=types.SimpleNamespace(user=types.SimpleNamespace(is_admin=True),send_result=Mock(),send_error=Mock())
         original=obj.purchase_book.to_storage()
-        with patch.object(hass.config_entries,'async_get_entry',return_value=obj.entry):
+        with patch.object(hass, 'config_entries', types.SimpleNamespace(async_get_entry=lambda entry_id: obj.entry if entry_id == obj.entry.entry_id else None)):
             await inspect.unwrap(panel_module.qr_preview)(hass,connection,{'id':51,'entry_id':'purchase-smoke',
                 'qr':'https://m.dhlottery.co.kr/qr.do?method=winQr&v=0031q0102030405060000000000'})
             preview=connection.send_result.call_args.args[1]

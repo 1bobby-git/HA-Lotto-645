@@ -17,7 +17,7 @@ class LottoTicketPanel extends HTMLElement {
   _start() {
     if (!this._hass || !this._panel || !this.isConnected) return;
     if (!this.shadowRoot.firstChild) this.render();
-    if (!this._poll) this._poll=setInterval(() => { if (!this._editing && !this._busy && !document.hidden) this.load(); },30000);
+    if (!this._poll) this._poll=setInterval(() => { if (!this._editing && !this._busy && !document.hidden) this.operation(()=>this.load()); },30000);
   }
   node(id) { return this.shadowRoot.getElementById(id); }
   message(text, error=false) { const n=this.node('message'); n.textContent=text; n.setAttribute('role',error?'alert':'status'); }
