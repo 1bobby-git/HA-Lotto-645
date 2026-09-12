@@ -20,6 +20,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.data_entry_flow import FlowResultType
 
 flow_module=importlib.import_module('custom_components.lotto_645.config_flow')
+init_module=importlib.import_module('custom_components.lotto_645')
 coordinator_module=importlib.import_module('custom_components.lotto_645.coordinator')
 models=importlib.import_module('custom_components.lotto_645.models')
 const=importlib.import_module('custom_components.lotto_645.const')
@@ -33,6 +34,7 @@ def serialize_form(result):
 
 
 async def main():
+    assert init_module._RESULT_CHECKS_UTC == ((5,11,55),(5,12,20),(5,12,50),(5,13,30),(5,14,0),(6,0,40))
     with tempfile.TemporaryDirectory() as folder:
         hass=HomeAssistant(folder)
         flow=flow_module.Lotto645OptionsFlow(types.SimpleNamespace(options={}))
@@ -161,11 +163,12 @@ async def main():
         assert numbers_sensor.name=='31회 추첨번호' and numbers_sensor.unique_id==unique
         obj.data=old_data
         summary_sensor=sensor_module.LottoRecommendationsSensor(obj)
-        assert summary_sensor.native_value==31
+        assert summary_sensor.native_value=='31회 추천 · 1게임'
         assert '추천 대상 회차' in summary_sensor.extra_state_attributes['purpose']
         purchased_sensor=sensor_module.LottoPurchasedTicketsSensor(obj)
         assert purchased_sensor.native_value=='30회 · 1개 당첨 · 최고 1등'
         win_sensor=sensor_module.LottoWinningStatusSensor(obj)
+        assert win_sensor.name=='30회 당첨 여부'
         assert win_sensor.native_value=='2개 당첨 · 최고 1등'  # old recommendation 5th + A 1st
         assert obj.winning_summary['recommendation_game_count']==1
         assert obj.winning_summary['purchased_game_count']==2
@@ -175,6 +178,14 @@ async def main():
         assert obj.winning_summary['round']==30
         assert obj.winning_summary['purchased_game_count']==2
         assert obj.winning_summary['pending_purchased_rounds']==[31]
+        before_nonce=obj._local_generation_nonce
+        before_ai=obj._cached_ai_recommendation
+        calls=obj.async_request_refresh.await_count
+        await obj.async_check_draw_result()
+        assert obj._local_generation_nonce==before_nonce
+        assert obj._cached_ai_recommendation is before_ai
+        assert obj._manual_result_refresh_requested is True
+        assert obj.async_request_refresh.await_count==calls+1
         # Roll back neither memory nor old rows on failed durable save.
         before=obj.purchase_book.to_storage()
         actual_store=obj._purchase_store

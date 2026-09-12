@@ -62,8 +62,10 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_recommendations"
 
     @property
-    def native_value(self) -> int:
-        return self.coordinator.data.analysis.target_round
+    def native_value(self) -> str:
+        data = self.coordinator.data
+        game_count = len(data.analysis.recommendations) + (1 if data.ai_recommendation else 0)
+        return f"{data.analysis.target_round}회 추천 · {game_count}게임"
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -374,7 +376,7 @@ class LottoPurchasedTicketsSensor(Lotto645Entity, SensorEntity):
         return {**report,
                 "storage_error": self.coordinator.purchase_storage_error,
                 "where_to_enter": "구성 > 직접 구매번호 입력·수정 > 회차 > A~E 게임 저장",
-                "how_to_refresh": "새 추첨 결과는 즉시 새로고침 · 번호 재생성으로 가져옵니다. 구매번호 자체는 재생성하지 않습니다.",
+                "how_to_refresh": "새 추첨 결과는 공유 미러 발표 후 자동 확인 일정, 일반 주기 또는 즉시 새로고침으로 가져옵니다. 구매번호 자체는 재생성하지 않습니다.",
                 "privacy": "구매번호는 HA 로컬에만 저장합니다. AI 프롬프트·공유 미러에 보내지 않습니다."}
 
 
@@ -382,8 +384,13 @@ class LottoWinningStatusSensor(Lotto645Entity, SensorEntity):
     """Keep recommendation and purchased outcomes separate within one draw."""
 
     _unrecorded_attributes = frozenset({"results", "winners", "losers"})
-    _attr_name = "당첨 여부"
+    _attr_has_entity_name = False
     _attr_icon = "mdi:ticket-percent-outline"
+
+    @property
+    def name(self) -> str:
+        evaluation = self.coordinator.winning_summary
+        return f"{evaluation['round']}회 당첨 여부" if evaluation else "당첨 여부"
 
     def __init__(self, coordinator: Lotto645Coordinator) -> None:
         super().__init__(coordinator)

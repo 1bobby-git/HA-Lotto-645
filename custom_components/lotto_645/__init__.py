@@ -8,11 +8,19 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.event import async_track_utc_time_change
 
 from .const import DOMAIN, SERVICE_GENERATE_AI, SERVICE_REFRESH
 from .coordinator import Lotto645Coordinator
 
 PLATFORMS = [Platform.SENSOR, Platform.BUTTON]
+
+# GitHub mirror: Sat 20:45/21:10/21:40/22:20/22:50 KST and Sun 09:30.
+# Client checks follow 10 minutes later; weekday is datetime.weekday().
+_RESULT_CHECKS_UTC = (
+    (5, 11, 55), (5, 12, 20), (5, 12, 50),
+    (5, 13, 30), (5, 14, 0), (6, 0, 40),
+)
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -28,6 +36,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    for weekday, hour, minute in _RESULT_CHECKS_UTC:
+        async def _scheduled_result_check(now, expected_weekday=weekday) -> None:
+            if now.weekday() != expected_weekday:
+                return
+            await entry.runtime_data.async_check_draw_result()
+
+        entry.async_on_unload(
+            async_track_utc_time_change(
+                hass, _scheduled_result_check, hour=hour, minute=minute, second=0
+            )
+        )
 
     if not hass.services.has_service(DOMAIN, SERVICE_REFRESH):
 
