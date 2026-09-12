@@ -247,13 +247,13 @@ class Lotto645OptionsFlow(OptionsFlow):
                             errors["base"] = "saju_profile_required"
                         else:
                             try:
-                                validate_saju_profile(profile)
+                                await self.hass.async_add_executor_job(validate_saju_profile, profile)
                             except SajuProfileError as err:
                                 _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
                                 errors["base"] = "invalid_saju_profile"
 
                     if not errors:
-                        return self.async_create_entry(title="", data=pending)
+                        return self.async_create_entry(data=pending)
             except (TypeError, ValueError) as err:
                 _LOGGER.exception("추천 방식 옵션 처리 중 오류: %s", err)
                 errors["base"] = "options_error"
@@ -297,7 +297,7 @@ class Lotto645OptionsFlow(OptionsFlow):
                 ).strip()
 
             try:
-                validate_saju_profile(extract_saju_profile(pending))
+                await self.hass.async_add_executor_job(validate_saju_profile, extract_saju_profile(pending))
             except SajuProfileError as err:
                 _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
                 errors["base"] = "invalid_saju_profile"
@@ -305,7 +305,7 @@ class Lotto645OptionsFlow(OptionsFlow):
                 _LOGGER.exception("개인 사주정보 처리 중 오류: %s", err)
                 errors["base"] = "options_error"
             else:
-                return self.async_create_entry(title="", data=pending)
+                return self.async_create_entry(data=pending)
             form_values = pending
 
         return self.async_show_form(

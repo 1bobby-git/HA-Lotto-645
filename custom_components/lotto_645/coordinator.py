@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from dataclasses import replace
 from datetime import UTC, datetime
 import logging
+import math
 from typing import Any
 
 import voluptuous as vol
@@ -63,6 +66,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             always_update=False,
         )
         self.entry = entry
+        self._regenerate_lock = asyncio.Lock()
         self.client = LottoApiClient(async_get_clientsession(hass))
         self._store: Store[dict[str, Any]] = Store(
             hass, STORAGE_VERSION, f"{STORAGE_KEY_PREFIX}.{entry.entry_id}"
@@ -323,6 +327,9 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 self.selected_method_ids,
                 self._local_generation_nonce,
                 profile,
+                {r.method_id: r.numbers for r in self.data.analysis.recommendations}
+                if self.data is not None and not changed and self._local_generation_nonce != self.data.analysis.summary.get("generation_sequence", 0)
+                else None,
             )
         except ValueError as err:
             raise UpdateFailed(f"로또 분석 실패: {err}") from err
@@ -377,11 +384,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
 
     async def async_refresh_and_regenerate(self) -> None:
         """Refresh history and rotate all local recommendations, leaving AI untouched."""
-        self._local_generation_nonce += 1
-        self._local_generated_at = datetime.now(UTC)
-        self._needs_storage_save = True
-        self._suppress_ai_generation_once = True
-        await self.async_request_refresh()
+        async with self._regenerate_lock:
+            self._local_generation_nonce += 1
+            self._local_generated_at = datetime.now(UTC)
+            self._needs_storage_save = True
+            self._suppress_ai_generation_once = True
+            await self.async_request_refresh()
 
     def _ai_structure(self) -> vol.Schema:
         number_selector = selector.NumberSelector(
@@ -407,6 +415,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         local_games = "\n".join(
             f"- {item.label}: {', '.join(map(str, item.numbers))} / {item.reason}"
             for item in analysis.recommendations
+            if item.method_id != METHOD_MYUNGRI_HETU
         )
         summary = analysis.summary
         retry_text = (
@@ -442,9 +451,10 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         if not isinstance(data, dict):
             raise AiRecommendationError("AI Task가 구조화된 객체를 반환하지 않았습니다")
         try:
-            numbers = tuple(
-                sorted(int(data[f"number_{index}"]) for index in range(1, 7))
-            )
+            values = [data[f"number_{index}"] for index in range(1, 7)]
+            if any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not float(value).is_integer() for value in values):
+                raise ValueError("번호는 유한 정수만 허용됩니다")
+            numbers = tuple(sorted(int(value) for value in values))
         except (KeyError, TypeError, ValueError) as err:
             raise AiRecommendationError("AI Task 추천 번호를 해석할 수 없습니다") from err
         if len(numbers) != 6 or len(set(numbers)) != 6:

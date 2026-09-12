@@ -165,16 +165,16 @@ class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
             "status": self.coordinator.saju_profile_status,
             "required_before_use": True,
             "required_fields": ["양력/음력", "생년월일", "출생시간", "성별", "출생지", "시간대"],
-            "where_to_enter": "설정 > 기기 및 서비스 > Lotto 6/45 Analysis > 구성 화면의 [명리] 입력 항목",
+            "where_to_enter": "설정 > 기기 및 서비스 > Lotto 6/45 Analysis > 구성 > 명리 사주정보 입력·수정",
             "privacy": "입력값은 Home Assistant 구성에 로컬 저장되며 로또 미러와 HA AI 추천 프롬프트에 원본 생년월일·출생시간·출생지를 보내지 않습니다.",
         }
         data = self.coordinator.data
         if data is None:
-            base["message"] = "통합 구성 화면에서 [명리] 개인 사주정보를 입력하세요."
+            base["message"] = "통합 구성 > 명리 사주정보 입력·수정 메뉴에서 입력하세요."
             return base
         recommendation = data.analysis.recommendation_by_method(METHOD_MYUNGRI_HETU)
         if recommendation is None:
-            base["message"] = "통합 구성 화면의 [명리] 입력 항목을 완료하면 명리 권장 추천이 활성화됩니다."
+            base["message"] = "통합 구성 > 명리 사주정보 입력·수정을 완료하면 명리 권장 추천이 활성화됩니다."
             return base
         details = recommendation.details
         for key in (
@@ -184,6 +184,7 @@ class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
             "avoid_elements", "current_daewoon", "target_draw_date",
             "target_draw_time", "target_draw_four_pillars", "target_interactions",
             "traditional_notice", "privacy_notice",
+            "natal_evaluation", "calculation_policy", "natal_interactions", "luck_layers", "target_time_basis",
         ):
             if key in details:
                 base[key] = details[key]

@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
-from itertools import combinations
+from itertools import combinations, groupby
+from heapq import heappush, heapreplace
 import math
 from statistics import fmean, median
 from typing import Any
@@ -69,10 +70,18 @@ def _z_residual(count: float, trials: int, probability: float) -> float:
 
 
 def _rank01(values: dict[int, float]) -> dict[int, float]:
+    """Midranks preserve ties; equal evidence must never prefer larger labels."""
     ordered = sorted(values, key=lambda number: (values[number], number))
     if len(ordered) <= 1:
         return {number: 0.5 for number in ordered}
-    return {number: index / (len(ordered) - 1) for index, number in enumerate(ordered)}
+    result = {}
+    index = 0
+    for _, group in groupby(ordered, key=values.__getitem__):
+        tied = list(group)
+        rank = (index + (len(tied) - 1) / 2) / (len(ordered) - 1)
+        result.update({number: rank for number in tied})
+        index += len(tied)
+    return result
 
 
 def _gap_since_last(history: list[LottoDraw], number: int) -> int:
@@ -267,6 +276,10 @@ def _feature_maps(
         "myungri_resonance": dict(myungri["number_resonance"]),
     }
     ranked = {name: _rank01(values) for name, values in raw_features.items()}
+    # Ranking an affine-shrunk posterior erases shrinkage. Keep its magnitude.
+    ranked["bayesian_60"] = {n: .5 + .5 * math.tanh(v / NUMBER_PROBABILITY) for n, v in bayesian_60.items()}
+    # Personal scoring already has a calibrated heuristic range; do not distort ties.
+    ranked["myungri_resonance"] = dict(myungri["number_resonance"])
     context = {
         "z_long": z_long,
         "z10": z10,
@@ -289,7 +302,7 @@ def _feature_maps(
 
 def _method_number_scores(method: MethodDefinition, ranked: dict[str, dict[int, float]]) -> dict[int, float]:
     return {
-        number: sum(weight * ranked[feature][number] for feature, weight in method.weights.items())
+        number: sum(weight * ranked[feature][number] for feature, weight in method.weights.items()) / sum(method.weights.values())
         for number in NUMBERS
     }
 
@@ -328,9 +341,13 @@ def _delta_score(combo: tuple[int, ...]) -> float:
     return max(0.0, 0.42 * within_15 + 0.21 * uniqueness + 0.18 * max_delta_score + 0.19 * range_score - 0.20 * repeated_penalty)
 
 
+OVERLAP_PROBABILITIES = tuple(math.comb(6, k) * math.comb(39, 6 - k) / math.comb(45, 6) for k in range(7))
+
+
 def _carryover_score(combo: tuple[int, ...], latest_numbers: set[int]) -> float:
+    """Exact count-group mass, not the winning probability of this ticket."""
     overlap = len(set(combo) & latest_numbers)
-    return {0: 0.38, 1: 1.0, 2: 0.88, 3: 0.35}.get(overlap, 0.0)
+    return OVERLAP_PROBABILITIES[overlap] / max(OVERLAP_PROBABILITIES)
 
 
 def _build_seen_subset_counts(history: list[LottoDraw]) -> tuple[Counter[tuple[int, ...]], Counter[tuple[int, ...]]]:
@@ -354,11 +371,11 @@ def _score_components(combo: tuple[int, ...], number_scores: dict[int, float], m
         "individual": fmean(number_scores[number] for number in combo),
         "pair": (fmean(pair_values) + 1.0) / 2.0,
         "triplet": triplet_value,
-        "diversity": _combo_diversity(combo, context["velocity"]),
-        "balance": _balance_score(combo),
-        "delta": _delta_score(combo),
-        "carryover": _carryover_score(combo, latest_numbers),
-        "myungri": combo_myungri_score(combo, context["myungri"]),
+        "diversity": _combo_diversity(combo, context["velocity"]) if method.diversity_weight else 0.0,
+        "balance": _balance_score(combo) if method.balance_weight else 0.0,
+        "delta": _delta_score(combo) if method.delta_weight else 0.0,
+        "carryover": _carryover_score(combo, latest_numbers) if method.carryover_weight else 0.0,
+        "myungri": combo_myungri_score(combo, context["myungri"]) if method.myungri_weight else 0.0,
     }
 
 
@@ -383,14 +400,16 @@ def _combo_score(combo: tuple[int, ...], number_scores: dict[int, float], method
         - penalty
     )
     components["historical_similarity_penalty"] = penalty
-    return score, components
+    total_weight = .66 + method.pair_weight + method.triplet_weight + method.diversity_weight + method.balance_weight + method.delta_weight + method.carryover_weight + method.myungri_weight
+    components["normalization_weight"] = total_weight
+    return max(0.0, min(1.0, score / total_weight)), components
 
 
 def _candidate_pool(method: MethodDefinition, number_scores: dict[int, float]) -> tuple[int, ...]:
     ordered = sorted(NUMBERS, key=lambda number: (-number_scores[number], number))
     base_count = max(14, method.pool_size - 10)
     selected: list[int] = ordered[:base_count]
-    for start, end in ((1, 9), (10, 19), (20, 29), (30, 39), (40, 45)):
+    for start, end in ((1, 10), (11, 20), (21, 30), (31, 40), (41, 45)):
         bucket = [number for number in ordered if start <= number <= end]
         for number in bucket[:2]:
             if number not in selected:
@@ -407,39 +426,42 @@ def _select_candidate(method: MethodDefinition, history: list[LottoDraw], ranked
     number_scores = _method_number_scores(method, ranked)
     pool = _candidate_pool(method, number_scores)
     latest_numbers = set(history[-1].numbers)
-    scored: list[tuple[float, tuple[int, ...], dict[str, float]]] = []
+    # Bounded heap replaces ~135k component dictionaries per method.
+    heap: list[tuple[float, tuple[int, ...], tuple[int, ...]]] = []
+    forbidden = past_combos | set(selected) | set(context.get("previous_recommendations", {}).get(method.method_id, ()))
     for combo in combinations(pool, 6):
-        if combo in past_combos:
+        if combo in forbidden:
             continue
-        score, components = _combo_score(combo, number_scores, method, context, latest_numbers, quads, quints)
-        scored.append((score, combo, components))
-    scored.sort(key=lambda item: (-item[0], item[1]))
+        score, _ = _combo_score(combo, number_scores, method, context, latest_numbers, quads, quints)
+        item = (score, tuple(-n for n in combo), combo)
+        if len(heap) < 1200:
+            heappush(heap, item)
+        elif item > heap[0]:
+            heapreplace(heap, item)
+    scored = sorted(heap, reverse=True)
     if not scored:
-        raise ValueError("추천 가능한 조합을 생성하지 못했습니다")
-
-    usage = Counter(number for previous in selected for number in previous)
-    for max_overlap in (3, 4, 5):
-        qualified: list[tuple[float, tuple[int, ...], dict[str, float]]] = []
-        for item in scored[:1200]:
-            score, combo, components = item
-            if any(usage[number] >= 3 for number in combo):
-                continue
-            if all(len(set(combo) & set(previous)) <= max_overlap for previous in selected):
-                qualified.append(item)
-                if len(qualified) >= 64:
-                    break
-        if qualified:
-            if generation_nonce <= 0 or len(qualified) == 1:
-                return qualified[0][1], qualified[0][0], qualified[0][2]
-            window = min(len(qualified), 48)
-            if window == 1:
-                return qualified[0][1], qualified[0][0], qualified[0][2]
-            offset = sum(ord(char) for char in method.method_id) % (window - 1)
-            index = 1 + ((generation_nonce - 1 + offset) % (window - 1))
-            score, combo, components = qualified[index]
-            return combo, score, components
-
-    return scored[0][1], scored[0][0], scored[0][2]
+        raise ValueError("과거 당첨·직전 추천과 다른 조합을 생성하지 못했습니다")
+    usage = Counter(n for previous in selected for n in previous)
+    for usage_cap in (3, 6, len(selected) + 1):
+        for max_overlap in (3, 4, 5):
+            qualified = []
+            for item in scored:
+                combo = item[2]
+                if any(usage[n] >= usage_cap for n in combo):
+                    continue
+                if all(len(set(combo) & set(previous)) <= max_overlap for previous in selected):
+                    qualified.append(item)
+                    if len(qualified) == 64:
+                        break
+            if qualified:
+                window = min(len(qualified), 48)
+                index = 0 if generation_nonce <= 0 or window == 1 else 1 + ((generation_nonce - 1 + sum(map(ord, method.method_id))) % (window - 1))
+                score, _, combo = qualified[index]
+                _, components = _combo_score(combo, number_scores, method, context, latest_numbers, quads, quints)
+                components["diversity_usage_cap"] = float(usage_cap)
+                components["diversity_overlap_cap"] = float(max_overlap)
+                return combo, score, components
+    raise ValueError("추천 게임 사이의 완전 중복을 제거할 수 없습니다")
 
 
 def _max_past_overlap(combo: tuple[int, ...], history: Iterable[LottoDraw]) -> int:
@@ -461,6 +483,9 @@ def _recommendation_reason(method: MethodDefinition, combo: tuple[int, ...], con
     overdue_leaders = sorted(combo, key=lambda n: (-gap[n], n))[:2]
     pair, pair_value = _strongest_pair(combo, context)
 
+    if method.method_id == METHOD_HOT_NUMBERS:
+        phase_leaders = sorted(combo, key=lambda n: (-velocity[n], n))[:2]
+
     if method.method_id == METHOD_MYUNGRI_HETU:
         meta = context["myungri"]
         favorable = "·".join(meta.get("favorable_elements_ko", [])) or "보완오행"
@@ -470,7 +495,7 @@ def _recommendation_reason(method: MethodDefinition, combo: tuple[int, ...], con
         reason = (
             f"개인 원국 일간 {meta.get('day_master') or '-'}({meta.get('day_master_element_ko') or '-'}), "
             f"{meta.get('strength') or '강약 미정'} 기준 보완오행 {favorable}; "
-            f"대운과 {meta.get('target_draw_date') or '다음 추첨일'} 사주의 합계열 {positive_count}건·충해형 {negative_count}건, "
+            f"대운과 {meta.get('target_draw_date') or '다음 추첨일'} 사주의 합계열 {positive_count}건·충형파해 {negative_count}건, "
             f"하도 수리오행 및 {pair[0]}-{pair[1]} 통계 연결을 보조 반영"
         )
     else:
@@ -516,6 +541,7 @@ def build_analysis(
     method_ids: Sequence[str] | None = None,
     generation_nonce: int = 0,
     saju_profile: dict[str, Any] | None = None,
+    previous_recommendations: dict[str, tuple[int, ...]] | None = None,
 ) -> AnalysisResult:
     """Build one recommendation per selected method.
 
@@ -531,8 +557,15 @@ def build_analysis(
     if history[0].round != 1 or actual_rounds != expected_rounds:
         raise ValueError("1회부터 최신 회차까지 연속된 전체 데이터가 필요합니다")
 
-    selected_method_ids = normalize_method_ids(method_ids if method_ids is not None else DEFAULT_METHOD_IDS)
-    ranked, context = _feature_maps(history, saju_profile)
+    selected_method_ids = () if method_ids == () or method_ids == [] else normalize_method_ids(method_ids if method_ids is not None else DEFAULT_METHOD_IDS)
+    for draw in history:
+        if len(draw.numbers) != 6 or len(set(draw.numbers)) != 6 or any(type(n) is not int or not 1 <= n <= 45 for n in draw.numbers) or tuple(sorted(draw.numbers)) != tuple(draw.numbers):
+            raise ValueError("본번호는 1~45 정수 6개, 중복 없이 정렬되어야 합니다")
+    if type(generation_nonce) is not int or generation_nonce < 0:
+        raise ValueError("재생성 순번은 0 이상의 정수여야 합니다")
+    active_profile = saju_profile if METHOD_MYUNGRI_HETU in selected_method_ids else None
+    ranked, context = _feature_maps(history, active_profile)
+    context["previous_recommendations"] = {key: (tuple(value),) for key, value in (previous_recommendations or {}).items()}
     if (
         METHOD_MYUNGRI_HETU in selected_method_ids
         and context["myungri"].get("status") != "ready"
@@ -554,6 +587,7 @@ def build_analysis(
         details.update(
             {
                 "generation_sequence": generation_nonce,
+                "score_meaning": "해당 방식 내부의 0~1 적합도; 당첨확률 및 방식 간 우열 아님",
                 "score_components": {key: round(value, 4) for key, value in components.items()},
                 "exact_past_first_prize_match": False,
                 "max_numbers_matching_any_past_first_prize": _max_past_overlap(combo, history),
@@ -579,7 +613,7 @@ def build_analysis(
     triplet_strength = context["triplet_strength_raw"]
     myungri = context["myungri"]
     summary = {
-        "algorithm": "selectable_multi_formula_v5_personal_saju",
+        "algorithm": "selectable_multi_formula_v6_audited_saju",
         "generation_sequence": generation_nonce,
         "history_draws": len(history),
         "selected_method_ids": list(selected_method_ids),

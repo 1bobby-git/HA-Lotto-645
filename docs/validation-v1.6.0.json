@@ -1,0 +1,2861 @@
+{
+  "version": "1.6.0",
+  "created_at": "2026-09-12T01:24:13.829178+00:00",
+  "history_sha256": "851da2f87f0db2ff7c7b28a9e5f1fdef8cc21a4d392a9d4cc7ae1ab4ba1527f3",
+  "history_through": 1240,
+  "method_order": [
+    "phase_residual_graph",
+    "transition_gap_phase",
+    "multiscale_resonance",
+    "weighted_frequency",
+    "hot_numbers",
+    "overdue_gap",
+    "pair_cooccurrence",
+    "triplet_cooccurrence",
+    "recency_decay",
+    "bayesian_shrinkage",
+    "cycle_rhythm",
+    "balance_formula",
+    "delta_system",
+    "carryover_formula",
+    "public_ensemble",
+    "myungri_hetu_day_pillar"
+  ],
+  "algorithm_sha256": {
+    "analysis.py": "89ea00f082f60b0d636d2a2e23b419fdb0a0e5bcd0ba8f10c979abae36a7be22",
+    "methods.py": "4f5b3596d8b7e650ab6a8606cf09e7078f15731d1ee08ad76ffc3aac337dcd41",
+    "myungri.py": "26168593975bb02cf2cf9e5ee676dc13cdfe3144976d0f48536154d9b6789054",
+    "saju_rules.py": "99ebf691ffdbe6e991bcdcc0df53b406f61225993bbc8eeda061c96be416d86d"
+  },
+  "synthetic_profile": {
+    "calendar": "solar",
+    "birth_date": "1990-05-17",
+    "birth_time": "14:30",
+    "lunar_leap_month": false,
+    "gender": "male",
+    "birth_place": "Synthetic fixture",
+    "timezone": "Asia/Seoul",
+    "true_solar_time": false,
+    "longitude": null
+  },
+  "generation_nonce": 0,
+  "checks": {
+    "all_16_methods": true,
+    "no_future_draw_as_input": true,
+    "six_distinct_in_range": true,
+    "no_exact_past_winner": true,
+    "no_duplicate_portfolio_games": true,
+    "finite_normalized_scores": true
+  },
+  "interpretation": "회고적 소표본 동작 점검. 동일 회차의 게임은 상관되며 출생정보는 합성 테스트값이다. 당첨 예측력·명리학 타당성·방법 우열을 입증하지 않는다.",
+  "predictive_validity_established": false,
+  "wall_seconds": 63.688,
+  "summaries": [
+    {
+      "method_id": "phase_residual_graph",
+      "games": 12,
+      "total_matches": 13,
+      "mean_matches": 1.0833333333333333,
+      "maximum_matches": 3,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "transition_gap_phase",
+      "games": 12,
+      "total_matches": 16,
+      "mean_matches": 1.3333333333333333,
+      "maximum_matches": 3,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "multiscale_resonance",
+      "games": 12,
+      "total_matches": 13,
+      "mean_matches": 1.0833333333333333,
+      "maximum_matches": 2,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "weighted_frequency",
+      "games": 12,
+      "total_matches": 7,
+      "mean_matches": 0.5833333333333334,
+      "maximum_matches": 2,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "hot_numbers",
+      "games": 12,
+      "total_matches": 8,
+      "mean_matches": 0.6666666666666666,
+      "maximum_matches": 3,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "overdue_gap",
+      "games": 12,
+      "total_matches": 11,
+      "mean_matches": 0.9166666666666666,
+      "maximum_matches": 2,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "pair_cooccurrence",
+      "games": 12,
+      "total_matches": 12,
+      "mean_matches": 1.0,
+      "maximum_matches": 3,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "triplet_cooccurrence",
+      "games": 12,
+      "total_matches": 9,
+      "mean_matches": 0.75,
+      "maximum_matches": 2,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "recency_decay",
+      "games": 12,
+      "total_matches": 7,
+      "mean_matches": 0.5833333333333334,
+      "maximum_matches": 2,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "bayesian_shrinkage",
+      "games": 12,
+      "total_matches": 8,
+      "mean_matches": 0.6666666666666666,
+      "maximum_matches": 2,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "cycle_rhythm",
+      "games": 12,
+      "total_matches": 9,
+      "mean_matches": 0.75,
+      "maximum_matches": 2,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "balance_formula",
+      "games": 12,
+      "total_matches": 6,
+      "mean_matches": 0.5,
+      "maximum_matches": 2,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "delta_system",
+      "games": 12,
+      "total_matches": 8,
+      "mean_matches": 0.6666666666666666,
+      "maximum_matches": 2,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "carryover_formula",
+      "games": 12,
+      "total_matches": 11,
+      "mean_matches": 0.9166666666666666,
+      "maximum_matches": 4,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "public_ensemble",
+      "games": 12,
+      "total_matches": 9,
+      "mean_matches": 0.75,
+      "maximum_matches": 1,
+      "random_baseline_mean": 0.8
+    },
+    {
+      "method_id": "myungri_hetu_day_pillar",
+      "games": 12,
+      "total_matches": 4,
+      "mean_matches": 0.3333333333333333,
+      "maximum_matches": 1,
+      "random_baseline_mean": 0.8
+    }
+  ],
+  "rounds": [
+    {
+      "training_through": 1228,
+      "target_round": 1229,
+      "target_numbers": [
+        12,
+        13,
+        29,
+        34,
+        37,
+        42
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            1,
+            3,
+            12,
+            13,
+            33,
+            42
+          ],
+          "matches": 3,
+          "score": 0.7218141991986377
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            1,
+            12,
+            14,
+            33,
+            37,
+            45
+          ],
+          "matches": 2,
+          "score": 0.6954925993577789
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            3,
+            13,
+            18,
+            19,
+            42,
+            45
+          ],
+          "matches": 2,
+          "score": 0.7124950887443031
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            6,
+            16,
+            17,
+            27,
+            28,
+            45
+          ],
+          "matches": 0,
+          "score": 0.7560309194908587
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            1,
+            16,
+            18,
+            25,
+            28,
+            41
+          ],
+          "matches": 0,
+          "score": 0.7735954038508922
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            5,
+            7,
+            10,
+            23,
+            38,
+            40
+          ],
+          "matches": 0,
+          "score": 0.7614808102844083
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            3,
+            6,
+            13,
+            27,
+            33,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7620668107638221
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            6,
+            19,
+            21,
+            27,
+            28,
+            38
+          ],
+          "matches": 0,
+          "score": 0.7142119616569174
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            1,
+            15,
+            16,
+            27,
+            28,
+            44
+          ],
+          "matches": 0,
+          "score": 0.8138966928712472
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            4,
+            11,
+            19,
+            26,
+            36,
+            39
+          ],
+          "matches": 0,
+          "score": 0.6298500765691047
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            11,
+            15,
+            20,
+            21,
+            36,
+            39
+          ],
+          "matches": 0,
+          "score": 0.7061269828674563
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            8,
+            9,
+            15,
+            26,
+            36,
+            39
+          ],
+          "matches": 0,
+          "score": 0.7719916328452716
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            6,
+            10,
+            19,
+            21,
+            36,
+            39
+          ],
+          "matches": 0,
+          "score": 0.7947409694359919
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            6,
+            15,
+            16,
+            24,
+            27,
+            36
+          ],
+          "matches": 0,
+          "score": 0.7848906542481446
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            3,
+            16,
+            17,
+            27,
+            36,
+            38
+          ],
+          "matches": 0,
+          "score": 0.7318083849821209
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            1,
+            6,
+            16,
+            21,
+            26,
+            39
+          ],
+          "matches": 0,
+          "score": 0.7518491869216144
+        }
+      ],
+      "elapsed_seconds": 21.581
+    },
+    {
+      "training_through": 1229,
+      "target_round": 1230,
+      "target_numbers": [
+        3,
+        8,
+        9,
+        22,
+        28,
+        42
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            1,
+            2,
+            3,
+            13,
+            33,
+            41
+          ],
+          "matches": 1,
+          "score": 0.6829975861875802
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            1,
+            3,
+            13,
+            14,
+            35,
+            38
+          ],
+          "matches": 1,
+          "score": 0.6796684281388979
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            3,
+            18,
+            19,
+            22,
+            33,
+            45
+          ],
+          "matches": 2,
+          "score": 0.692952617725081
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            6,
+            16,
+            17,
+            27,
+            28,
+            44
+          ],
+          "matches": 1,
+          "score": 0.745132938523396
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            1,
+            17,
+            18,
+            28,
+            41,
+            44
+          ],
+          "matches": 1,
+          "score": 0.758331996488608
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            5,
+            7,
+            10,
+            23,
+            38,
+            40
+          ],
+          "matches": 0,
+          "score": 0.7840658470287001
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            6,
+            19,
+            21,
+            27,
+            28,
+            38
+          ],
+          "matches": 1,
+          "score": 0.73994698091677
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            6,
+            19,
+            21,
+            24,
+            30,
+            33
+          ],
+          "matches": 0,
+          "score": 0.7041124099831048
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            15,
+            16,
+            27,
+            30,
+            31,
+            44
+          ],
+          "matches": 0,
+          "score": 0.8001195818021006
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            4,
+            15,
+            16,
+            24,
+            39,
+            45
+          ],
+          "matches": 0,
+          "score": 0.6330176835591826
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            8,
+            9,
+            21,
+            25,
+            26,
+            45
+          ],
+          "matches": 2,
+          "score": 0.729276319345337
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            8,
+            9,
+            15,
+            24,
+            36,
+            39
+          ],
+          "matches": 2,
+          "score": 0.766738226221969
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            6,
+            19,
+            20,
+            24,
+            36,
+            39
+          ],
+          "matches": 0,
+          "score": 0.8013474149958655
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            11,
+            13,
+            17,
+            27,
+            28,
+            45
+          ],
+          "matches": 1,
+          "score": 0.7908655269556191
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            1,
+            16,
+            27,
+            28,
+            31,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7394687013254008
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            4,
+            9,
+            11,
+            26,
+            36,
+            41
+          ],
+          "matches": 1,
+          "score": 0.7426731834431461
+        }
+      ],
+      "elapsed_seconds": 22.344
+    },
+    {
+      "training_through": 1230,
+      "target_round": 1231,
+      "target_numbers": [
+        4,
+        13,
+        14,
+        18,
+        31,
+        38
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            7,
+            12,
+            13,
+            19,
+            41,
+            42
+          ],
+          "matches": 1,
+          "score": 0.7023577684742554
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            13,
+            14,
+            15,
+            34,
+            35,
+            45
+          ],
+          "matches": 2,
+          "score": 0.6758166625804736
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            12,
+            13,
+            16,
+            18,
+            41,
+            45
+          ],
+          "matches": 2,
+          "score": 0.7160830461765915
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            6,
+            16,
+            17,
+            27,
+            30,
+            44
+          ],
+          "matches": 0,
+          "score": 0.7165065387641277
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            1,
+            17,
+            18,
+            27,
+            41,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7292587058163438
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            5,
+            7,
+            10,
+            23,
+            38,
+            40
+          ],
+          "matches": 1,
+          "score": 0.7915667157005306
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            6,
+            12,
+            19,
+            21,
+            27,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7260271120415343
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            6,
+            19,
+            21,
+            24,
+            30,
+            33
+          ],
+          "matches": 0,
+          "score": 0.7055595539638602
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            1,
+            15,
+            16,
+            30,
+            31,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7457197285320939
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            10,
+            15,
+            21,
+            24,
+            36,
+            39
+          ],
+          "matches": 0,
+          "score": 0.6376373528520334
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            1,
+            4,
+            17,
+            24,
+            26,
+            33
+          ],
+          "matches": 1,
+          "score": 0.7249334637642472
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            6,
+            15,
+            16,
+            35,
+            36,
+            39
+          ],
+          "matches": 0,
+          "score": 0.8000298544469837
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            6,
+            16,
+            21,
+            24,
+            31,
+            39
+          ],
+          "matches": 1,
+          "score": 0.8016741236885406
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            3,
+            4,
+            11,
+            34,
+            36,
+            45
+          ],
+          "matches": 1,
+          "score": 0.7610002058640701
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            6,
+            15,
+            17,
+            27,
+            28,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7445333433404893
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            1,
+            16,
+            19,
+            26,
+            36,
+            39
+          ],
+          "matches": 0,
+          "score": 0.7623303285946128
+        }
+      ],
+      "elapsed_seconds": 22.259
+    },
+    {
+      "training_through": 1231,
+      "target_round": 1232,
+      "target_numbers": [
+        12,
+        15,
+        19,
+        22,
+        24,
+        36
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            12,
+            33,
+            37,
+            41,
+            42,
+            44
+          ],
+          "matches": 1,
+          "score": 0.6843353119311273
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            5,
+            8,
+            15,
+            16,
+            24,
+            45
+          ],
+          "matches": 2,
+          "score": 0.6469957154341738
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            12,
+            16,
+            19,
+            41,
+            42,
+            45
+          ],
+          "matches": 2,
+          "score": 0.6992444007893613
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            3,
+            13,
+            16,
+            27,
+            28,
+            42
+          ],
+          "matches": 0,
+          "score": 0.7333272876572495
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            8,
+            9,
+            17,
+            28,
+            41,
+            44
+          ],
+          "matches": 0,
+          "score": 0.7229428533985681
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            7,
+            10,
+            15,
+            23,
+            40,
+            43
+          ],
+          "matches": 1,
+          "score": 0.7838236717315108
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            3,
+            12,
+            19,
+            24,
+            27,
+            34
+          ],
+          "matches": 3,
+          "score": 0.7445709549452645
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            6,
+            19,
+            21,
+            27,
+            28,
+            45
+          ],
+          "matches": 1,
+          "score": 0.7178121571881184
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            9,
+            15,
+            16,
+            27,
+            28,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7932490835670605
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            1,
+            6,
+            24,
+            35,
+            36,
+            39
+          ],
+          "matches": 2,
+          "score": 0.6469301558342271
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            1,
+            6,
+            25,
+            26,
+            30,
+            35
+          ],
+          "matches": 0,
+          "score": 0.7408465853893537
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            4,
+            20,
+            21,
+            25,
+            26,
+            39
+          ],
+          "matches": 0,
+          "score": 0.7512535223268623
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            10,
+            21,
+            26,
+            35,
+            36,
+            39
+          ],
+          "matches": 1,
+          "score": 0.7616722010111742
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            6,
+            24,
+            26,
+            27,
+            31,
+            45
+          ],
+          "matches": 1,
+          "score": 0.7930323168430085
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            6,
+            15,
+            17,
+            27,
+            28,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7318332921549687
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            1,
+            6,
+            11,
+            36,
+            41,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7654794412554687
+        }
+      ],
+      "elapsed_seconds": 21.355
+    },
+    {
+      "training_through": 1232,
+      "target_round": 1233,
+      "target_numbers": [
+        2,
+        7,
+        20,
+        25,
+        37,
+        40
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            13,
+            33,
+            37,
+            41,
+            42,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7057060098856817
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            3,
+            8,
+            13,
+            14,
+            33,
+            44
+          ],
+          "matches": 0,
+          "score": 0.6789847132937739
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            3,
+            13,
+            16,
+            42,
+            44,
+            45
+          ],
+          "matches": 0,
+          "score": 0.7112180826862158
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            3,
+            16,
+            18,
+            28,
+            31,
+            38
+          ],
+          "matches": 0,
+          "score": 0.7313152153523698
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            8,
+            18,
+            28,
+            31,
+            41,
+            42
+          ],
+          "matches": 0,
+          "score": 0.7448776464780431
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            7,
+            10,
+            11,
+            23,
+            40,
+            43
+          ],
+          "matches": 2,
+          "score": 0.7775627579862738
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            6,
+            17,
+            21,
+            27,
+            28,
+            38
+          ],
+          "matches": 0,
+          "score": 0.7220816209937738
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            6,
+            19,
+            21,
+            27,
+            30,
+            33
+          ],
+          "matches": 0,
+          "score": 0.6761062780027153
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            8,
+            9,
+            16,
+            27,
+            31,
+            38
+          ],
+          "matches": 0,
+          "score": 0.7647981542703794
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            1,
+            4,
+            6,
+            30,
+            35,
+            39
+          ],
+          "matches": 0,
+          "score": 0.6327987510731281
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            1,
+            6,
+            16,
+            35,
+            37,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7766346777650509
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            4,
+            17,
+            21,
+            26,
+            30,
+            39
+          ],
+          "matches": 0,
+          "score": 0.7379446237720017
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            6,
+            16,
+            17,
+            24,
+            35,
+            39
+          ],
+          "matches": 0,
+          "score": 0.8115746576940995
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            3,
+            6,
+            15,
+            28,
+            44,
+            45
+          ],
+          "matches": 0,
+          "score": 0.8068838092661758
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            3,
+            16,
+            19,
+            27,
+            28,
+            42
+          ],
+          "matches": 0,
+          "score": 0.7520482679299728
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            4,
+            11,
+            21,
+            26,
+            31,
+            34
+          ],
+          "matches": 0,
+          "score": 0.7391243356004691
+        }
+      ],
+      "elapsed_seconds": 20.295
+    },
+    {
+      "training_through": 1233,
+      "target_round": 1234,
+      "target_numbers": [
+        1,
+        15,
+        19,
+        31,
+        35,
+        43
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            12,
+            33,
+            37,
+            41,
+            42,
+            43
+          ],
+          "matches": 1,
+          "score": 0.7136388528587851
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            10,
+            13,
+            15,
+            19,
+            22,
+            43
+          ],
+          "matches": 3,
+          "score": 0.6769747385965227
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            3,
+            12,
+            16,
+            41,
+            42,
+            44
+          ],
+          "matches": 0,
+          "score": 0.7057570492560009
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            9,
+            13,
+            15,
+            27,
+            28,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7562642983104708
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            8,
+            9,
+            13,
+            31,
+            42,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7780552605343971
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            5,
+            10,
+            11,
+            16,
+            23,
+            43
+          ],
+          "matches": 1,
+          "score": 0.7495402829128394
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            3,
+            12,
+            15,
+            24,
+            27,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7409591730220013
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            3,
+            6,
+            19,
+            27,
+            28,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7141829597162975
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            3,
+            15,
+            16,
+            27,
+            28,
+            42
+          ],
+          "matches": 1,
+          "score": 0.8338930647795929
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            6,
+            17,
+            19,
+            24,
+            26,
+            39
+          ],
+          "matches": 1,
+          "score": 0.6468579770442027
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            1,
+            6,
+            26,
+            34,
+            35,
+            41
+          ],
+          "matches": 2,
+          "score": 0.7264880774327533
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            4,
+            17,
+            21,
+            24,
+            35,
+            36
+          ],
+          "matches": 1,
+          "score": 0.7500950825623791
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            3,
+            4,
+            16,
+            26,
+            35,
+            39
+          ],
+          "matches": 1,
+          "score": 0.7986398822037035
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            1,
+            17,
+            18,
+            31,
+            37,
+            38
+          ],
+          "matches": 2,
+          "score": 0.7585938977453649
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            6,
+            16,
+            17,
+            27,
+            31,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7368097178076695
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            4,
+            11,
+            21,
+            34,
+            36,
+            39
+          ],
+          "matches": 0,
+          "score": 0.7429835854304175
+        }
+      ],
+      "elapsed_seconds": 20.654
+    },
+    {
+      "training_through": 1234,
+      "target_round": 1235,
+      "target_numbers": [
+        6,
+        7,
+        11,
+        15,
+        39,
+        43
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            3,
+            7,
+            12,
+            22,
+            42,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7150298766335582
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            12,
+            33,
+            37,
+            39,
+            44,
+            45
+          ],
+          "matches": 1,
+          "score": 0.6690279872771254
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            3,
+            12,
+            16,
+            41,
+            44,
+            45
+          ],
+          "matches": 0,
+          "score": 0.7189808145503565
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            4,
+            13,
+            15,
+            27,
+            28,
+            42
+          ],
+          "matches": 1,
+          "score": 0.71860793618532
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            8,
+            13,
+            22,
+            25,
+            31,
+            42
+          ],
+          "matches": 0,
+          "score": 0.7343698443245685
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            5,
+            10,
+            11,
+            30,
+            32,
+            39
+          ],
+          "matches": 2,
+          "score": 0.7495448444978827
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            3,
+            6,
+            13,
+            24,
+            27,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7626288098867032
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            6,
+            7,
+            21,
+            27,
+            30,
+            38
+          ],
+          "matches": 2,
+          "score": 0.6893270730612269
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            3,
+            16,
+            25,
+            27,
+            28,
+            42
+          ],
+          "matches": 0,
+          "score": 0.7747399350760492
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            6,
+            16,
+            17,
+            24,
+            36,
+            41
+          ],
+          "matches": 1,
+          "score": 0.6397748203290101
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            8,
+            9,
+            14,
+            28,
+            38,
+            41
+          ],
+          "matches": 0,
+          "score": 0.7188993863784295
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            8,
+            9,
+            17,
+            26,
+            30,
+            39
+          ],
+          "matches": 1,
+          "score": 0.7422513334375683
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            3,
+            16,
+            17,
+            26,
+            30,
+            36
+          ],
+          "matches": 0,
+          "score": 0.794911313528122
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            13,
+            15,
+            17,
+            24,
+            38,
+            44
+          ],
+          "matches": 1,
+          "score": 0.8070331879250678
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            6,
+            17,
+            19,
+            27,
+            28,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7435503556272157
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            4,
+            11,
+            21,
+            31,
+            34,
+            36
+          ],
+          "matches": 1,
+          "score": 0.7311053891733581
+        }
+      ],
+      "elapsed_seconds": 20.609
+    },
+    {
+      "training_through": 1235,
+      "target_round": 1236,
+      "target_numbers": [
+        12,
+        18,
+        21,
+        29,
+        34,
+        38
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            3,
+            22,
+            32,
+            33,
+            37,
+            42
+          ],
+          "matches": 0,
+          "score": 0.7159736709584261
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            13,
+            16,
+            18,
+            19,
+            43,
+            45
+          ],
+          "matches": 1,
+          "score": 0.6713608223311177
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            3,
+            16,
+            18,
+            37,
+            42,
+            45
+          ],
+          "matches": 1,
+          "score": 0.7389829110473758
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            12,
+            13,
+            15,
+            28,
+            31,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7485396157115431
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            1,
+            13,
+            22,
+            31,
+            42,
+            44
+          ],
+          "matches": 0,
+          "score": 0.7533901230423097
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            5,
+            10,
+            21,
+            32,
+            33,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7317675105713471
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            3,
+            12,
+            19,
+            24,
+            27,
+            38
+          ],
+          "matches": 2,
+          "score": 0.7401045757082074
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            12,
+            19,
+            21,
+            24,
+            33,
+            40
+          ],
+          "matches": 2,
+          "score": 0.6807032991183773
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            1,
+            24,
+            27,
+            28,
+            31,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7872669196855682
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            1,
+            8,
+            16,
+            35,
+            36,
+            41
+          ],
+          "matches": 0,
+          "score": 0.6227562398758972
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            8,
+            9,
+            18,
+            36,
+            37,
+            38
+          ],
+          "matches": 2,
+          "score": 0.7330698633478848
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            8,
+            9,
+            17,
+            30,
+            36,
+            41
+          ],
+          "matches": 0,
+          "score": 0.7528100774809565
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            3,
+            17,
+            26,
+            30,
+            35,
+            36
+          ],
+          "matches": 0,
+          "score": 0.7825956957001644
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            3,
+            13,
+            15,
+            24,
+            38,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7881716028972534
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            3,
+            15,
+            16,
+            28,
+            31,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7463554015773806
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            1,
+            16,
+            19,
+            24,
+            26,
+            31
+          ],
+          "matches": 0,
+          "score": 0.7628394084006695
+        }
+      ],
+      "elapsed_seconds": 20.21
+    },
+    {
+      "training_through": 1236,
+      "target_round": 1237,
+      "target_numbers": [
+        10,
+        20,
+        23,
+        34,
+        37,
+        40
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            3,
+            22,
+            32,
+            33,
+            37,
+            42
+          ],
+          "matches": 1,
+          "score": 0.7012720568490877
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            3,
+            27,
+            33,
+            39,
+            43,
+            45
+          ],
+          "matches": 0,
+          "score": 0.6838322494073403
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            3,
+            6,
+            22,
+            27,
+            42,
+            45
+          ],
+          "matches": 0,
+          "score": 0.715740193797036
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            7,
+            13,
+            15,
+            28,
+            31,
+            44
+          ],
+          "matches": 0,
+          "score": 0.7377835968590299
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            15,
+            19,
+            22,
+            31,
+            42,
+            44
+          ],
+          "matches": 0,
+          "score": 0.7354438655561719
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            5,
+            10,
+            26,
+            32,
+            33,
+            45
+          ],
+          "matches": 1,
+          "score": 0.7336868822342283
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            6,
+            13,
+            15,
+            24,
+            27,
+            37
+          ],
+          "matches": 1,
+          "score": 0.7105609420200512
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            6,
+            7,
+            13,
+            19,
+            24,
+            28
+          ],
+          "matches": 0,
+          "score": 0.6969756780988321
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            1,
+            19,
+            24,
+            28,
+            31,
+            38
+          ],
+          "matches": 0,
+          "score": 0.7520323566403947
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            1,
+            16,
+            20,
+            35,
+            36,
+            37
+          ],
+          "matches": 2,
+          "score": 0.6305538386356709
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            4,
+            8,
+            9,
+            25,
+            35,
+            36
+          ],
+          "matches": 0,
+          "score": 0.7247476867849425
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            8,
+            9,
+            17,
+            30,
+            39,
+            44
+          ],
+          "matches": 0,
+          "score": 0.7606711172094109
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            7,
+            8,
+            20,
+            30,
+            36,
+            39
+          ],
+          "matches": 1,
+          "score": 0.7680376988188875
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            3,
+            6,
+            13,
+            36,
+            38,
+            45
+          ],
+          "matches": 0,
+          "score": 0.7823224804086538
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            6,
+            15,
+            27,
+            28,
+            31,
+            38
+          ],
+          "matches": 0,
+          "score": 0.7448016705983206
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            1,
+            11,
+            14,
+            16,
+            26,
+            41
+          ],
+          "matches": 0,
+          "score": 0.7281230985616435
+        }
+      ],
+      "elapsed_seconds": 20.918
+    },
+    {
+      "training_through": 1237,
+      "target_round": 1238,
+      "target_numbers": [
+        2,
+        13,
+        18,
+        32,
+        38,
+        42
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            3,
+            22,
+            24,
+            27,
+            41,
+            42
+          ],
+          "matches": 1,
+          "score": 0.6984928538968341
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            6,
+            18,
+            19,
+            27,
+            43,
+            45
+          ],
+          "matches": 1,
+          "score": 0.6875964368159708
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            3,
+            12,
+            18,
+            22,
+            24,
+            45
+          ],
+          "matches": 1,
+          "score": 0.7201809588148746
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            12,
+            13,
+            15,
+            29,
+            31,
+            38
+          ],
+          "matches": 2,
+          "score": 0.7684782773798442
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            15,
+            18,
+            19,
+            31,
+            38,
+            42
+          ],
+          "matches": 3,
+          "score": 0.7505715637693289
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            5,
+            17,
+            26,
+            32,
+            33,
+            45
+          ],
+          "matches": 1,
+          "score": 0.73498195587625
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            3,
+            12,
+            15,
+            19,
+            24,
+            27
+          ],
+          "matches": 0,
+          "score": 0.7589520145644519
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            6,
+            7,
+            13,
+            28,
+            30,
+            38
+          ],
+          "matches": 2,
+          "score": 0.6858281400701007
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            1,
+            6,
+            13,
+            28,
+            31,
+            42
+          ],
+          "matches": 2,
+          "score": 0.7531099530791809
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            1,
+            8,
+            28,
+            29,
+            35,
+            36
+          ],
+          "matches": 0,
+          "score": 0.6278502077384762
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            4,
+            8,
+            9,
+            25,
+            35,
+            36
+          ],
+          "matches": 0,
+          "score": 0.7214934042385787
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            8,
+            9,
+            11,
+            29,
+            36,
+            44
+          ],
+          "matches": 0,
+          "score": 0.7646616643607609
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            1,
+            4,
+            16,
+            30,
+            35,
+            39
+          ],
+          "matches": 0,
+          "score": 0.7584311812651299
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            1,
+            19,
+            24,
+            28,
+            31,
+            34
+          ],
+          "matches": 0,
+          "score": 0.7940741868422427
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            6,
+            15,
+            17,
+            28,
+            31,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7393351001434809
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            1,
+            6,
+            21,
+            24,
+            31,
+            36
+          ],
+          "matches": 0,
+          "score": 0.7765858334417174
+        }
+      ],
+      "elapsed_seconds": 20.428
+    },
+    {
+      "training_through": 1238,
+      "target_round": 1239,
+      "target_numbers": [
+        11,
+        13,
+        22,
+        32,
+        33,
+        36
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            3,
+            22,
+            23,
+            27,
+            37,
+            45
+          ],
+          "matches": 1,
+          "score": 0.6863887323293194
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            6,
+            27,
+            36,
+            37,
+            39,
+            45
+          ],
+          "matches": 1,
+          "score": 0.680687729910565
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            3,
+            22,
+            24,
+            25,
+            27,
+            36
+          ],
+          "matches": 2,
+          "score": 0.7032041212935013
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            8,
+            12,
+            15,
+            31,
+            34,
+            37
+          ],
+          "matches": 0,
+          "score": 0.7496306875105511
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            15,
+            18,
+            19,
+            20,
+            34,
+            43
+          ],
+          "matches": 0,
+          "score": 0.7108071468676656
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            5,
+            8,
+            17,
+            26,
+            44,
+            45
+          ],
+          "matches": 0,
+          "score": 0.7515620332696848
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            3,
+            6,
+            12,
+            15,
+            24,
+            31
+          ],
+          "matches": 0,
+          "score": 0.7184771022433344
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            6,
+            7,
+            12,
+            19,
+            24,
+            40
+          ],
+          "matches": 0,
+          "score": 0.7137569005744535
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            1,
+            19,
+            28,
+            31,
+            34,
+            38
+          ],
+          "matches": 0,
+          "score": 0.739874734463122
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            1,
+            8,
+            28,
+            29,
+            35,
+            36
+          ],
+          "matches": 1,
+          "score": 0.6234571385665791
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            4,
+            6,
+            19,
+            31,
+            35,
+            36
+          ],
+          "matches": 1,
+          "score": 0.7664080148032422
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            4,
+            11,
+            16,
+            30,
+            35,
+            39
+          ],
+          "matches": 1,
+          "score": 0.7441082719726028
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            6,
+            11,
+            24,
+            35,
+            36,
+            39
+          ],
+          "matches": 2,
+          "score": 0.7960391113004419
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            6,
+            18,
+            19,
+            27,
+            34,
+            39
+          ],
+          "matches": 0,
+          "score": 0.7736398577186255
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            3,
+            13,
+            15,
+            27,
+            28,
+            34
+          ],
+          "matches": 1,
+          "score": 0.7307599184685205
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            11,
+            14,
+            16,
+            21,
+            26,
+            41
+          ],
+          "matches": 1,
+          "score": 0.7441555564706512
+        }
+      ],
+      "elapsed_seconds": 20.493
+    },
+    {
+      "training_through": 1239,
+      "target_round": 1240,
+      "target_numbers": [
+        11,
+        13,
+        19,
+        20,
+        31,
+        44
+      ],
+      "games": [
+        {
+          "method_id": "phase_residual_graph",
+          "numbers": [
+            3,
+            27,
+            37,
+            42,
+            44,
+            45
+          ],
+          "matches": 1,
+          "score": 0.7311701428104368
+        },
+        {
+          "method_id": "transition_gap_phase",
+          "numbers": [
+            16,
+            18,
+            19,
+            20,
+            27,
+            45
+          ],
+          "matches": 2,
+          "score": 0.7079599047214211
+        },
+        {
+          "method_id": "multiscale_resonance",
+          "numbers": [
+            3,
+            6,
+            18,
+            37,
+            43,
+            44
+          ],
+          "matches": 1,
+          "score": 0.7163779531525888
+        },
+        {
+          "method_id": "weighted_frequency",
+          "numbers": [
+            7,
+            15,
+            18,
+            28,
+            31,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7769444944937375
+        },
+        {
+          "method_id": "hot_numbers",
+          "numbers": [
+            2,
+            15,
+            19,
+            31,
+            34,
+            38
+          ],
+          "matches": 2,
+          "score": 0.7249522829464146
+        },
+        {
+          "method_id": "overdue_gap",
+          "numbers": [
+            5,
+            8,
+            17,
+            26,
+            44,
+            45
+          ],
+          "matches": 1,
+          "score": 0.7693090259526639
+        },
+        {
+          "method_id": "pair_cooccurrence",
+          "numbers": [
+            3,
+            12,
+            19,
+            24,
+            27,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7471195267274292
+        },
+        {
+          "method_id": "triplet_cooccurrence",
+          "numbers": [
+            6,
+            7,
+            15,
+            24,
+            31,
+            40
+          ],
+          "matches": 1,
+          "score": 0.6951213353435793
+        },
+        {
+          "method_id": "recency_decay",
+          "numbers": [
+            1,
+            13,
+            15,
+            27,
+            28,
+            38
+          ],
+          "matches": 1,
+          "score": 0.7864676825724838
+        },
+        {
+          "method_id": "bayesian_shrinkage",
+          "numbers": [
+            1,
+            20,
+            24,
+            28,
+            29,
+            35
+          ],
+          "matches": 1,
+          "score": 0.6320118958489293
+        },
+        {
+          "method_id": "cycle_rhythm",
+          "numbers": [
+            1,
+            6,
+            7,
+            29,
+            35,
+            43
+          ],
+          "matches": 0,
+          "score": 0.7368745406221641
+        },
+        {
+          "method_id": "balance_formula",
+          "numbers": [
+            4,
+            8,
+            20,
+            29,
+            35,
+            39
+          ],
+          "matches": 1,
+          "score": 0.74630896169747
+        },
+        {
+          "method_id": "delta_system",
+          "numbers": [
+            6,
+            10,
+            19,
+            24,
+            31,
+            43
+          ],
+          "matches": 2,
+          "score": 0.7813052174795286
+        },
+        {
+          "method_id": "carryover_formula",
+          "numbers": [
+            12,
+            13,
+            19,
+            21,
+            31,
+            44
+          ],
+          "matches": 4,
+          "score": 0.7808636036885914
+        },
+        {
+          "method_id": "public_ensemble",
+          "numbers": [
+            7,
+            13,
+            15,
+            24,
+            38,
+            42
+          ],
+          "matches": 1,
+          "score": 0.735771618225952
+        },
+        {
+          "method_id": "myungri_hetu_day_pillar",
+          "numbers": [
+            4,
+            14,
+            16,
+            21,
+            39,
+            41
+          ],
+          "matches": 0,
+          "score": 0.7332133372268825
+        }
+      ],
+      "elapsed_seconds": 20.783
+    }
+  ]
+}

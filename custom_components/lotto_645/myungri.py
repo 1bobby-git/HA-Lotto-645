@@ -13,13 +13,18 @@ sends birth data to the shared lottery mirror or to Home Assistant AI Tasks.
 from __future__ import annotations
 
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone as fixed_timezone
 import math
+import re
 from statistics import fmean
 from typing import Any, Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from lunar_python import Lunar, Solar
+from lunar_python.util import LunarUtil
+from korean_lunar_calendar import KoreanLunarCalendar
+
+from . import saju_rules as rules
 
 from .const import (
     CONF_SAJU_BIRTH_DATE,
@@ -221,12 +226,12 @@ def has_complete_saju_profile(profile: dict[str, Any] | None) -> bool:
     if bool(profile.get("true_solar_time")) and profile.get("longitude") in (None, ""):
         return False
     try:
-        _parse_date(str(profile["birth_date"]))
+        _parse_birth_parts(str(profile["birth_date"]), str(profile.get("calendar", "solar")))
         _parse_time(str(profile["birth_time"]))
         ZoneInfo(str(profile["timezone"]))
         if profile.get("longitude") not in (None, ""):
             longitude = float(profile["longitude"])
-            if longitude < -180 or longitude > 180:
+            if not math.isfinite(longitude) or longitude < -180 or longitude > 180:
                 return False
     except (ValueError, ZoneInfoNotFoundError):
         return False
@@ -246,22 +251,42 @@ def validate_saju_profile(profile: dict[str, Any]) -> None:
         raise SajuProfileError(f"사주 출생정보를 계산할 수 없습니다: {err}") from err
 
 
-def _parse_date(value: str) -> date:
-    try:
-        return date.fromisoformat(value[:10])
-    except ValueError as err:
-        raise SajuProfileError("생년월일 형식이 올바르지 않습니다") from err
+def _parse_birth_parts(value: str, calendar: str) -> tuple[int, int, int]:
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+        raise SajuProfileError("생년월일은 YYYY-MM-DD로 입력하세요")
+    year, month, day = map(int, value.split("-"))
+    if not 1900 <= year <= 2050:
+        raise SajuProfileError("지원 출생연도는 1900~2050입니다")
+    if calendar == "solar":
+        date(year, month, day)
+    elif not (1 <= month <= 12 and 1 <= day <= 30):
+        raise SajuProfileError("음력 월일 범위가 올바르지 않습니다")
+    return year, month, day
 
 
 def _parse_time(value: str) -> tuple[int, int]:
-    text = value.strip()
-    try:
-        hour, minute = (int(part) for part in text[:5].split(":"))
-    except (ValueError, TypeError) as err:
-        raise SajuProfileError("출생시간 형식이 올바르지 않습니다") from err
+    if not re.fullmatch(r"[0-9]{2}:[0-9]{2}(?::00)?", value):
+        raise SajuProfileError("출생시간은 HH:MM으로 입력하세요")
+    hour, minute = map(int, value.split(":")[:2])
     if not 0 <= hour <= 23 or not 0 <= minute <= 59:
         raise SajuProfileError("출생시간 범위가 올바르지 않습니다")
     return hour, minute
+
+
+def _civil_aware(value: datetime, zone: str) -> datetime:
+    """Reject nonexistent or ambiguous DST input rather than silently choosing."""
+    tz = ZoneInfo(zone)
+    candidates = []
+    for fold in (0, 1):
+        aware = value.replace(tzinfo=tz, fold=fold)
+        restored = aware.astimezone(UTC).astimezone(tz).replace(tzinfo=None)
+        if restored == value:
+            candidates.append(aware)
+    if not candidates:
+        raise SajuProfileError("서머타임 전환으로 존재하지 않는 출생시각입니다")
+    if len({item.utcoffset() for item in candidates}) > 1:
+        raise SajuProfileError("서머타임 중복 시각입니다. 고정 UTC 오프셋 시간대를 지정하세요")
+    return candidates[0]
 
 
 def _equation_of_time_minutes(value: date) -> float:
@@ -289,52 +314,77 @@ def _true_solar_adjustment(local_dt: datetime, timezone: str, longitude: float) 
 
 
 def _solar_from_profile(profile: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
-    """Convert configured solar/lunar birth input to a Solar instance."""
-    birth_date = _parse_date(str(profile["birth_date"]))
-    hour, minute = _parse_time(str(profile["birth_time"]))
+    """Korean lunar conversion; solar-term and civil clocks stay separate."""
     calendar = str(profile.get("calendar", DEFAULT_SAJU_CALENDAR))
-
+    year, month, day = _parse_birth_parts(str(profile["birth_date"]), calendar)
+    hour, minute = _parse_time(str(profile["birth_time"]))
+    converter = KoreanLunarCalendar()
     if calendar == "lunar":
-        lunar_month = -birth_date.month if bool(profile.get("lunar_leap_month")) else birth_date.month
-        lunar = Lunar.fromYmdHms(birth_date.year, lunar_month, birth_date.day, hour, minute, 0)
-        solar = lunar.getSolar()
-    else:
-        solar = Solar.fromYmdHms(birth_date.year, birth_date.month, birth_date.day, hour, minute, 0)
-        lunar = solar.getLunar()
-
-    civil_dt = datetime(
-        solar.getYear(), solar.getMonth(), solar.getDay(), solar.getHour(), solar.getMinute(), 0
-    )
+        leap = bool(profile.get("lunar_leap_month"))
+        if not converter.setLunarDate(year, month, day, leap) or converter.isIntercalation != leap:
+            raise SajuProfileError("존재하지 않는 한국 음력 날짜 또는 윤달입니다")
+        year, month, day = converter.solarYear, converter.solarMonth, converter.solarDay
+    elif not converter.setSolarDate(year, month, day):
+        raise SajuProfileError("지원하지 않는 양력 날짜입니다")
+    civil_dt = datetime(year, month, day, hour, minute)
+    zone = str(profile.get("timezone", DEFAULT_SAJU_TIMEZONE))
+    aware = _civil_aware(civil_dt, zone)
+    if aware > datetime.now(UTC):
+        raise SajuProfileError("미래 출생일은 사용할 수 없습니다")
     correction = 0.0
     effective_dt = civil_dt
     if bool(profile.get("true_solar_time")):
-        effective_dt, correction = _true_solar_adjustment(
-            civil_dt,
-            str(profile.get("timezone", DEFAULT_SAJU_TIMEZONE)),
-            float(profile["longitude"]),
-        )
-        solar = Solar.fromYmdHms(
-            effective_dt.year,
-            effective_dt.month,
-            effective_dt.day,
-            effective_dt.hour,
-            effective_dt.minute,
-            0,
-        )
-        lunar = solar.getLunar()
-
-    meta = {
-        "input_calendar": calendar,
-        "birth_place": str(profile.get("birth_place", "")),
-        "birth_timezone": str(profile.get("timezone", DEFAULT_SAJU_TIMEZONE)),
+        effective_dt, correction = _true_solar_adjustment(civil_dt, zone, float(profile["longitude"]))
+    solar = Solar.fromYmdHms(effective_dt.year, effective_dt.month, effective_dt.day,
+                             effective_dt.hour, effective_dt.minute, effective_dt.second)
+    return solar, {
+        "input_calendar": calendar, "calendar_basis": "한국 음력 (korean_lunar_calendar 0.3.1)",
+        "birth_place": str(profile.get("birth_place", "")), "birth_timezone": zone,
         "birth_solar": civil_dt.strftime("%Y-%m-%d %H:%M"),
-        "birth_lunar": lunar.toString(),
-        "effective_birth_time": effective_dt.strftime("%Y-%m-%d %H:%M"),
+        "birth_lunar": converter.LunarIsoFormat(),
+        "effective_birth_time": effective_dt.isoformat(timespec="seconds"),
         "true_solar_time": bool(profile.get("true_solar_time")),
         "true_solar_correction_minutes": round(correction, 2),
         "longitude": float(profile["longitude"]) if profile.get("longitude") not in (None, "") else None,
+        "calendar_warnings": ["진태양시 균시차는 근사식이며 경계 수분 이내는 별도 검산 권장"],
     }
-    return solar, meta
+
+
+def _pillar_from_ganzhi(ganzhi: str, day_stem: str) -> dict[str, Any]:
+    stem, branch = ganzhi
+    hidden = rules.HIDDEN[branch]
+    # Same growth-cycle table as supplied section 1.2.10, in branch order.
+    offsets = {"甲": 1, "乙": 6, "丙": 10, "丁": 9, "戊": 10, "己": 9, "庚": 7, "辛": 0, "壬": 4, "癸": 3}
+    stages = ("장생", "목욕", "관대", "건록", "제왕", "쇠", "병", "사", "묘", "절", "태", "양")
+    direction = 1 if rules.STEMS.index(day_stem) % 2 == 0 else -1
+    stage = stages[(offsets[day_stem] + direction * rules.BRANCHES.index(branch)) % 12]
+    return {
+        "ganzhi": ganzhi, "stem": stem, "stem_display": _stem_display(stem),
+        "stem_element": ELEMENT_KO[_element_from_stem(stem)],
+        "branch": branch, "branch_display": _branch_display(branch),
+        "branch_element": ELEMENT_KO[_element_from_branch(branch)],
+        "hidden_stems": list(hidden), "hidden_stem_ratios": dict(hidden),
+        "wuxing": ELEMENT_HANJA[_element_from_stem(stem)] + ELEMENT_HANJA[_element_from_branch(branch)],
+        "nayin": LunarUtil.NAYIN.get(ganzhi), "ten_god_stem": rules.ten_god(day_stem, stem),
+        "ten_gods_branch": [rules.ten_god(day_stem, item) for item in hidden], "growth_stage": stage,
+    }
+
+
+def _clock_pillars(civil: datetime, effective: datetime, zone: str) -> tuple[dict[str, Any], Any]:
+    """UTC+8 astronomy clock for year/month; local/solar clock for day/hour."""
+    astronomical = _civil_aware(civil, zone).astimezone(fixed_timezone(timedelta(hours=8)))
+    term_lunar = Solar.fromYmdHms(astronomical.year, astronomical.month, astronomical.day,
+                                  astronomical.hour, astronomical.minute, astronomical.second).getLunar()
+    day_lunar = Solar.fromYmdHms(effective.year, effective.month, effective.day,
+                                 effective.hour, effective.minute, effective.second).getLunar()
+    day = day_lunar.getDayInGanZhiExact2()
+    # The source explicitly selects same-day day pillar at 23h. Apply that day
+    # stem to hour DunGan too, instead of library's next-day hour stem at 23h.
+    branch_index = ((effective.hour + 1) // 2) % 12
+    hour_stem_index = ((rules.STEMS.index(day[0]) % 5) * 2 + branch_index) % 10
+    ganzhi = {"year": term_lunar.getYearInGanZhiExact(), "month": term_lunar.getMonthInGanZhiExact(),
+              "day": day, "time": rules.STEMS[hour_stem_index] + rules.BRANCHES[branch_index]}
+    return {key: _pillar_from_ganzhi(value, day[0]) for key, value in ganzhi.items()}, term_lunar
 
 
 def _element_from_stem(stem: str) -> str:
@@ -353,227 +403,38 @@ def _branch_display(branch: str) -> str:
     return f"{BRANCH_INFO[branch][0]}({branch})"
 
 
-def _pillar_dict(eight_char: Any) -> dict[str, Any]:
-    """Return full Four Pillars metadata from lunar_python EightChar."""
-    pillars = [
-        (
-            "year",
-            eight_char.getYear(),
-            eight_char.getYearGan(),
-            eight_char.getYearZhi(),
-            list(eight_char.getYearHideGan()),
-            eight_char.getYearWuXing(),
-            eight_char.getYearNaYin(),
-            eight_char.getYearShiShenGan(),
-            list(eight_char.getYearShiShenZhi()),
-            eight_char.getYearDiShi(),
-        ),
-        (
-            "month",
-            eight_char.getMonth(),
-            eight_char.getMonthGan(),
-            eight_char.getMonthZhi(),
-            list(eight_char.getMonthHideGan()),
-            eight_char.getMonthWuXing(),
-            eight_char.getMonthNaYin(),
-            eight_char.getMonthShiShenGan(),
-            list(eight_char.getMonthShiShenZhi()),
-            eight_char.getMonthDiShi(),
-        ),
-        (
-            "day",
-            eight_char.getDay(),
-            eight_char.getDayGan(),
-            eight_char.getDayZhi(),
-            list(eight_char.getDayHideGan()),
-            eight_char.getDayWuXing(),
-            eight_char.getDayNaYin(),
-            eight_char.getDayShiShenGan(),
-            list(eight_char.getDayShiShenZhi()),
-            eight_char.getDayDiShi(),
-        ),
-        (
-            "time",
-            eight_char.getTime(),
-            eight_char.getTimeGan(),
-            eight_char.getTimeZhi(),
-            list(eight_char.getTimeHideGan()),
-            eight_char.getTimeWuXing(),
-            eight_char.getTimeNaYin(),
-            eight_char.getTimeShiShenGan(),
-            list(eight_char.getTimeShiShenZhi()),
-            eight_char.getTimeDiShi(),
-        ),
-    ]
-    result: dict[str, Any] = {}
-    for key, ganzhi, stem, branch, hidden, wuxing, nayin, ten_stem, ten_branch, stage in pillars:
-        result[key] = {
-            "ganzhi": ganzhi,
-            "stem": stem,
-            "stem_display": _stem_display(stem),
-            "stem_element": ELEMENT_KO[_element_from_stem(stem)],
-            "branch": branch,
-            "branch_display": _branch_display(branch),
-            "branch_element": ELEMENT_KO[_element_from_branch(branch)],
-            "hidden_stems": hidden,
-            "wuxing": wuxing,
-            "nayin": nayin,
-            "ten_god_stem": ten_stem,
-            "ten_gods_branch": ten_branch,
-            "growth_stage": stage,
-        }
-    return result
-
-
-def _weighted_element_balance(pillars: dict[str, Any]) -> dict[str, float]:
-    """Estimate element strength with month branch and hidden stems emphasized."""
-    counts = {element: 0.0 for element in ELEMENT_KO}
-    for key in ("year", "month", "day", "time"):
-        pillar = pillars[key]
-        stem = str(pillar["stem"])
-        branch = str(pillar["branch"])
-        counts[_element_from_stem(stem)] += 1.0
-        counts[_element_from_branch(branch)] += 1.65 if key == "month" else 1.0
-        for index, hidden in enumerate(pillar["hidden_stems"]):
-            if hidden not in STEM_INFO:
-                continue
-            weights = (0.42, 0.24, 0.12)
-            counts[_element_from_stem(hidden)] += weights[min(index, 2)]
-    total = sum(counts.values()) or 1.0
-    return {element: counts[element] / total for element in counts}
-
-
-def _day_master_roles(day_element: str) -> dict[str, str]:
-    return {
-        "companion": day_element,
-        "resource": GENERATED_BY[day_element],
-        "output": GENERATES[day_element],
-        "wealth": CONTROLS[day_element],
-        "officer": CONTROLLED_BY[day_element],
-    }
-
-
-def _strength_and_favorable(day_element: str, balance: dict[str, float]) -> dict[str, Any]:
-    roles = _day_master_roles(day_element)
-    support = balance[roles["companion"]] + balance[roles["resource"]]
-    if support >= 0.54:
-        strength = "신강"
-        favorable = [roles["output"], roles["wealth"], roles["officer"]]
-        avoid = [roles["companion"], roles["resource"]]
-    elif support <= 0.46:
-        strength = "신약"
-        favorable = [roles["resource"], roles["companion"]]
-        avoid = [roles["wealth"], roles["officer"]]
-    else:
-        strength = "중화"
-        least = sorted(ELEMENT_KO, key=lambda element: (balance[element], element))
-        favorable = least[:2] + [roles["output"]]
-        favorable = list(dict.fromkeys(favorable))
-        avoid = []
-    return {
-        "strength": strength,
-        "support_ratio": round(support, 4),
-        "roles": roles,
-        "favorable_elements": favorable,
-        "avoid_elements": avoid,
-    }
-
-
-def _interaction_summary(birth: dict[str, Any], target: dict[str, Any]) -> dict[str, list[str]]:
-    """Compare natal pillars with target draw pillars using common 명리 relations."""
-    stem_positive: list[str] = []
-    stem_negative: list[str] = []
-    branch_positive: list[str] = []
-    branch_negative: list[str] = []
-    birth_items = [(PILLAR_LABELS[i], birth[key]) for i, key in enumerate(("year", "month", "day", "time"))]
-    target_items = [(f"추첨{PILLAR_LABELS[i]}", target[key]) for i, key in enumerate(("year", "month", "day", "time"))]
-
-    for birth_label, bp in birth_items:
-        for target_label, tp in target_items:
-            stem_pair = frozenset((str(bp["stem"]), str(tp["stem"])))
-            if stem_pair in STEM_COMBINATIONS:
-                stem_positive.append(f"{birth_label}-{target_label} {STEM_COMBINATIONS[stem_pair]}")
-            if stem_pair in STEM_CLASHES:
-                stem_negative.append(f"{birth_label}-{target_label} {STEM_CLASHES[stem_pair]}")
-            branch_pair = frozenset((str(bp["branch"]), str(tp["branch"])))
-            if branch_pair in BRANCH_COMBINATIONS:
-                branch_positive.append(f"{birth_label}-{target_label} {BRANCH_COMBINATIONS[branch_pair]}")
-            if branch_pair in BRANCH_CLASHES:
-                branch_negative.append(f"{birth_label}-{target_label} {BRANCH_CLASHES[branch_pair]}")
-            if branch_pair in BRANCH_HARMS:
-                branch_negative.append(f"{birth_label}-{target_label} {BRANCH_HARMS[branch_pair]}")
-
-    all_branches = {str(item[1]["branch"]) for item in birth_items + target_items}
-    for group, name in THREE_HARMONIES.items():
-        if group <= all_branches:
-            branch_positive.append(name)
-    for group, name in THREE_PUNISHMENTS.items():
-        if group <= all_branches:
-            branch_negative.append(name)
-
-    return {
-        "stem_harmony": sorted(set(stem_positive)),
-        "stem_clash": sorted(set(stem_negative)),
-        "branch_harmony": sorted(set(branch_positive)),
-        "branch_clash_harm_punishment": sorted(set(branch_negative)),
-    }
-
-
-def _luck_cycle(eight_char: Any, gender: str, target_year: int) -> dict[str, Any]:
-    """Return current DaYun plus its start metadata when calculable."""
-    gender_value = 1 if gender == "male" else 0
-    try:
-        yun = eight_char.getYun(gender_value)
-        selected = None
-        for dayun in yun.getDaYun(12):
-            start = int(dayun.getStartYear())
-            end = int(dayun.getEndYear()) if hasattr(dayun, "getEndYear") else start + 9
-            if start <= target_year <= end:
-                selected = dayun
-                break
-        return {
-            "direction": "순행" if yun.isForward() else "역행",
-            "start_after": {
-                "years": int(yun.getStartYear()),
-                "months": int(yun.getStartMonth()),
-                "days": int(yun.getStartDay()),
-            },
-            "current": (
-                {
-                    "ganzhi": selected.getGanZhi(),
-                    "start_year": int(selected.getStartYear()),
-                    "end_year": int(selected.getEndYear()) if hasattr(selected, "getEndYear") else int(selected.getStartYear()) + 9,
-                    "start_age": int(selected.getStartAge()),
-                    "end_age": int(selected.getEndAge()) if hasattr(selected, "getEndAge") else int(selected.getStartAge()) + 9,
-                }
-                if selected is not None
-                else None
-            ),
-        }
-    except Exception:
-        return {"direction": None, "start_after": None, "current": None}
-
-
-def _relation_score(day_element: str, candidate_element: str) -> float:
-    if candidate_element == day_element:
-        return 0.82
-    if GENERATED_BY[day_element] == candidate_element:
-        return 0.90
-    if GENERATES[day_element] == candidate_element:
-        return 0.86
-    if CONTROLS[day_element] == candidate_element:
-        return 0.76
-    if CONTROLLED_BY[day_element] == candidate_element:
-        return 0.66
-    return 0.50
-
-
-def _element_from_ganzhi(ganzhi: str) -> tuple[str | None, str | None]:
-    if len(ganzhi) < 2:
-        return None, None
-    stem = _element_from_stem(ganzhi[0]) if ganzhi[0] in STEM_INFO else None
-    branch = _element_from_branch(ganzhi[1]) if ganzhi[1] in BRANCH_INFO else None
-    return stem, branch
+def _luck_cycle(pillars: dict[str, Any], term_lunar: Any, civil: datetime, zone: str, gender: str, target: date) -> dict[str, Any]:
+    """Source section 1.2.16: Jie interval /3, half-up rounded starting age."""
+    forward = (rules.STEMS.index(pillars["year"]["stem"]) % 2 == 0) == (gender == "male")
+    jie = term_lunar.getNextJie() if forward else term_lunar.getPrevJie()
+    jie_dt = datetime.fromisoformat(jie.getSolar().toYmdHms()).replace(tzinfo=fixed_timezone(timedelta(hours=8)))
+    birth = _civil_aware(civil, zone)
+    elapsed_days = abs((jie_dt - birth).total_seconds()) / 86400
+    age = int(math.floor(elapsed_days / 3 + .5))
+    ganzhi_cycle = [rules.STEMS[i % 10] + rules.BRANCHES[i % 12] for i in range(60)]
+    month_index = ganzhi_cycle.index(pillars["month"]["ganzhi"])
+    timeline = []
+    current = None
+    for index in range(12):
+        start_year = civil.year + age + 10 * index
+        start = date(start_year, civil.month, min(civil.day, 28) if civil.month == 2 and civil.day == 29 else civil.day)
+        end_year = start_year + 10
+        end = date(end_year, start.month, start.day)
+        item = {"ganzhi": ganzhi_cycle[(month_index + (index + 1) * (1 if forward else -1)) % 60],
+                "start_age": age + 10 * index, "end_age": age + 10 * index + 9,
+                "start_date": start.isoformat(), "end_exclusive": end.isoformat(),
+                "start_year": start_year, "end_year": end_year,
+                "birthday_policy": "2월29일은 해당 경계연도 2월28일"}
+        timeline.append(item)
+        if start <= target < end:
+            current = item
+    return {"direction": "순행" if forward else "역행", "current": current, "timeline": timeline,
+            "status": "대운 전" if current is None and target < date.fromisoformat(timeline[0]["start_date"]) else "계산됨",
+            "start_after": {"years": age, "months": 0, "days": 0},
+            "calculation": {"rule": "제공 문서 1.2.16: 절(Jie)까지 실제 일수 /3, 0.5 올림",
+                "jie": jie.getName(), "jie_at_birth_timezone": jie_dt.astimezone(ZoneInfo(zone)).isoformat(),
+                "interval_days": round(elapsed_days, 8), "unrounded_start_age": round(elapsed_days / 3, 8),
+                "both_stem_and_branch_active": True}}
 
 
 def build_myungri_context(
@@ -594,102 +455,72 @@ def build_myungri_context(
             "notice": "명리 권장 사용 전 개인 사주정보 입력이 필요합니다.",
             "privacy_notice": SAJU_PRIVACY_NOTICE,
         }
+    if latest is None:
+        raise SajuProfileError("추첨일을 확인할 수 없어 명리 추천을 생성하지 않습니다")
     validate_saju_profile(profile or {})
     solar, birth_meta = _solar_from_profile(profile or {})
-    natal_lunar = solar.getLunar()
-    eight_char = natal_lunar.getEightChar()
-    eight_char.setSect(2)
-    natal_pillars = _pillar_dict(eight_char)
-    day_stem = str(eight_char.getDayGan())
+    civil = datetime.fromisoformat(birth_meta["birth_solar"])
+    effective = datetime.fromisoformat(birth_meta["effective_birth_time"])
+    zone = str(profile.get("timezone", DEFAULT_SAJU_TIMEZONE))
+    natal_pillars, term_lunar = _clock_pillars(civil, effective, zone)
+    day_stem = natal_pillars["day"]["stem"]
     day_element = _element_from_stem(day_stem)
     day_polarity = STEM_INFO[day_stem][2]
-    balance = _weighted_element_balance(natal_pillars)
-    strength = _strength_and_favorable(day_element, balance)
-
-    target = (latest + timedelta(days=7)) if latest else date.today()
-    target_solar = Solar.fromYmdHms(target.year, target.month, target.day, 20, 35, 0)
-    target_eight_char = target_solar.getLunar().getEightChar()
-    target_eight_char.setSect(2)
-    target_pillars = _pillar_dict(target_eight_char)
-    interactions = _interaction_summary(natal_pillars, target_pillars)
-    luck = _luck_cycle(eight_char, str(profile.get("gender")), target.year)
-
-    favorable: list[str] = list(strength["favorable_elements"])
-    avoid: list[str] = list(strength["avoid_elements"])
-    min_balance = min(balance.values())
-    max_balance = max(balance.values()) or 1.0
-    luck_current = luck.get("current") or {}
-    luck_stem_element, luck_branch_element = _element_from_ganzhi(str(luck_current.get("ganzhi", "")))
-    target_day_element = _element_from_stem(str(target_pillars["day"]["stem"]))
-    target_day_branch_element = _element_from_branch(str(target_pillars["day"]["branch"]))
-
-    resonance: dict[int, float] = {}
-    role_by_number: dict[int, str] = {}
-    roles: dict[str, str] = dict(strength["roles"])
-    role_scores = {
-        "resource": 1.0 if strength["strength"] == "신약" else 0.68,
-        "companion": 0.94 if strength["strength"] == "신약" else 0.62,
-        "output": 0.96 if strength["strength"] != "신약" else 0.72,
-        "wealth": 0.91 if strength["strength"] != "신약" else 0.64,
-        "officer": 0.88 if strength["strength"] != "신약" else 0.62,
+    evaluation = rules.analyze_natal(natal_pillars, day_stem)
+    balance, strength = evaluation["balance"], evaluation["strength"]
+    roles = evaluation["roles"]
+    target = latest + timedelta(days=7)
+    # Scheduled reference, not a claim that a particular draw happened at 20:35.
+    target_clock = datetime(target.year, target.month, target.day, 20, 35)
+    target_pillars, _ = _clock_pillars(target_clock, target_clock, "Asia/Seoul")
+    luck = _luck_cycle(natal_pillars, term_lunar, civil, zone, str(profile["gender"]), target)
+    layers, layer_scores = rules.evaluate_layers(natal_pillars, target_pillars, luck, evaluation["element_preference"])
+    events = [event for layer in layers.values() for event in layer["relations"]]
+    interactions = {
+        "stem_harmony": [str(e["positions"]) + e["symbols"] for e in events if e["kind"] == "천간합"],
+        "stem_clash": [str(e["positions"]) + e["symbols"] for e in events if e["kind"] == "천간충"],
+        "branch_harmony": [str(e["positions"]) + e["symbols"] for e in events if e["kind"] in {"육합", "삼합", "방합"}],
+        "branch_clash_harm_punishment": [str(e["positions"]) + e["symbols"] for e in events if e["kind"] in {"육충", "파", "해", "자묘형", "자형", "삼형"}],
     }
+    favorable, avoid = evaluation["favorable_elements"], evaluation["avoid_elements"]
     element_to_role = {element: role for role, element in roles.items()}
-
+    number_gods, role_by_number, resonance, breakdown = {}, {}, {}, {}
+    god_values = evaluation["ten_god_distribution"]
+    max_god = max(god_values.values()) or 1.0
     for number, element in number_elements.items():
-        role = element_to_role[element]
-        role_by_number[number] = role
-        if element in favorable:
-            favorable_score = 1.0 - 0.08 * favorable.index(element)
-        elif element in avoid:
-            favorable_score = 0.42
-        else:
-            favorable_score = 0.68
-        deficiency_score = 1.0 - max(0.0, (balance[element] - min_balance) / max(max_balance - min_balance, 0.001))
-        draw_score = 0.56 * _relation_score(target_day_element, element) + 0.44 * _relation_score(target_day_branch_element, element)
-        luck_parts = [
-            _relation_score(luck_element, element)
-            for luck_element in (luck_stem_element, luck_branch_element)
-            if luck_element
-        ]
-        luck_score = fmean(luck_parts) if luck_parts else 0.5
-        polarity_score = 0.78 if number_polarity(number) != day_polarity else 0.72
-        resonance[number] = (
-            0.34 * favorable_score
-            + 0.22 * role_scores[role]
-            + 0.18 * deficiency_score
-            + 0.14 * draw_score
-            + 0.08 * luck_score
-            + 0.04 * polarity_score
-        )
-
+        god = rules.ten_god(day_stem, rules.number_stem(element, number_polarity(number)))
+        number_gods[number] = god
+        role_by_number[number] = element_to_role[element]
+        preference = evaluation["element_preference"][element]
+        # The polarity-specific God affects the ranking; no special 'windfall' promise.
+        god_score = preference * (.75 + .25 * (1 - god_values[god] / max_god))
+        parts = {"보완오행합의": .55 * preference, "십신10종": .20 * god_score,
+                 "대운세운월운일시진": .25 * layer_scores[element]}
+        resonance[number] = sum(parts.values())
+        breakdown[number] = {key: round(value, 6) for key, value in parts.items()}
     return {
-        "status": "ready",
-        "profile": birth_meta,
-        "gender": str(profile.get("gender")),
-        "natal_pillars": natal_pillars,
-        "day_master": _stem_display(day_stem),
-        "day_master_element": day_element,
-        "day_master_element_ko": ELEMENT_KO[day_element],
+        "status": "ready", "profile": birth_meta, "gender": str(profile["gender"]),
+        "natal_pillars": natal_pillars, "day_master": _stem_display(day_stem),
+        "day_master_element": day_element, "day_master_element_ko": ELEMENT_KO[day_element],
         "day_master_polarity": day_polarity,
-        "element_balance": {ELEMENT_KO[element]: round(value, 4) for element, value in balance.items()},
-        "strength": strength["strength"],
-        "support_ratio": strength["support_ratio"],
+        "element_balance": {ELEMENT_KO[e]: round(v, 5) for e, v in balance.items()},
+        "strength": strength, "support_ratio": evaluation["support_ratio"],
         "ten_god_element_roles": {role: ELEMENT_KO[element] for role, element in roles.items()},
-        "favorable_elements": favorable,
-        "favorable_elements_ko": [ELEMENT_KO[element] for element in favorable],
-        "avoid_elements": avoid,
-        "avoid_elements_ko": [ELEMENT_KO[element] for element in avoid],
-        "luck_cycle": luck,
-        "target_draw_date": target.isoformat(),
-        "target_draw_time": "20:35",
-        "target_pillars": target_pillars,
-        "target_day": target_pillars["day"]["ganzhi"],
-        "interactions": interactions,
-        "number_elements": number_elements,
-        "number_roles": role_by_number,
-        "number_resonance": resonance,
-        "notice": SAJU_NOTICE,
-        "privacy_notice": SAJU_PRIVACY_NOTICE,
+        "favorable_elements": favorable, "favorable_elements_ko": [ELEMENT_KO[e] for e in favorable],
+        "avoid_elements": avoid, "avoid_elements_ko": [ELEMENT_KO[e] for e in avoid],
+        "luck_cycle": luck, "target_draw_date": target.isoformat(), "target_draw_time": "20:35",
+        "target_timezone": "Asia/Seoul", "target_time_basis": "예정시각 가정; 실제 추첨시각 미검증",
+        "target_pillars": target_pillars, "target_day": target_pillars["day"]["ganzhi"],
+        "interactions": interactions, "natal_interactions": rules.relations(natal_pillars),
+        "luck_layers": layers, "number_elements": number_elements, "number_roles": role_by_number,
+        "number_ten_gods": number_gods, "number_resonance": resonance, "number_score_breakdown": breakdown,
+        "natal_evaluation": {k: v for k, v in evaluation.items() if k not in {"balance", "roles"}},
+        "calculation_policy": {"version": rules.SOURCE_RULE_VERSION,
+            "day_boundary": "23시 당일 일주 및 당일 일간으로 시주 계산 (문서 1.2.8 선택 규칙)",
+            "solar_terms": "UTC+8 절기 시각과 출생 절대시각 비교; 연월주/일시주 시계 분리",
+            "source_day_anchor_table": "오류로 미적용; 독립 역법 검산 일진 사용",
+            "scoring_notice": rules.APPLICATION_NOTICE},
+        "notice": SAJU_NOTICE, "privacy_notice": SAJU_PRIVACY_NOTICE,
     }
 
 
@@ -734,7 +565,14 @@ def combo_myungri_details(combo: tuple[int, ...], context: dict[str, Any]) -> di
     favorable = set(context.get("favorable_elements", []))
     return {
         "saju_profile_status": "준비됨",
-        "traditional_method": "개인 사주 원국 + 대운 + 추첨일 사주 + 하도 수리오행",
+        "traditional_method": "문서 기반 개인 사주·대운·세운·월운·일시진 + 하도 수리오행 응용",
+        "calculation_policy": context.get("calculation_policy"),
+        "natal_evaluation": context.get("natal_evaluation"),
+        "natal_interactions": context.get("natal_interactions"),
+        "luck_layers": context.get("luck_layers"),
+        "target_time_basis": context.get("target_time_basis"),
+        "number_ten_gods": {str(n): context["number_ten_gods"][n] for n in combo},
+        "number_score_breakdown": {str(n): context["number_score_breakdown"][n] for n in combo},
         "birth_profile": dict(context.get("profile", {})),
         "four_pillars": {
             label: context["natal_pillars"][key]["ganzhi"]
@@ -794,6 +632,8 @@ def saju_profile_sensor_attributes(profile: dict[str, Any] | None, latest_draw_d
     details = combo_myungri_details((1, 2, 3, 4, 5, 6), context)
     for key in (
         "number_five_elements",
+        "number_ten_gods",
+        "number_score_breakdown",
         "number_ten_god_roles",
         "favorable_number_count",
         "five_element_counts",

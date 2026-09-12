@@ -1,13 +1,20 @@
 {
   "domain": "lotto_645",
   "name": "Lotto 6/45 Analysis",
-  "after_dependencies": ["ai_task"],
-  "codeowners": ["@1bobby-git"],
+  "after_dependencies": [
+    "ai_task"
+  ],
+  "codeowners": [
+    "@1bobby-git"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/1bobby-git/HA-Lotto-645",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/1bobby-git/HA-Lotto-645/issues",
-  "requirements": ["lunar_python==1.4.8"],
-  "version": "1.5.5"
+  "requirements": [
+    "korean_lunar_calendar==0.3.1",
+    "lunar_python==1.4.8"
+  ],
+  "version": "1.6.0"
 }
