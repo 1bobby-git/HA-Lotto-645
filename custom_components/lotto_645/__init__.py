@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import time, timedelta
+from zoneinfo import ZoneInfo
+
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID, Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.event import async_track_time_interval
 
 from .const import DOMAIN, SERVICE_GENERATE_AI, SERVICE_REFRESH
 from .coordinator import Lotto645Coordinator
@@ -26,6 +30,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+
+    seoul_tz = ZoneInfo("Asia/Seoul")
+
+    @callback
+    def _draw_result_window_tick(now) -> None:
+        local = now.astimezone(seoul_tz)
+        if (
+            local.weekday() == 5
+            and time(20, 30) <= local.time().replace(tzinfo=None) <= time(22, 30)
+        ):
+            hass.async_create_task(
+                coordinator.async_request_refresh(),
+                "lotto_645_draw_result_refresh",
+            )
+
+    entry.async_on_unload(
+        async_track_time_interval(
+            hass, _draw_result_window_tick, timedelta(minutes=5)
+        )
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
