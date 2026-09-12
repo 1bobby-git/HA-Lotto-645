@@ -75,6 +75,7 @@ async def main():
         obj.entry=types.SimpleNamespace(options={})
         obj._manual_lock=asyncio.Lock();obj._local_generation_nonce=0
         obj._local_generated_at=None
+        obj._saju_profile_valid=False
         obj._prediction_snapshot=None;obj._draw_evaluation=None;obj._needs_storage_save=False
         rec=models.Recommendation(1,'weighted_frequency','local','stats',(1,2,3,4,5,6),'local reason',.5,{})
         saju=models.Recommendation(2,'myungri_hetu_day_pillar','saju','saju',(7,8,9,10,11,12),'DO NOT SEND PERSONAL SAJU',.5,{})
@@ -150,7 +151,7 @@ async def main():
         fields=to_field_list(form['data_schema'],custom_serializer=cv.custom_serializer)
         defaults={field['name']:field.get('default') for field in fields}
         assert defaults['game_a']=='30, 31, 32, 33, 34, 35'
-        # Dynamically named draw sensor keeps unique_id unchanged across rounds.
+        # Dynamically named draw sensor keeps_unique_id unchanged across rounds.
         numbers_sensor=sensor_module.LottoDrawNumbersSensor(obj)
         unique=numbers_sensor.unique_id
         assert numbers_sensor.name=='30회 추첨번호'
