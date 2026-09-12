@@ -14,7 +14,7 @@ from .ticket_panel import async_register_ticket_panel, async_remove_ticket_panel
 from .const import DOMAIN, SERVICE_GENERATE_AI, SERVICE_REFRESH
 from .coordinator import Lotto645Coordinator
 
-PLATFORMS = [Platform.SENSOR, Platform.BUTTON]
+PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.BINARY_SENSOR]
 
 # GitHub mirror: Sat 20:45/21:10/21:40/22:20/22:50 KST and Sun 09:30.
 # Client checks follow 10 minutes later; weekday is datetime.weekday().

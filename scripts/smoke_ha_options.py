@@ -235,6 +235,61 @@ async def main():
                 'round':31,'revision':'','clear':False,'values':{'game_a':'10 11 12 13 14 15'}})
             assert connection.send_error.call_args.args[1]=='purchase_revision_conflict'
             assert obj.purchase_book.records['31']['games'][0]['numbers']==[1,2,3,4,5,6]
+        # New review storage, category grouping and binary prize details use
+        # actual HA entity classes/registry. No fabricated user tickets.
+        review_module=importlib.import_module('custom_components.lotto_645.review')
+        binary_module=importlib.import_module('custom_components.lotto_645.binary_sensor')
+        button_module=importlib.import_module('custom_components.lotto_645.button')
+        from homeassistant.helpers.entity import EntityCategory
+        obj.review_book=review_module.ReviewBook();obj.review_storage_error=False
+        obj._review_dirty=False;obj._review_save_error=False;obj._review_save_lock=asyncio.Lock()
+        obj._review_store=Store(hass,1,'lotto_review_smoke')
+        obj._store=Store(hass,3,'lotto_history_review_smoke')
+        obj._regeneration_exclusions=();obj._local_generated_at=None
+        obj._frozen_result_snapshot=None;obj._fast_result=None
+        obj._prediction_snapshot={"target_round":30,"based_on_round":29,
+            "local_generated_at":"2003-06-27T10:00:00+00:00",
+            "recommendations":[models.Recommendation(1,"old","old sensor","test",(30,31,32,1,2,3),"",None,{}).to_storage()]}
+        obj._sync_reviews()
+        await obj._save_storage()
+        restored=review_module.ReviewBook.from_storage(await obj._review_store.async_load())
+        assert restored.summary('old')['reviewed_rounds']==1
+        assert obj.review_for_method('old')['winning_rounds']==1
+        # Method label reads the actual local review, not the engine's fit score.
+        game_sensor=sensor_module.LottoGameSensor(obj,'weighted_frequency')
+        assert game_sensor.name.startswith('☆평가대기')
+        obj._review_summaries['weighted_frequency']={'mean_score':80.,'stars':4.,'reviewed_rounds':1}
+        assert game_sensor.name.startswith('★4.0 · 80.0점')
+        assert game_sensor.entity_category is None
+        assert summary_sensor.entity_category==EntityCategory.DIAGNOSTIC
+        assert sensor_module.LottoMethodGuideSensor(obj).entity_category==EntityCategory.DIAGNOSTIC
+        assert numbers_sensor.device_info['identifiers'] != game_sensor.device_info['identifiers']
+        detail=binary_module.LottoWinningDetailSensor(obj)
+        assert detail.name=='30회 당첨 상세'
+        assert detail.is_on is True
+        attrs=detail.extra_state_attributes
+        assert attrs['winning_game_count']==2
+        assert attrs['winners'][0]['recommended_numbers']
+        assert attrs['winners'][0]['prize_rank'] is not None
+        assert all('entity_id' in row for row in attrs['results'])
+        assert attrs['review_notice']
+        result_button=button_module.LottoResultCheckButton(obj)
+        obj.async_poll_published_results=AsyncMock()
+        await result_button.async_press()
+        obj.async_poll_published_results.assert_awaited_once_with(force=True)
+        # Unknown is never reported as false/no-win on a pending/conflicted draw.
+        obj._fast_result={'status':'conflict','round':31,'sources':[]}
+        assert detail.is_on is None
+        assert detail.extra_state_attributes['results']==[]
+        # A store write failure keeps the ledger dirty for retry, not a fake success.
+        obj._fast_result=None;obj._review_dirty=True
+        actual_review_store=obj._review_store
+        obj._review_store=types.SimpleNamespace(async_save=AsyncMock(side_effect=OSError('test disk error')))
+        await obj._save_storage()
+        assert obj._review_dirty and obj._review_save_error
+        obj._review_store=actual_review_store
+        await obj._save_storage()
+        assert not obj._review_dirty and not obj._review_save_error
         await hass.async_stop(force=True)
     print('PASS: real HA options menu/forms/JSON serialization/profile save/compact normalization/gating; coordinator manual/AI contracts; purchased five-line round storage, restore, atomic save and draw-name checks')
 

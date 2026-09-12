@@ -1,6 +1,6 @@
 """Strict, offline Lotto 6/45 QR decoding. Never follow a ticket URL.
 
-The four-digit draw and q/m/s + 12-digit game records are public QR payload
+The four-digit draw and q/m/s + 12-digit game records (n = empty slot) are public QR payload
 conventions, not purchase/ownership authentication. Only explicit save stores
 parsed numbers. The receipt suffix is discarded and must not enter logs.
 """
@@ -16,8 +16,9 @@ _ALLOWED = {
     "www.dhlottery.co.kr": {"/qr.do"},
     "dhlottery.co.kr": {"/qr.do"},
     "qr.645lotto.net": {"/", ""},
+    "qr.dhlottery.co.kr": {"/", ""},
 }
-_PAYLOAD = re.compile(r"(?P<round>[0-9]{4})(?P<games>(?:[qms][0-9]{12}){1,5})(?P<receipt>[0-9]{10})?", re.ASCII)
+_PAYLOAD = re.compile(r"(?P<round>[0-9]{4})(?P<games>(?:[qmsn][0-9]{12}){1,5})(?P<receipt>(?:[0-9]{18}|[0-9]{10}))?", re.ASCII)
 
 
 def parse_ticket_qr(value: str) -> dict:
@@ -42,9 +43,16 @@ def parse_ticket_qr(value: str) -> dict:
         match = _PAYLOAD.fullmatch(query["v"][0])
         if match is None or int(match["round"]) < 1:
             fail()
-        games = re.findall(r"[qms]([0-9]{12})", match["games"])
-        values = {f"game_{slot.lower()}": ", ".join(map(str, parse_ticket(numbers)))
-                  for slot, numbers in zip(SLOTS, games)}
+        games = re.findall(r"([qmsn])([0-9]{12})", match["games"])
+        values = {}
+        for slot, (mode, numbers) in zip(SLOTS, games):
+            if mode == 'n':
+                if numbers != '000000000000':
+                    fail()
+                continue
+            values[f"game_{slot.lower()}"] = ", ".join(map(str, parse_ticket(numbers)))
+        if not values:
+            fail()
         return {"round": int(match["round"]), "values": values,
                 "game_count": len(values), "purchase_verified": False}
     except (ValueError, TypeError, KeyError) as err:

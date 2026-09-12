@@ -36,3 +36,16 @@ def test_legacy_url_and_one_digit_numbers_zero_padded():
 ])
 def test_untrusted_malformed_ambiguous_rejected(value):
     with pytest.raises(ValueError):qr.parse_ticket_qr(value)
+
+@pytest.mark.parametrize('receipt', ['', '0'*10, '0'*18])
+def test_official_qr_host_empty_slots_and_receipt_lengths(receipt):
+    value='https://qr.dhlottery.co.kr/?v=1241q010715243345n000000000000m020816253444n000000000000n000000000000'+receipt
+    result=qr.parse_ticket_qr(value)
+    assert result['game_count']==2
+    assert set(result['values'])=={'game_a','game_c'}
+    assert result['values']['game_c']=='2, 8, 16, 25, 34, 44'
+    assert 'receipt' not in result
+
+@pytest.mark.parametrize('payload',['1241n000000000000','1241q010715243345n010203040506','1241q010715243345'+'0'*17])
+def test_empty_slot_is_not_a_ticket_or_an_arbitrary_suffix(payload):
+    with pytest.raises(ValueError):qr.parse_ticket_qr('https://qr.dhlottery.co.kr/?v='+payload)

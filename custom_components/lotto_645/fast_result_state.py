@@ -97,6 +97,10 @@ class FastResultState:
         evaluation = self._draw_evaluation
         if snapshot and snapshot.get('target_round') == draw.round:
             evaluation = evaluate_saved(snapshot, draw)
+        # The ledger retains real pre-draw predictions for every generated method,
+        # including methods later deselected. No backtest/invented recommendations.
+        if hasattr(self, 'recorded_evaluation'):
+            evaluation = self.recorded_evaluation(draw) or evaluation
         result = combined_result(draw, evaluation, self.purchase_book.report(self.result_history, draw.round))
         result['result_verification'] = metadata
         result['provisional'] = metadata['status'] in ('provisional', 'cross_checked')

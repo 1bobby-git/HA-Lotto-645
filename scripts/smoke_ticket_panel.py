@@ -26,7 +26,7 @@ async def run():
               el.hass={callWS:async (msg)=>{
                 requests.push(msg);
                 if(msg.type==='lotto_645/qr_preview'){
-                  if(msg.qr!=='https://m.dhlottery.co.kr/qr.do?method=winQr&v=1241q0107152433450000000000')throw Error('decoded QR differs');
+                  if(msg.qr!=='https://qr.dhlottery.co.kr/?v=1241q010715243345n000000000000n000000000000n000000000000n000000000000000000000000000000')throw Error('decoded QR differs');
                   return {round:1241,game_count:1,values:{game_a:'1, 7, 15, 24, 33, 45'},revision:'',will_replace:false};
                 }
                 if(msg.type==='lotto_645/purchases_save'){saved=msg.values;}
@@ -36,7 +36,7 @@ async def run():
             await page.get_by_role('heading',name='1240회 추첨번호').wait_for()
             with tempfile.TemporaryDirectory() as tmp:
                 file=Path(tmp)/'fixture.png'
-                qrcode.make('https://m.dhlottery.co.kr/qr.do?method=winQr&v=1241q0107152433450000000000').save(file)
+                qrcode.make('https://qr.dhlottery.co.kr/?v=1241q010715243345n000000000000n000000000000n000000000000n000000000000000000000000000000').save(file)
                 await page.locator('#file').set_input_files(str(file))
                 await page.wait_for_function("el.shadowRoot.getElementById('game_a').value === '1, 7, 15, 24, 33, 45'")
             assert not await page.evaluate("requests.some(r=>r.type==='lotto_645/purchases_save')")
@@ -46,6 +46,21 @@ async def run():
             assert saves[-1]['round']==1241
             assert 'qr' not in saves[-1]
             assert saves[-1]['values']['game_a']=='1, 7, 15, 24, 33, 45'
+            # Current review/fast results continue to update while purchase edits stay intact.
+            await page.evaluate("""async()=>{
+                const base=el._hass.callWS;
+                el._hass.callWS=async msg=>({...await base(msg),
+                    result_round:1241,draw:{numbers:[7,13,16,23,24,43],bonus:9},
+                    result_verification:{status:'provisional'},
+                    reviews:[{method_id:'test',display_name:'★4.5 · 90.0점 | 시험',reviewed_rounds:2}],
+                    review_round:{round:1241,status:'provisional',peer_count:1,methods:[{method_id:'test',review_score:85,exact_match_count:5,near_match_count:1,rank_this_round:1}]}});
+                el.node('game_a').value='2, 3, 4, 5, 6, 7';el._editing=true;
+                await el.refreshStatus();
+            }""")
+            await page.get_by_role('heading',name='1241회 추첨번호').wait_for()
+            assert await page.locator('#game_a').input_value()=='2, 3, 4, 5, 6, 7'
+            assert '★4.5' in await page.locator('#reviews').inner_text()
+            assert '잠정' in await page.locator('#reviews').inner_text()
             assert not errors, errors
             await browser.close()
             print('PASS: browser loads local jsQR, decodes photo locally, previews without save, confirms explicit A-E save')

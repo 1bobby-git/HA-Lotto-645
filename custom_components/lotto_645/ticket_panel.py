@@ -26,13 +26,33 @@ def _coordinator(hass: HomeAssistant, message: dict) -> Any:
     return entry.runtime_data
 
 
+def _review_rows(coordinator) -> list[dict]:
+    from .const import AI_METHOD_ID
+    from .methods import METHODS_BY_ID
+    from .review import review_name
+    ids = list(getattr(coordinator, 'configured_method_ids', ()))
+    ids.extend(key for key in getattr(coordinator, '_review_summaries', {}) if key not in ids)
+    if getattr(coordinator, 'ai_enabled', False) and AI_METHOD_ID not in ids:
+        ids.append(AI_METHOD_ID)
+    rows = []
+    for method_id in ids:
+        summary = coordinator.review_for_method(method_id) if hasattr(coordinator, 'review_for_method') else {}
+        label = METHODS_BY_ID[method_id].label if method_id in METHODS_BY_ID else 'Home Assistant AI 추천' if method_id == AI_METHOD_ID else method_id
+        rows.append({'method_id': method_id, 'label': label, 'display_name': review_name(label, summary), **summary})
+    return rows
+
+
 def _view(coordinator: Any, round_no: int | None = None) -> dict:
     draw = coordinator.result_draw
     book = coordinator.purchase_book
     round_no = round_no or book.selected_round or (coordinator.data.analysis.target_round if coordinator.data else None)
     record = book.records.get(str(round_no), {})
     metadata = coordinator.result_metadata
-    return {'round': round_no, 'revision': record.get('saved_at', ''),
+    return {'reviews': _review_rows(coordinator),
+            'review_round': coordinator.review_for_round(coordinator.result_round) if hasattr(coordinator, 'review_for_round') else {},
+            'review_storage_error': getattr(coordinator, 'review_storage_error', False),
+            'review_save_pending': getattr(coordinator, '_review_save_error', False),
+            'round': round_no, 'revision': record.get('saved_at', ''),
             'values': book.form_values(round_no) if round_no else {},
             'stored_rounds': sorted(map(int, book.records), reverse=True),
             'purchased': book.report(coordinator.result_history, round_no),

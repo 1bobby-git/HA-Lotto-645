@@ -17,7 +17,7 @@ class LottoTicketPanel extends HTMLElement {
   _start() {
     if (!this._hass || !this._panel || !this.isConnected) return;
     if (!this.shadowRoot.firstChild) this.render();
-    if (!this._poll) this._poll=setInterval(() => { if (!this._editing && !this._busy && !document.hidden) this.operation(()=>this.load()); },30000);
+    if (!this._poll) this._poll=setInterval(() => { if (!this._busy && !document.hidden) this.operation(()=>this.refreshStatus()); },30000);
   }
   node(id) { return this.shadowRoot.getElementById(id); }
   message(text, error=false) { const n=this.node('message'); n.textContent=text; n.setAttribute('role',error?'alert':'status'); }
@@ -41,11 +41,11 @@ class LottoTicketPanel extends HTMLElement {
       <section class="box"><h2 id="drawtitle">추첨번호</h2><div class="numbers" id="numbers">확인 중</div><p id="verification"></p><p id="result"></p><div id="sources"></div><button id="check">추첨 결과 지금 확인</button><p class="note">공개 결과를 찾으면 자동 반영합니다. 속보 판정은 공식 이력 수신 후 다시 대조됩니다. 사이트 게시 지연·접근 제한에 따라 수신이 늦어질 수 있습니다.</p></section>
       <section class="box"><h2>복권 QR로 입력</h2><div class="row"><button id="scan">카메라로 QR 스캔</button><button id="photo">QR 사진 선택</button><input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
       <div id="camera" hidden><video id="video" autoplay muted playsinline></video><button id="stop">카메라 종료</button></div>
-      <label for="qr">또는 휴대폰 카메라로 읽은 QR 주소 붙여넣기</label><textarea id="qr" maxlength="2048" placeholder="https://m.dhlottery.co.kr/qr.do?method=winQr&v=..."></textarea><button id="preview">QR 번호 미리보기</button><p class="note">QR은 주소를 방문하지 않고 회차·번호만 읽습니다. 아래 A~E를 확인한 뒤 저장하세요.</p></section>
+      <label for="qr">또는 휴대폰 카메라로 읽은 QR 주소 붙여넣기</label><textarea id="qr" maxlength="2048" placeholder="https://qr.dhlottery.co.kr/?v=..."></textarea><button id="preview">QR 번호 미리보기</button><p class="note">QR은 주소를 방문하지 않고 회차·번호만 읽습니다. 아래 A~E를 확인한 뒤 저장하세요.</p></section>
       <section class="box"><h2>직접 구매번호 A~E</h2><label for="round">복권에 적힌 회차</label><input id="round" inputmode="numeric" type="text" maxlength="6"><button id="load">해당 회차 불러오기</button><p id="savedrounds" class="note"></p><div id="games"></div>
       <p class="note">예: 1, 7, 15, 24, 33, 45 / 1 7 15 24 33 45 / 010715243345. 게임당 중복 없는 6개 번호, 최대 5게임입니다. 빈 줄은 저장하지 않습니다. 같은 회차의 A~E는 저장할 때 교체됩니다.</p>
       <div class="row"><button id="save" class="primary">확인한 번호 저장</button><button id="clear">이 회차 구매번호 삭제</button></div><div class="scroll"><table><caption>저장한 구매번호의 회차별 판정</caption><thead><tr><th>게임</th><th>번호</th><th>결과</th></tr></thead><tbody id="outcomes"></tbody></table></div></section>
-      <section class="box"><h2>추천 센서별 판정</h2><div class="scroll"><table><thead><tr><th>추천 방식</th><th>번호</th><th>결과</th></tr></thead><tbody id="predictions"></tbody></table></div></section></main>`;
+      <section class="box"><h2>추천 센서별 판정</h2><div class="scroll"><table><thead><tr><th>추천 방식</th><th>번호</th><th>결과</th></tr></thead><tbody id="predictions"></tbody></table></div></section><section class="box"><h2>방식별 누적 리뷰</h2><p class="note">추첨 전 저장한 실제 추천만 평가합니다. 공식 확인 회차의 평균점수 ÷ 20이 별점입니다. ±1은 유사도일 뿐 당첨이 아닙니다. 속보 점수는 잠정이며 누적평균과 분리합니다. 표본이 적은 별점은 미래 예측력을 뜻하지 않습니다.</p><p id="reviewstatus"></p><div class="scroll"><table><thead><tr><th>추천 방식 / 누적 별점</th><th>평가 회차</th><th>이번 회차</th><th>정확 / ±1</th><th>순위</th></tr></thead><tbody id="reviews"></tbody></table></div></section></main>`;
     const config=this._panel.config || {};
     for (const [id,name] of Object.entries(config.entries || {})) {const n=document.createElement('option');n.value=id;n.textContent=name;this.node('entry').append(n);}
     for (const s of 'abcde') {
@@ -81,6 +81,11 @@ class LottoTicketPanel extends HTMLElement {
     this.rows('outcomes',(data.purchased.games||[]).map(g=>[g.slot,(g.numbers||g.recommended_numbers||[]).join(', '),g.prize||'추첨 대기']));
     if(data.storage_error)this.message('구매번호 저장소를 확인해야 합니다. 기존 파일은 덮어쓰지 않습니다.',true);
   }
+  async refreshStatus() {
+    // Result/review updates never replace an unfinished purchase form or revision.
+    const data=await this.request('purchases_get',this._loadedRound?{round:this._loadedRound}:{});
+    this.updateResults(data);
+  }
   rows(id,rows) {const root=this.node(id);root.replaceChildren();for(const row of rows){const tr=document.createElement('tr');for(const v of row){const td=document.createElement('td');td.textContent=String(v??'');tr.append(td);}root.append(tr);}}
   updateResults(data) {
     const d=data.draw, meta=data.result_verification||{};
@@ -89,6 +94,13 @@ class LottoTicketPanel extends HTMLElement {
     this.node('verification').textContent=label[meta.status]||'발표 대기';
     const w=data.winning;this.node('result').textContent=w?.status==='evaluated'?`${w.round}회 당첨 여부: ${w.winning_game_count}개 당첨 · 최고 ${w.highest_prize}`:w?.status==='conflict'?'당첨 판정 보류':'대조할 추첨 전 추천 또는 구매번호가 아직 없습니다.';
     this.rows('predictions',(w?.results||[]).filter(g=>g.source!=='purchased').map(g=>[g.sensor_name,g.recommended_numbers.join(', '),g.prize]));
+    const roundReview=data.review_round||{};
+    const current=new Map((roundReview.methods||[]).map(r=>[r.method_id,r]));
+    this.rows('reviews',(data.reviews||[]).map(r=>{
+      const now=current.get(r.method_id);
+      return [r.display_name,r.reviewed_rounds||0,now?`${roundReview.status==='provisional'?'잠정 ':''}${now.review_score.toFixed(1)}점`:'평가 대기',now?`${now.exact_match_count}개 / ${now.near_match_count}개`:'—',now?`${now.rank_this_round}/${roundReview.peer_count}`:'—'];
+    }));
+    this.node('reviewstatus').textContent=data.review_storage_error?'리뷰 저장소 오류: 기존 파일을 보존하며 새 점수를 누적하지 않습니다.':data.review_save_pending?'리뷰 저장 재시도 대기 중입니다. 현재 점수는 아직 저장되지 않았을 수 있습니다.':(roundReview.round?`${roundReview.round}회 결과 대조. 누적 별점에는 공식 확인된 회차만 포함합니다.`:'리뷰할 추첨 전 추천이 아직 없습니다.');
     const sourceRoot=this.node('sources');sourceRoot.replaceChildren();for(const s of meta.sources||[]){const a=document.createElement('a');a.textContent=s.publisher+' 발표 ';a.href=s.url;a.target='_blank';a.rel='noopener noreferrer';sourceRoot.append(a);}
   }
   async preview(qr) {

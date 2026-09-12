@@ -18,7 +18,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up local-regeneration and optional AI buttons."""
     coordinator: Lotto645Coordinator = entry.runtime_data
-    entities: list[ButtonEntity] = [LottoRefreshButton(coordinator)]
+    entities: list[ButtonEntity] = [LottoRefreshButton(coordinator), LottoResultCheckButton(coordinator)]
     if coordinator.ai_enabled:
         entities.append(LottoAiRecommendationButton(coordinator))
     async_add_entities(entities)
@@ -54,3 +54,17 @@ class LottoAiRecommendationButton(Lotto645Entity, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.coordinator.async_generate_ai_recommendation()
+
+
+class LottoResultCheckButton(Lotto645Entity, ButtonEntity):
+    """Action button lives in Controls on the result device, not primary sensors."""
+    _lotto_group = "results"
+    _attr_name = "추첨 결과 지금 확인"
+    _attr_icon = "mdi:cloud-sync-outline"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_check_result"
+
+    async def async_press(self):
+        await self.coordinator.async_poll_published_results(force=True)
