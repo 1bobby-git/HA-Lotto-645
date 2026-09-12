@@ -1,0 +1,42 @@
+name: Brand Delta Workspace
+on:
+  push:
+    branches: [feat/v1.10.0-fast-results-qr]
+    paths: [.github/workflows/brand-delta-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export only existing large branding objects
+        run: |
+          python - <<'PY'
+          import subprocess,json
+          from pathlib import Path
+          out=Path('/tmp/brand-delta');out.mkdir()
+          seen=set();records=[];total=0
+          for line in subprocess.check_output(['git','rev-list','--objects','--all']).decode().splitlines():
+              parts=line.split(' ',1)
+              if len(parts)!=2:continue
+              sha,name=parts
+              if sha in seen or not name.endswith(('.png','.svg')) or not any(x in name.lower() for x in ('logo','brand')):continue
+              seen.add(sha)
+              size=int(subprocess.check_output(['git','cat-file','-s',sha]))
+              if not 50000<=size<=2000000 or total+size>25000000:continue
+              data=subprocess.check_output(['git','cat-file','blob',sha])
+              (out/(sha+Path(name).suffix)).write_bytes(data)
+              records.append({'sha':sha,'name':name,'bytes':size});total+=size
+          (out/'objects.json').write_text(json.dumps(records,indent=2))
+          print(json.dumps(records,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brand-delta-workspace
+          path: /tmp/brand-delta/
+          retention-days: 1
