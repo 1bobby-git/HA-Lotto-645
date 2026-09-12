@@ -1,6 +1,10 @@
 name: Apply Exact User Branding
 on:
-  workflow_dispatch:
+  push:
+    branches: [fix/v1.9.1-exact-branding-final]
+    paths:
+      - '.brand-upload/READY'
+      - '.github/workflows/apply-exact-branding.yml'
 permissions:
   contents: write
 jobs:
@@ -11,21 +15,59 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: fix/v1.9.1-exact-branding-final
+      - name: Exit until all logo chunks are staged
+        id: ready
+        shell: bash
+        run: |
+          if [ ! -f .brand-upload/READY ]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Waiting for .brand-upload/READY'
+          else
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-python@v5
+        if: steps.ready.outputs.ready == 'true'
         with:
           python-version: '3.13'
-      - name: Install Pillow
-        run: python -m pip install --disable-pip-version-check 'Pillow>=10,<12'
-      - name: Validate branding sources and variants
-        run: python scripts/render_brand.py
-      - name: Commit generated brand variants if changed
+      - name: Restore exact uploaded PNG
+        if: steps.ready.outputs.ready == 'true'
+        shell: bash
+        run: |
+          cat .brand-upload/logo.b64.* | base64 --decode > images/logo-horizontal.png
+          echo '0fe12c375a418c2bb51d5729526c4c65da70f82f5afecb4ae9ab8f60fe1b2a37  images/logo-horizontal.png' | sha256sum --check --strict
+      - name: Install Pillow and build only the required crop/HA variants
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          python -m pip install --disable-pip-version-check 'Pillow>=10,<12'
+          python scripts/render_brand.py
+      - name: Bump v1.9.1 and remove temporary importer
+        if: steps.ready.outputs.ready == 'true'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = Path('custom_components/lotto_645/manifest.json')
+          data = json.loads(manifest.read_text())
+          data['version'] = '1.9.1'
+          manifest.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+          const = Path('custom_components/lotto_645/const.py')
+          text = const.read_text().replace('VERSION = "1.9.0"', 'VERSION = "1.9.1"')
+          const.write_text(text)
+          changelog = Path('CHANGELOG.md')
+          text = changelog.read_text()
+          marker = '# Changelog\n'
+          entry = '''\n## 1.9.1\n\n- 사용자가 첨부한 2048×682 가로 PNG를 픽셀 변경 없이 `images/logo-horizontal.png` 원본으로 적용.\n- 정사각 로고는 같은 원본의 좌측 복주머니+6/45 부분만 정확히 크롭하고 투명 정사각 캔버스에 중앙 정렬.\n- Home Assistant 실제 통합 브랜드 `brand/logo.png` / `brand/icon.png`도 동일 두 자산의 규격 맞춤 리사이즈만 사용.\n- 브랜드 스크립트가 임의 재그리기·색상변환·여백 추가를 하지 못하도록 원본 SHA-256 및 크롭 크기를 검증.\n\n'''
+          if '## 1.9.1' not in text:
+              changelog.write_text(text.replace(marker, marker + entry, 1))
+          PY
+          git rm -r .brand-upload .github/workflows/apply-exact-branding.yml
+      - name: Commit exact assets
+        if: steps.ready.outputs.ready == 'true'
+        shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add images/logo-horizontal.png images/icon-square.png custom_components/lotto_645/brand/logo.png custom_components/lotto_645/brand/icon.png
-          if git diff --cached --quiet; then
-            echo 'No branding changes to commit'
-          else
-            git commit -m 'fix: apply exact supplied Lotto branding assets'
-            git push origin HEAD:fix/v1.9.1-exact-branding-final
-          fi
+          git add images/logo-horizontal.png images/icon-square.png custom_components/lotto_645/brand/logo.png custom_components/lotto_645/brand/icon.png scripts/render_brand.py custom_components/lotto_645/manifest.json custom_components/lotto_645/const.py CHANGELOG.md
+          git commit -m 'fix: apply exact user-supplied Lotto branding (v1.9.1)'
+          git push origin HEAD:fix/v1.9.1-exact-branding-final
