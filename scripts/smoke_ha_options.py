@@ -86,6 +86,7 @@ async def main():
         ai=models.Recommendation(3,'home_assistant_ai','ai','ai',(13,14,15,16,17,18),'ai',None,{},'ai_task')
         from datetime import datetime,timezone
         obj.data=models.Lotto645Data(models.LottoDraw(30,'2026-09-05',(30,31,32,33,34,35),36),models.AnalysisResult(31,30,(rec,saju),{}),30,datetime.now(timezone.utc),'cache',ai)
+        obj._cached_ai_recommendation=ai;obj._cached_ai_generated_at=None
         obj.async_request_refresh=AsyncMock()
         await obj.async_refresh_and_regenerate()
         assert obj.data.ai_recommendation is ai
