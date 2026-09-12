@@ -44,7 +44,10 @@ jobs:
           import sys
 
           root = Path(next(iter(importlib.util.find_spec('homeassistant').submodule_search_locations))) / 'components'
-          pending = ['ai_task']
+          # AI Task imports these media domains in Python even when they are
+          # not listed in its manifest dependencies. Install their production
+          # requirements too; do not replace real HA modules with test stubs.
+          pending = ['ai_task', 'camera', 'stream', 'image']
           visited = set()
           requirements = set()
           while pending:
