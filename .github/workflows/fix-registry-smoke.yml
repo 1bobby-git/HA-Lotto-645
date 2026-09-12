@@ -1,0 +1,33 @@
+name: Initialize Registry Smoke
+on:
+  push:
+    branches: [feat/v1.10.0-fast-results-qr]
+    paths: [.github/workflows/fix-registry-smoke.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v1.10.0-fast-results-qr
+      - name: Initialize actual registry in the test fixture
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/smoke_ha_options.py')
+          s=p.read_text()
+          needle='        hass=HomeAssistant(folder)\n'
+          assert s.count(needle)==1
+          s=s.replace(needle,needle+'        from homeassistant.helpers import entity_registry as er\n        await er.async_get(hass).async_load()\n')
+          p.write_text(s)
+          Path('.github/workflows/fix-registry-smoke.yml').unlink()
+          PY
+          python -m compileall -q scripts/smoke_ha_options.py
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test: load real entity registry before result-detail assertions'
+          git push origin HEAD:feat/v1.10.0-fast-results-qr
