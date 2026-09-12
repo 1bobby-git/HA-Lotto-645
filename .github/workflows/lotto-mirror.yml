@@ -8,10 +8,16 @@ on:
       - scripts/update_lotto_mirror.py
       - .github/workflows/lotto-mirror.yml
   schedule:
-    # Saturday 22:50 KST, comfortably after the ~20:35 draw.
-    - cron: "50 13 * * 6"
-    # Sunday 09:30 KST fallback in case publication or access was delayed.
-    - cron: "30 0 * * 0"
+    # Centralized, low-frequency checks after the Saturday ~20:35 KST draw.
+    # Each run is strictly sequential and limited to <=4 official requests;
+    # Home Assistant clients continue to read the shared mirror instead of
+    # individually crawling Donghaeng Lottery.
+    - cron: "45 11 * * 6"  # Saturday 20:45 KST
+    - cron: "10 12 * * 6"  # Saturday 21:10 KST
+    - cron: "40 12 * * 6"  # Saturday 21:40 KST
+    - cron: "20 13 * * 6"  # Saturday 22:20 KST
+    - cron: "50 13 * * 6"  # Saturday 22:50 KST late-publication fallback
+    - cron: "30 0 * * 0"   # Sunday 09:30 KST final fallback
   workflow_dispatch:
 
 permissions:
