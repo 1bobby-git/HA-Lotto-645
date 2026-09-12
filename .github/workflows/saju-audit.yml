@@ -35,7 +35,6 @@ jobs:
           import lzma
           from pathlib import Path
           import subprocess
-
           parts = [Path(f'.github/audit-transfer/part-{i}.txt') for i in range(5)]
           encoded = ''.join(p.read_text(encoding='ascii').strip() for p in parts)
           raw = lzma.decompress(base64.b64decode(encoded, validate=True))
@@ -43,18 +42,18 @@ jobs:
           actual = hashlib.sha256(raw).hexdigest()
           if actual != expected:
               raise SystemExit(f'Patch checksum mismatch: {actual}')
-          subprocess.run(['git', 'apply', '--check', '-'], input=raw, check=True)
-          subprocess.run(['git', 'apply', '-'], input=raw, check=True)
-          print(f'Applied audited patch: {len(raw)} bytes, SHA256 {actual}')
+          # Workflow writes are handled separately by the authorized connector.
+          subprocess.run(['git', 'apply', '--exclude=.github/workflows/*', '--check', '-'], input=raw, check=True)
+          subprocess.run(['git', 'apply', '--exclude=.github/workflows/*', '-'], input=raw, check=True)
+          print(f'Applied audited source patch: {len(raw)} bytes, SHA256 {actual}')
           PY
           python -m compileall -q custom_components/lotto_645 tests scripts
           git diff --check
-      - name: Commit source and remove temporary transfer files
+      - name: Commit source and remove temporary payload
         shell: bash
         run: |
           git rm -r .github/audit-transfer
-          git rm .github/workflows/saju-audit.yml
-          git add .github/workflows/validate.yml .github/workflows/release.yml custom_components/lotto_645 tests scripts docs README.md CHANGELOG.md
+          git add custom_components/lotto_645 tests scripts docs README.md CHANGELOG.md
           git diff --cached --stat
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
