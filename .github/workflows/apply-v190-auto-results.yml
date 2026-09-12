@@ -1,0 +1,107 @@
+name: Apply v1.9 Automatic Results
+on:
+  push:
+    branches: [feat/v1.9.0-purchased-ticket-results]
+    paths: [.github/workflows/apply-v190-auto-results.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply final v1.9 result behavior
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p=Path(path); s=p.read_text()
+              if old not in s:
+                  raise SystemExit(f'missing patch anchor in {path}: {old[:80]!r}')
+              p.write_text(s.replace(old,new,count))
+
+          # Home Assistant checks the centralized GitHub mirror shortly after each
+          # server-side mirror publication. No direct official traffic is generated
+          # unless the existing opt-in fallback is enabled by the user.
+          p=Path('custom_components/lotto_645/__init__.py'); s=p.read_text()
+          s=s.replace('from homeassistant.helpers import config_validation as cv\n', 'from homeassistant.helpers import config_validation as cv\nfrom homeassistant.helpers.event import async_track_utc_time_change\n')
+          s=s.replace('PLATFORMS = [Platform.SENSOR, Platform.BUTTON]\n', '''PLATFORMS = [Platform.SENSOR, Platform.BUTTON]\n\n# GitHub mirror: Sat 20:45/21:10/21:40/22:20/22:50 KST and Sun 09:30.\n# Client checks follow 10 minutes later; weekday is datetime.weekday().\n_RESULT_CHECKS_UTC = (\n    (5, 11, 55), (5, 12, 20), (5, 12, 50),\n    (5, 13, 30), (5, 14, 0), (6, 0, 40),\n)\n''')
+          anchor='    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)\n\n'
+          insertion='''    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)\n\n    for weekday, hour, minute in _RESULT_CHECKS_UTC:\n        async def _scheduled_result_check(now, expected_weekday=weekday) -> None:\n            if now.weekday() != expected_weekday:\n                return\n            await entry.runtime_data.async_check_draw_result()\n\n        entry.async_on_unload(\n            async_track_utc_time_change(\n                hass, _scheduled_result_check, hour=hour, minute=minute, second=0\n            )\n        )\n\n'''
+          if anchor not in s: raise SystemExit('missing setup anchor')
+          p.write_text(s.replace(anchor,insertion,1))
+
+          p=Path('custom_components/lotto_645/coordinator.py'); s=p.read_text()
+          s=s.replace('''    async def _async_update_data(self) -> Lotto645Data:\n        \"\"\"Refresh data; newer draw adoption is explicitly user-triggered.\"\"\"''', '''    async def _async_update_data(self) -> Lotto645Data:\n        \"\"\"Refresh data and atomically evaluate a newly completed draw.\"\"\"''')
+          hold='''                if (\n                    self.history\n                    and mirror_latest > cached_latest\n                    and not manual_result_refresh\n                ):\n                    # A newer weekly result may exist remotely, but the user asked\n                    # that draw/result sensors remain unchanged until the refresh\n                    # button is explicitly pressed.  Keep the current coordinator\n                    # payload completely stable.\n                    source_status = (\n                        self.data.source_status if self.data is not None else self._startup_source\n                    )\n                    _LOGGER.debug(\n                        \"새 회차 %s는 수동 새로고침 전까지 보류합니다 (현재 %s회)\",\n                        mirror_latest,\n                        cached_latest,\n                    )\n                elif not self.history or mirror_latest >= cached_latest:\n'''
+          if hold not in s: raise SystemExit('manual-only mirror hold anchor missing')
+          s=s.replace(hold, '                if not self.history or mirror_latest >= cached_latest:\n',1)
+          s=s.replace('''        if self.history[-1].round != old_latest_round:\n            if manual_result_refresh:\n                self._evaluate_prediction_snapshot()\n''','''        if self.history[-1].round != old_latest_round:\n            # Evaluate the pre-draw snapshot before next-round recommendations replace it.\n            # Applies to scheduled, normal coordinator and manual refresh paths.\n            self._evaluate_prediction_snapshot()\n''',1)
+          ai_anchor='''    def _ai_structure(self) -> vol.Schema:\n'''
+          method='''    async def async_check_draw_result(self) -> None:\n        \"\"\"Force a mirror recheck without regenerating current recommendation numbers.\"\"\"\n        async with self._manual_lock:\n            if self.data is not None:\n                self._set_prediction_snapshot(\n                    self.data.analysis,\n                    self.data.ai_recommendation,\n                    self.data.ai_generated_at,\n                )\n            self._manual_result_refresh_requested = True\n            await self.async_request_refresh()\n\n'''
+          if ai_anchor not in s: raise SystemExit('AI anchor missing')
+          if 'async def async_check_draw_result' not in s:
+              s=s.replace(ai_anchor,method+ai_anchor,1)
+          p.write_text(s)
+
+          p=Path('custom_components/lotto_645/sensor.py'); s=p.read_text()
+          s=s.replace('''    @property\n    def native_value(self) -> int:\n        return self.coordinator.data.analysis.target_round\n''','''    @property\n    def native_value(self) -> str:\n        data = self.coordinator.data\n        game_count = len(data.analysis.recommendations) + (1 if data.ai_recommendation else 0)\n        return f\"{data.analysis.target_round}회 추천 · {game_count}게임\"\n''',1)
+          s=s.replace('''    _unrecorded_attributes = frozenset({\"results\", \"winners\", \"losers\"})\n    _attr_name = \"당첨 여부\"\n    _attr_icon = \"mdi:ticket-percent-outline\"\n''','''    _unrecorded_attributes = frozenset({\"results\", \"winners\", \"losers\"})\n    _attr_has_entity_name = False\n    _attr_icon = \"mdi:ticket-percent-outline\"\n\n    @property\n    def name(self) -> str:\n        evaluation = self.coordinator.winning_summary\n        return f\"{evaluation['round']}회 당첨 여부\" if evaluation else \"당첨 여부\"\n''',1)
+          s=s.replace('새 추첨 결과는 즉시 새로고침 · 번호 재생성으로 가져옵니다. 구매번호 자체는 재생성하지 않습니다.', '새 추첨 결과는 공유 미러 발표 후 자동 확인 일정, 일반 주기 또는 즉시 새로고침으로 가져옵니다. 구매번호 자체는 재생성하지 않습니다.')
+          s=s.replace('update_behavior\": \"수동 새로고침에서 새 추첨 결과를 실제로 받은 경우에만', 'update_behavior\": \"새 회차가 공유 미러에 반영되면 자동 확인 일정 또는 일반 주기/수동 새로고침에서')
+          p.write_text(s)
+
+          # Keep docs explicit about the two round-aware result sensors, summary sensor,
+          # and up to five self-reported purchased games.
+          p=Path('README.md'); s=p.read_text().rstrip()+"\n"
+          section='''\n### 추첨번호·당첨판정·직접 구매번호\n\n- 추첨번호 센서의 표시명은 항상 **`n회 추첨번호`** 형식입니다(예: `1241회 추첨번호`). 상태에는 본번호 6개, 속성에는 `round`, 보너스번호·추첨일·1등 정보가 표시됩니다. unique_id는 고정이라 회차가 바뀌어도 동일 엔티티로 갱신됩니다.\n- **`n회 당첨 여부`** 센서는 그 회차 발표 전에 저장돼 있던 선택 추천/AI 추천과 해당 회차의 직접 구매번호 A~E를 각각 1~5등/미당첨으로 판정합니다. 추천과 직접 구매는 별도 집계하며 어떤 센서/구매게임이 몇 개 맞았는지 표시합니다.\n- `추천 요약`은 점수 센서가 아니라 **다음 추천 대상 회차와 선택 방식들의 번호·근거를 묶은 인덱스 센서**입니다. 상태는 `n회 추천 · m게임`입니다.\n- `구성 → 직접 구매번호 입력·수정`에서 회차를 선택하고 번호 6개씩 최대 5게임(A~E)을 저장할 수 있습니다. 구매번호는 HA 로컬에만 저장되고 추천 점수·AI·공유 미러에는 사용되지 않습니다.\n- 중앙 공유 미러 발표 뒤 KST 20:55, 21:20, 21:50, 22:30, 23:00 및 일요일 09:40에 결과를 자동 확인합니다. 평상시 coordinator 주기와 수동 새로고침도 유지합니다. 동행복권 직접 접근은 기존처럼 기본 OFF입니다.\n'''
+          if '### 추첨번호·당첨판정·직접 구매번호' in s:
+              s=s[:s.index('### 추첨번호·당첨판정·직접 구매번호')].rstrip()+"\n"+section
+          else:
+              s+=section
+          p.write_text(s)
+
+          p=Path('CHANGELOG.md'); s=p.read_text()
+          marker='## 1.9.0\n'
+          addition='''## 1.9.0\n\n- `n회 추첨번호`·`n회 당첨 여부` 센서 및 회차별 추천 스냅샷 판정.\n- 직접 구매번호 A~E 최대 5게임을 회차별 HA 로컬 저장하고 동일 등수 규칙으로 판정.\n- 토요일 공유 미러 발표 일정 직후 자동 결과 확인. 일반 주기·수동 확인도 유지.\n- `추천 요약` 상태를 `n회 추천 · m게임`으로 명확화.\n'''
+          if marker not in s: raise SystemExit('1.9 changelog marker missing')
+          # Collapse any previous partial v1.9 block into one current block.
+          next_marker=s.find('\n## ',s.index(marker)+len(marker))
+          rest=s[next_marker:] if next_marker >= 0 else '\n'
+          s=s[:s.index(marker)]+addition+rest
+          p.write_text(s)
+
+          p=Path('scripts/smoke_ha_options.py'); s=p.read_text()
+          s=s.replace('assert summary_sensor.native_value==31', "assert summary_sensor.native_value=='31회 추천 · 1게임'")
+          s=s.replace("win_sensor=sensor_module.LottoWinningStatusSensor(obj)\n        assert win_sensor.native_value=='2개 당첨 · 최고 1등'", "win_sensor=sensor_module.LottoWinningStatusSensor(obj)\n        assert win_sensor.name=='30회 당첨 여부'\n        assert win_sensor.native_value=='2개 당첨 · 최고 1등'")
+          needle="        assert obj.winning_summary['pending_purchased_rounds']==[31]\n"
+          if needle in s and 'await obj.async_check_draw_result()' not in s:
+              s=s.replace(needle, needle+'''        before_nonce=obj._local_generation_nonce\n        before_ai=obj._cached_ai_recommendation\n        calls=obj.async_request_refresh.await_count\n        await obj.async_check_draw_result()\n        assert obj._local_generation_nonce==before_nonce\n        assert obj._cached_ai_recommendation is before_ai\n        assert obj._manual_result_refresh_requested is True\n        assert obj.async_request_refresh.await_count==calls+1\n''')
+          # Static schedule contract: follows the six centralized mirror jobs by 10min.\n          if "_RESULT_CHECKS_UTC" not in s:
+              s=s.replace("flow_module=importlib.import_module('custom_components.lotto_645.config_flow')", "flow_module=importlib.import_module('custom_components.lotto_645.config_flow')\ninit_module=importlib.import_module('custom_components.lotto_645')")
+              s=s.replace("async def main():", "async def main():\n    assert init_module._RESULT_CHECKS_UTC == ((5,11,55),(5,12,20),(5,12,50),(5,13,30),(5,14,0),(6,0,40))")
+          p.write_text(s)
+          PY
+          python -m compileall -q custom_components/lotto_645 scripts tests
+          git diff --check
+      - name: Run focused pure Python result tests
+        run: |
+          python -m pip install pytest lunar_python==1.4.8 korean-lunar-calendar==0.4.0 voluptuous
+          python -m pytest -q tests/test_purchased_tickets.py tests/test_result_evaluator.py
+      - name: Commit feature and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/apply-v190-auto-results.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: add purchased tickets and automatic round results'
+          git push
