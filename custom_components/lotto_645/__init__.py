@@ -9,6 +9,7 @@ from homeassistant.const import ATTR_ENTITY_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.event import async_track_utc_time_change
+from .ticket_panel import async_register_ticket_panel, async_remove_ticket_panel
 
 from .const import DOMAIN, SERVICE_GENERATE_AI, SERVICE_REFRESH
 from .coordinator import Lotto645Coordinator
@@ -36,6 +37,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    await async_register_ticket_panel(hass, entry)
+
+    async def _publication_tick(now) -> None:
+        await coordinator.async_poll_published_results()
+
+    entry.async_on_unload(async_track_utc_time_change(hass, _publication_tick, second=15))
 
     for weekday, hour, minute in _RESULT_CHECKS_UTC:
         async def _scheduled_result_check(now, expected_weekday=weekday) -> None:
@@ -77,6 +85,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        async_remove_ticket_panel(hass, entry.entry_id)
         if hass.services.has_service(DOMAIN, SERVICE_REFRESH):
             hass.services.async_remove(DOMAIN, SERVICE_REFRESH)
         if hass.services.has_service(DOMAIN, SERVICE_GENERATE_AI):

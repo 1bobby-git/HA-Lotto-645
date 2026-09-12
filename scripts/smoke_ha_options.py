@@ -205,6 +205,34 @@ async def main():
         obj.purchase_storage_error=False
         await obj.async_save_purchase_record(31, {}, clear=True)
         assert '30' in obj.purchase_book.records and '31' not in obj.purchase_book.records
+        # New panel backend: real HA decorators with an admin-authenticated mock
+        # connection. Parsing a QR is a preview only, not a purchase write.
+        import inspect
+        from unittest.mock import patch
+        panel_module=importlib.import_module('custom_components.lotto_645.ticket_panel')
+        from homeassistant.exceptions import Unauthorized
+        unauthorized=types.SimpleNamespace(user=types.SimpleNamespace(is_admin=False))
+        try:
+            panel_module.qr_preview(hass,unauthorized,{'id':50,'entry_id':'purchase-smoke','qr':'ignored'})
+        except Unauthorized:
+            pass
+        else:
+            raise AssertionError('QR endpoint permitted non-admin')
+        connection=types.SimpleNamespace(user=types.SimpleNamespace(is_admin=True),send_result=Mock(),send_error=Mock())
+        original=obj.purchase_book.to_storage()
+        with patch.object(hass.config_entries,'async_get_entry',return_value=obj.entry):
+            await inspect.unwrap(panel_module.qr_preview)(hass,connection,{'id':51,'entry_id':'purchase-smoke',
+                'qr':'https://m.dhlottery.co.kr/qr.do?method=winQr&v=0031q0102030405060000000000'})
+            preview=connection.send_result.call_args.args[1]
+            assert preview['round']==31 and preview['values']['game_a']=='1, 2, 3, 4, 5, 6'
+            assert obj.purchase_book.to_storage()==original
+            await inspect.unwrap(panel_module.purchases_save)(hass,connection,{'id':52,'entry_id':'purchase-smoke',
+                'round':31,'revision':'','clear':False,'values':preview['values']})
+            assert '31' in obj.purchase_book.records
+            await inspect.unwrap(panel_module.purchases_save)(hass,connection,{'id':53,'entry_id':'purchase-smoke',
+                'round':31,'revision':'','clear':False,'values':{'game_a':'10 11 12 13 14 15'}})
+            assert connection.send_error.call_args.args[1]=='purchase_revision_conflict'
+            assert obj.purchase_book.records['31']['games'][0]['numbers']==[1,2,3,4,5,6]
         await hass.async_stop(force=True)
     print('PASS: real HA options menu/forms/JSON serialization/profile save/compact normalization/gating; coordinator manual/AI contracts; purchased five-line round storage, restore, atomic save and draw-name checks')
 

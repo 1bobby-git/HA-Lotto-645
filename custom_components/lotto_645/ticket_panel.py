@@ -1,0 +1,135 @@
+"""Admin-authenticated purchase panel. QR image decoding stays in the browser."""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import voluptuous as vol
+from homeassistant.components import frontend, panel_custom, websocket_api
+from homeassistant.components.http import StaticPathConfig
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+
+from .const import DOMAIN, VERSION
+from .purchased_tickets import PurchaseInputError, parse_round
+from .ticket_qr import parse_ticket_qr
+
+KEY = DOMAIN + '_panel'
+PATH = 'lotto-645'
+WWW = Path(__file__).parent / 'www'
+
+
+def _coordinator(hass: HomeAssistant, message: dict) -> Any:
+    entry = hass.config_entries.async_get_entry(message['entry_id'])
+    if entry is None or entry.domain != DOMAIN or not getattr(entry, 'runtime_data', None):
+        raise HomeAssistantError('통합을 사용할 수 없습니다')
+    return entry.runtime_data
+
+
+def _view(coordinator: Any, round_no: int | None = None) -> dict:
+    draw = coordinator.result_draw
+    book = coordinator.purchase_book
+    round_no = round_no or book.selected_round or (coordinator.data.analysis.target_round if coordinator.data else None)
+    record = book.records.get(str(round_no), {})
+    metadata = coordinator.result_metadata
+    return {'round': round_no, 'revision': record.get('saved_at', ''),
+            'values': book.form_values(round_no) if round_no else {},
+            'stored_rounds': sorted(map(int, book.records), reverse=True),
+            'purchased': book.report(coordinator.result_history, round_no),
+            'draw': draw.to_storage() if draw and metadata['status'] != 'conflict' else None,
+            'result_round': coordinator.result_round,
+            'result_verification': metadata, 'winning': coordinator.winning_summary,
+            'storage_error': coordinator.purchase_storage_error,
+            'recommendation_target': coordinator.data.analysis.target_round if coordinator.data else None}
+
+
+@websocket_api.websocket_command({'type': 'lotto_645/purchases_get', vol.Required('entry_id'): str,
+                                 vol.Optional('round'): vol.All(int, vol.Range(min=1, max=999999))})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def purchases_get(hass, connection, msg):
+    try:
+        result = _view(_coordinator(hass, msg), msg.get('round'))
+    except (ValueError, HomeAssistantError):
+        connection.send_error(msg['id'], 'unavailable', '로또 통합 또는 회차를 확인하세요')
+    else:
+        connection.send_result(msg['id'], result)
+
+
+@websocket_api.websocket_command({'type': 'lotto_645/qr_preview', vol.Required('entry_id'): str,
+                                 vol.Required('qr'): vol.All(str, vol.Length(min=1, max=2048))})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def qr_preview(hass, connection, msg):
+    try:
+        coordinator = _coordinator(hass, msg)
+        preview = parse_ticket_qr(msg['qr'])
+        # Do not retain/log raw QR, receipt identifier, or an image.
+        preview['revision'] = coordinator.purchase_book.records.get(str(preview['round']), {}).get('saved_at', '')
+        preview['will_replace'] = bool(preview['revision'])
+    except (PurchaseInputError, ValueError, HomeAssistantError):
+        connection.send_error(msg['id'], 'invalid_ticket_qr', '지원하는 로또 6/45 QR 주소가 아닙니다. A~E 번호를 직접 입력할 수 있습니다.')
+    else:
+        connection.send_result(msg['id'], preview)
+
+
+@websocket_api.websocket_command({'type': 'lotto_645/purchases_save', vol.Required('entry_id'): str,
+                                 vol.Required('round'): vol.All(int, vol.Range(min=1, max=999999)),
+                                 vol.Required('revision'): vol.All(str, vol.Length(max=100)),
+                                 vol.Required('values'): {vol.Optional(f'game_{s}'): vol.All(str, vol.Length(max=150)) for s in 'abcde'},
+                                 vol.Optional('clear', default=False): bool})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def purchases_save(hass, connection, msg):
+    try:
+        coordinator = _coordinator(hass, msg)
+        await coordinator.async_save_purchase_record(parse_round(msg['round']), msg['values'],
+                                                      clear=msg['clear'], expected_revision=msg['revision'])
+        result = _view(coordinator, msg['round'])
+    except PurchaseInputError as err:
+        connection.send_error(msg['id'], err.code, f'{err.field}: 1~45의 중복 없는 번호 6개를 입력하세요')
+    except (HomeAssistantError, OSError) as err:
+        code = 'purchase_revision_conflict' if str(err) == 'purchase_revision_conflict' else 'save_failed'
+        text = '다른 화면에서 변경되었습니다. 해당 회차를 다시 불러온 후 저장하세요.' if code == 'purchase_revision_conflict' else '저장하지 못했습니다. 기존 번호는 유지됩니다.'
+        connection.send_error(msg['id'], code, text)
+    else:
+        connection.send_result(msg['id'], result)
+
+
+@websocket_api.websocket_command({'type': 'lotto_645/result_check', vol.Required('entry_id'): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def result_check(hass, connection, msg):
+    try:
+        coordinator = _coordinator(hass, msg)
+        await coordinator.async_poll_published_results(force=True)
+        result = _view(coordinator)
+    except (HomeAssistantError, ValueError, OSError):
+        connection.send_error(msg['id'], 'check_failed', '아직 새 결과를 확인하지 못했습니다. 기존 저장번호는 유지됩니다.')
+    else:
+        connection.send_result(msg['id'], result)
+
+
+async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
+    shared = hass.data.setdefault(KEY, {'entries': {}, 'registered': False})
+    shared['entries'][entry.entry_id] = entry.title
+    if not shared['registered']:
+        await hass.http.async_register_static_paths([StaticPathConfig('/lotto_645_static', str(WWW), False)])
+        for handler in (purchases_get, qr_preview, purchases_save, result_check):
+            websocket_api.async_register_command(hass, handler)
+        shared['registered'] = True
+    frontend.async_remove_panel(hass, PATH)
+    await panel_custom.async_register_panel(
+        hass, webcomponent_name='lotto-ticket-panel', frontend_url_path=PATH,
+        sidebar_title='로또 복권', sidebar_icon='mdi:ticket-confirmation',
+        module_url=f'/lotto_645_static/lotto-panel.js?v={VERSION}',
+        require_admin=True, config={'entries': shared['entries'], 'version': VERSION},
+    )
+
+
+def async_remove_ticket_panel(hass: HomeAssistant, entry_id: str) -> None:
+    shared = hass.data.get(KEY)
+    if shared:
+        shared['entries'].pop(entry_id, None)
+        if not shared['entries']:
+            frontend.async_remove_panel(hass, PATH)

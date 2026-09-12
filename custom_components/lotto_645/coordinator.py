@@ -45,6 +45,7 @@ from .methods import DEFAULT_METHOD_IDS, METHOD_MYUNGRI_HETU, normalize_method_i
 from .models import AnalysisResult, Lotto645Data, LottoDraw, Recommendation
 from .myungri import extract_saju_profile, has_complete_saju_profile
 from .result_evaluator import evaluate_recommendations
+from .fast_result_state import FastResultState
 from .purchased_tickets import PurchaseBook, combined_result
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ class AiRecommendationError(HomeAssistantError):
     """Raised when an AI Task result cannot be accepted safely."""
 
 
-class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
+class Lotto645Coordinator(FastResultState, DataUpdateCoordinator[Lotto645Data]):
     """Coordinate safe history updates, local regeneration, Saju and optional AI Tasks."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -162,26 +163,18 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         """Return the latest persisted recommendation-vs-draw evaluation."""
         return self._draw_evaluation
 
-    @property
-    def winning_summary(self) -> dict[str, Any] | None:
-        """Completed draw results; never mix current recommendations with old draws."""
-        if self.data is None:
-            return None
-        draw = self.data.latest_draw
-        result = combined_result(draw, self._draw_evaluation, self.purchase_book.report(self.history, draw.round))
-        result["purchase_storage_error"] = self.purchase_storage_error
-        result["pending_purchased_rounds"] = sorted(
-            int(key) for key in self.purchase_book.records if int(key) > draw.round
-        )
-        return result
-
     async def async_save_purchase_record(
-        self, round_no: int, values: dict[str, Any], *, clear: bool = False
+        self, round_no: int, values: dict[str, Any], *, clear: bool = False,
+        expected_revision: str | None = None
     ) -> None:
         """Save all five lines atomically without network, AI or regeneration."""
         if self.purchase_storage_error:
             raise HomeAssistantError("purchase_storage_unavailable")
         async with self._purchase_lock:
+            if expected_revision is not None:
+                current = self.purchase_book.records.get(str(round_no), {}).get("saved_at", "")
+                if current != expected_revision:
+                    raise HomeAssistantError("purchase_revision_conflict")
             updated = self.purchase_book.updated(round_no, values, clear=clear)
             await self._purchase_store.async_save(updated.to_storage())
             # Do not replace the in-memory copy before a successful durable write.
@@ -201,6 +194,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         )
         payload = await self._store.async_load()
         if payload:
+            try:
+                self._restore_fast_state(payload)
+            except (ValueError, TypeError, KeyError):
+                # A damaged provisional overlay must not discard valid history.
+                self._fast_result = None
+                self._frozen_result_snapshot = None
             try:
                 prediction_snapshot = payload.get("prediction_snapshot")
                 if isinstance(prediction_snapshot, dict):
@@ -261,6 +260,8 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
     async def _save_storage(self) -> None:
         await self._store.async_save(
             {
+                "fast_result": getattr(self, "_fast_result", None),
+                "frozen_result_snapshot": getattr(self, "_frozen_result_snapshot", None),
                 "latest_round": self.history[-1].round if self.history else 0,
                 "draws": [draw.to_storage() for draw in self.history],
                 "local_generation_sequence": self._local_generation_nonce,
@@ -328,6 +329,11 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         ai_recommendation: Recommendation | None,
         ai_generated_at: datetime | None,
     ) -> None:
+        # Do not replace the result's pre-publication snapshot with numbers
+        # generated after that draw was reported while official history lags.
+        state = getattr(self, "_fast_result", None) or {}
+        if analysis.target_round <= state.get("round", 0):
+            return
         snapshot = self._build_prediction_snapshot(
             analysis, ai_recommendation, ai_generated_at
         )
@@ -345,10 +351,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             return
         if target_round <= 0:
             return
-        if self._draw_evaluation and self._draw_evaluation.get("round") == target_round:
-            return
         draw = next((item for item in self.history if item.round == target_round), None)
         if draw is None:
+            return
+        if (self._draw_evaluation and self._draw_evaluation.get("round") == target_round
+                and self._draw_evaluation.get("winning_numbers") == list(draw.numbers)
+                and self._draw_evaluation.get("bonus_number") == draw.bonus):
             return
         try:
             recommendations = tuple(
