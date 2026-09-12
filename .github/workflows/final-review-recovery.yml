@@ -1,0 +1,68 @@
+name: Final Review Recovery
+on:
+  push:
+    branches: [feat/v1.10.0-fast-results-qr]
+    paths: [.github/workflows/final-review-recovery.yml]
+permissions:
+  contents: write
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v1.10.0-fast-results-qr
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install inspection dependencies
+        run: python -m pip install -q Pillow
+      - name: Fix bootstrap and inspect historical artwork by exact hash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess, hashlib, json, io
+          from PIL import Image
+          p=Path('scripts/smoke_ha_options.py')
+          s=p.read_text()
+          old='        from homeassistant.helpers import entity_registry as er\n        await er.async_get(hass).async_load()\n'
+          new='        from homeassistant.helpers import device_registry as dr, entity_registry as er\n        dr.async_setup(hass)\n        await dr.async_load(hass)\n        await er.async_get(hass).async_load()\n'
+          assert s.count(old)==1
+          p.write_text(s.replace(old,new))
+          out=Path('/tmp/final-review');out.mkdir()
+          rows=subprocess.check_output(['git','cat-file','--batch-all-objects','--batch-check=%(objectname) %(objecttype) %(objectsize)'],text=True).splitlines()
+          matches=[];images=[]
+          wanted='88f442d0d73cb9c4b378059297dfa1b8d3f334fb5e2dc9599404e5eee042ed3d'
+          pixels='49c50d32ada65824bebca839b2f50fc76bcf509d5ffabe432032f913b7a15c5d'
+          for row in rows:
+              sha,kind,size=row.split()
+              if kind!='blob' or not 25000<=int(size)<=2000000:continue
+              b=subprocess.check_output(['git','cat-file','blob',sha])
+              if not b.startswith(b'\x89PNG\r\n\x1a\n'):continue
+              try:
+                  im=Image.open(io.BytesIO(b)).convert('RGBA')
+                  record={'sha':sha,'size':len(b),'dimensions':im.size,'file_sha256':hashlib.sha256(b).hexdigest(),'rgba_sha256':hashlib.sha256(im.tobytes()).hexdigest()}
+                  images.append(record)
+                  if record['file_sha256']==wanted or (im.size==(2048,682) and record['rgba_sha256']==pixels):
+                      matches.append(record)
+                      (out/f'original-{sha}.png').write_bytes(b)
+              except (OSError,ValueError):pass
+          (out/'artwork-search.json').write_text(json.dumps({'exact_matches':matches,'image_candidates':images},indent=2))
+          Path('.github/workflows/final-review-recovery.yml').unlink()
+          PY
+          python -m compileall -q custom_components/lotto_645 scripts
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/smoke_ha_options.py .github/workflows/final-review-recovery.yml
+          git commit -m 'test: bootstrap device registry before entity registry in HA smoke'
+          git push origin HEAD:feat/v1.10.0-fast-results-qr
+          git archive --format=zip HEAD > /tmp/final-review/source.zip
+          git rev-parse HEAD > /tmp/final-review/source-commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-review-source
+          path: /tmp/final-review/
+          retention-days: 1
