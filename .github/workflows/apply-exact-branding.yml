@@ -16,12 +16,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Restore exact user-supplied horizontal PNG
+      - name: Restore user-supplied horizontal artwork
         shell: bash
         run: |
-          cat .brand-upload/logo.b64.* | base64 --decode > images/logo-horizontal.png
-          echo '0fe12c375a418c2bb51d5729526c4c65da70f82f5afecb4ae9ab8f60fe1b2a37  images/logo-horizontal.png' | sha256sum --check --strict
-      - name: Crop only the left icon and apply HA brand variants
+          cat .brand-upload/logo768.b64.* | base64 --decode > images/logo-horizontal.png
+          echo 'fc220ddd9a82111dc3a620562090e884f1ee9e697421a3257db734bf206b688a  images/logo-horizontal.png' | sha256sum --check --strict
+      - name: Crop only the left icon and apply actual HA brand files
         run: |
           python -m pip install --disable-pip-version-check 'Pillow>=10,<12'
           python scripts/render_brand.py
@@ -39,7 +39,7 @@ jobs:
           const.write_text(const.read_text().replace('VERSION = "1.9.0"', 'VERSION = "1.9.1"'))
           changelog = Path('CHANGELOG.md')
           text = changelog.read_text()
-          entry = '''\n## 1.9.1\n\n- 사용자가 첨부한 2048×682 가로 PNG를 재그리기·색상변환 없이 그대로 `images/logo-horizontal.png`로 적용.\n- 정사각 아이콘은 동일 원본의 좌측 복주머니+6/45 영역만 정확히 크롭하고 투명 정사각 캔버스에 중앙 정렬.\n- Home Assistant 실제 `brand/logo.png`와 `brand/icon.png`는 해당 두 자산의 규격 맞춤 리사이즈만 사용.\n- 브랜드 검증에서 원본 SHA-256과 2048×682 크기, 정사각 크롭 550×550을 확인.\n\n'''
+          entry = '''\n## 1.9.1\n\n- 사용자가 첨부한 가로 로고를 재그리기·색상변환·팔레트 양자화 없이 원본 비율 그대로 해상도만 768×256으로 규격화하여 적용.\n- 정사각 아이콘은 동일 가로 로고의 좌측 복주머니+6/45 영역만 크롭하여 256×256으로 적용.\n- `images/logo-horizontal.png`와 실제 HA `brand/logo.png`, `images/icon-square.png`와 실제 HA `brand/icon.png`를 각각 동일 바이트로 통일.\n- 브랜드 검증에서 가로 로고 SHA-256/크기와 좌측 크롭 크기를 확인해 다른 이미지로 회귀하지 않도록 고정.\n\n'''
           if '## 1.9.1' not in text:
               changelog.write_text(text.replace('# Changelog\n', '# Changelog\n' + entry, 1))
           PY
@@ -50,5 +50,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add images/logo-horizontal.png images/icon-square.png custom_components/lotto_645/brand/logo.png custom_components/lotto_645/brand/icon.png scripts/render_brand.py custom_components/lotto_645/manifest.json custom_components/lotto_645/const.py CHANGELOG.md
-          git commit -m 'fix: apply exact user-supplied Lotto branding (v1.9.1)'
+          git commit -m 'fix: apply user-supplied Lotto branding (v1.9.1)'
           git push origin HEAD:fix/v1.9.1-exact-branding-final
