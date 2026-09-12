@@ -47,6 +47,7 @@ async def async_setup_entry(
 class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
     """Summary sensor for all selected games."""
 
+    _unrecorded_attributes = frozenset({"games", "analysis_summary"})
     _attr_name = "추천 요약"
     _attr_icon = "mdi:ticket-confirmation-outline"
 
@@ -100,6 +101,7 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
 class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
     """Expose detailed explanations for every selectable recommendation method."""
 
+    _unrecorded_attributes = frozenset({"methods"})
     _attr_name = "추천 방식 안내"
     _attr_icon = "mdi:book-open-variant"
 
@@ -143,6 +145,7 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
 class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
     """Show whether personal Saju is configured and expose derived natal context."""
 
+    _unrecorded_attributes = frozenset({"*"})
     _attr_name = "명리 사주 프로필"
     _attr_icon = "mdi:yin-yang"
 
@@ -165,20 +168,22 @@ class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
             "status": self.coordinator.saju_profile_status,
             "required_before_use": True,
             "required_fields": ["양력/음력", "생년월일", "출생시간", "성별", "출생지", "시간대"],
-            "where_to_enter": "설정 > 기기 및 서비스 > Lotto 6/45 Analysis > 구성 화면의 [명리] 입력 항목",
+            "where_to_enter": "설정 > 기기 및 서비스 > Lotto 6/45 Analysis > 구성 > 명리 사주정보 입력·수정",
             "privacy": "입력값은 Home Assistant 구성에 로컬 저장되며 로또 미러와 HA AI 추천 프롬프트에 원본 생년월일·출생시간·출생지를 보내지 않습니다.",
         }
         data = self.coordinator.data
         if data is None:
-            base["message"] = "통합 구성 화면에서 [명리] 개인 사주정보를 입력하세요."
+            base["message"] = "구성 > 명리 사주정보 입력·수정에서 프로필을 저장하세요."
             return base
         recommendation = data.analysis.recommendation_by_method(METHOD_MYUNGRI_HETU)
         if recommendation is None:
-            base["message"] = "통합 구성 화면의 [명리] 입력 항목을 완료하면 명리 권장 추천이 활성화됩니다."
+            base["message"] = "통합 구성 > 명리 사주정보 입력·수정을 완료하면 명리 권장 추천이 활성화됩니다."
             return base
         details = recommendation.details
         for key in (
-            "birth_profile", "four_pillars", "pillar_details", "day_master",
+            "structural_analysis", "favorable_analysis", "luck_layers", "calendar_rules",
+            "shensha", "rule_version", "rule_sources", "calculation_warnings",
+            "four_pillars", "pillar_details", "day_master",
             "day_master_element", "day_master_strength", "support_ratio",
             "five_element_balance", "ten_god_element_roles", "favorable_elements",
             "avoid_elements", "current_daewoon", "target_draw_date",
@@ -193,6 +198,13 @@ class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
 class LottoGameSensor(Lotto645Entity, SensorEntity):
     """Recommendation produced by one selected method."""
 
+    # Keep current explanations accessible, but do not duplicate a large natal
+    # profile and luck timeline in Recorder on every recommendation refresh.
+    _unrecorded_attributes = frozenset({
+        "pillar_details", "current_daewoon", "target_interactions", "structural_analysis",
+        "favorable_analysis", "luck_layers", "number_score_trace", "rule_sources",
+        "calculation_warnings", "calendar_rules", "shensha", "target_draw_four_pillars",
+    })
     _attr_icon = "mdi:numeric"
 
     def __init__(self, coordinator: Lotto645Coordinator, method_id: str) -> None:

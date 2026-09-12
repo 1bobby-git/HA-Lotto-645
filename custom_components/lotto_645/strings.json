@@ -44,29 +44,31 @@
         "data": {
           "saju_calendar": "Birth calendar",
           "saju_birth_date": "Birth date (YYYY-MM-DD)",
-          "saju_birth_time": "Birth time (HH:MM)",
+          "saju_birth_time": "Birth time (HH:MM or unknown)",
           "saju_gender": "Gender (luck-cycle direction)",
           "saju_birth_place": "Birth place",
           "saju_timezone": "Birth timezone (IANA)",
           "saju_lunar_leap_month": "Lunar leap month",
           "saju_true_solar_time": "Use true solar time correction",
-          "saju_longitude": "Birth longitude (optional)"
+          "saju_longitude": "Birth longitude (optional)",
+          "saju_lunar_standard": "Lunar calendar standard"
         },
         "data_description": {
           "saju_birth_date": "Example: 1982-03-15",
-          "saju_birth_time": "Example: 14:30. Use the actual birth time when available.",
+          "saju_birth_time": "Use the recorded local birth time. Explicit unknown omits the hour pillar; boundary cases still require a known time.",
           "saju_birth_place": "Example: Seoul, South Korea. No external geocoding request is made.",
           "saju_timezone": "For births in Korea, Asia/Seoul is normally used.",
           "saju_lunar_leap_month": "Used only for lunar-calendar birth dates.",
           "saju_true_solar_time": "When enabled, the hour pillar time is corrected using timezone meridian, longitude and equation of time.",
-          "saju_longitude": "Only needed when true solar time correction is enabled."
+          "saju_longitude": "Only needed when true solar time correction is enabled.",
+          "saju_lunar_standard": "Korean and Chinese lunar dates can differ. Existing lunar profiles retain Chinese conversion until you select a different standard."
         }
       }
     },
     "error": {
       "select_at_least_one": "Select at least one recommendation method.",
       "saju_profile_required": "Save the Personal Four Pillars profile from the previous menu before enabling this recommendation method.",
-      "invalid_saju_profile": "The Four Pillars profile is missing or invalid. Check all required birth fields.",
+      "invalid_saju_profile": "Check birth date, time, lunar standard/leap month, timezone and longitude. Solar-term or DST boundary ambiguity requires a known time.",
       "options_error": "An error occurred while processing the options. Check the entered values and try again."
     }
   }

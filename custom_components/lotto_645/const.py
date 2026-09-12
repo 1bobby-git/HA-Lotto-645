@@ -4,7 +4,7 @@ from datetime import timedelta
 
 DOMAIN = "lotto_645"
 NAME = "Lotto 6/45 Analysis"
-VERSION = "1.5.5"
+VERSION = "1.6.0"
 
 PLATFORMS = ["sensor", "button"]
 UPDATE_INTERVAL = timedelta(hours=6)
@@ -23,6 +23,7 @@ CONF_ALLOW_OFFICIAL_FALLBACK = "allow_official_direct_fallback"
 # Personal Four Pillars / Saju profile. These values stay inside the user's
 # Home Assistant config entry and are never sent to the lottery mirror.
 CONF_SAJU_CALENDAR = "saju_calendar"
+CONF_SAJU_LUNAR_STANDARD = "saju_lunar_standard"
 CONF_SAJU_BIRTH_DATE = "saju_birth_date"
 CONF_SAJU_BIRTH_TIME = "saju_birth_time"
 CONF_SAJU_LUNAR_LEAP_MONTH = "saju_lunar_leap_month"
@@ -34,6 +35,7 @@ CONF_SAJU_LONGITUDE = "saju_longitude"
 
 SAJU_PROFILE_KEYS = (
     CONF_SAJU_CALENDAR,
+    CONF_SAJU_LUNAR_STANDARD,
     CONF_SAJU_BIRTH_DATE,
     CONF_SAJU_BIRTH_TIME,
     CONF_SAJU_GENDER,

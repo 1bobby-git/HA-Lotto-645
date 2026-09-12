@@ -44,29 +44,31 @@
         "data": {
           "saju_calendar": "출생일 기준 (양력/음력)",
           "saju_birth_date": "생년월일 (YYYY-MM-DD)",
-          "saju_birth_time": "출생시간 (HH:MM)",
+          "saju_birth_time": "출생시간 (HH:MM 또는 미상)",
           "saju_gender": "성별 (대운 순·역행 계산용)",
           "saju_birth_place": "출생지",
           "saju_timezone": "출생지 시간대 (IANA)",
           "saju_lunar_leap_month": "음력 윤달",
           "saju_true_solar_time": "진태양시 보정 사용",
-          "saju_longitude": "출생지 경도 (선택 사항)"
+          "saju_longitude": "출생지 경도 (선택 사항)",
+          "saju_lunar_standard": "음력 기준"
         },
         "data_description": {
           "saju_birth_date": "예: 1982-03-15",
-          "saju_birth_time": "예: 14:30. 가능한 실제 출생시각을 입력하세요.",
+          "saju_birth_time": "예: 14:30. 모르면 미상으로 입력하면 시주를 제외합니다. 절입일 경계는 정확한 시각이 필요하고, 대운 시작이 불확실하면 대운 점수는 제외합니다.",
           "saju_birth_place": "예: Seoul, South Korea. 외부 지오코딩은 호출하지 않습니다.",
           "saju_timezone": "한국 출생이면 일반적으로 Asia/Seoul을 사용합니다.",
           "saju_lunar_leap_month": "음력 출생일 때만 사용합니다. 양력이면 자동으로 무시됩니다.",
           "saju_true_solar_time": "선택 시 표준시 자오선과 출생지 경도, 균시차를 이용해 시주용 시각을 보정합니다.",
-          "saju_longitude": "진태양시 보정을 켰을 때만 필요합니다. 예: 서울 약 126.9780."
+          "saju_longitude": "진태양시 보정을 켰을 때만 필요합니다. 예: 서울 약 126.9780.",
+          "saju_lunar_standard": "한국/중국 음력은 일부 날짜가 다릅니다. 기존 음력 프로필은 중국 기준을 유지하므로 출생기록 기준을 직접 확인하세요."
         }
       }
     },
     "error": {
       "select_at_least_one": "번호 추천 방식을 하나 이상 선택하세요.",
       "saju_profile_required": "명리 권장을 사용하려면 먼저 이전 메뉴의 '명리 사주정보 입력·수정'에서 개인 사주정보를 저장하세요.",
-      "invalid_saju_profile": "사주정보가 누락되었거나 유효하지 않습니다. 생년월일·출생시간·달력 구분·성별·출생지·시간대를 확인하세요.",
+      "invalid_saju_profile": "출생일·시간(HH:MM/미상)·음력 기준/윤달·시간대·경도를 확인하세요. 절입일 또는 서머타임 중복 시각은 확정된 시간이 필요합니다.",
       "options_error": "설정 처리 중 오류가 발생했습니다. 입력값을 확인한 뒤 다시 시도하세요."
     }
   }

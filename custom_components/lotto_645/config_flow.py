@@ -20,6 +20,7 @@ from .const import (
     CONF_SAJU_BIRTH_PLACE,
     CONF_SAJU_BIRTH_TIME,
     CONF_SAJU_CALENDAR,
+    CONF_SAJU_LUNAR_STANDARD,
     CONF_SAJU_GENDER,
     CONF_SAJU_LONGITUDE,
     CONF_SAJU_LUNAR_LEAP_MONTH,
@@ -38,6 +39,7 @@ from .const import (
 from .methods import (
     DEFAULT_METHOD_IDS,
     METHOD_MYUNGRI_HETU,
+    METHODS_BY_ID,
     method_selector_options,
     normalize_method_ids,
 )
@@ -141,6 +143,12 @@ def _saju_schema(options: dict[str, Any]) -> vol.Schema:
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Required(CONF_SAJU_LUNAR_STANDARD, default=str(options.get(
+                CONF_SAJU_LUNAR_STANDARD, "chinese" if options.get(CONF_SAJU_CALENDAR) == "lunar" else "korean"
+            ))): selector.SelectSelector(selector.SelectSelectorConfig(
+                options=[{"value": "korean", "label": "한국 음력"}, {"value": "chinese", "label": "중국 음력 (기존 호환)"}],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )),
             _required_text_marker(CONF_SAJU_BIRTH_DATE, options): selector.TextSelector(),
             _required_text_marker(CONF_SAJU_BIRTH_TIME, options): selector.TextSelector(),
             vol.Required(CONF_SAJU_GENDER, default=gender): selector.SelectSelector(
@@ -177,6 +185,8 @@ def _normalize_submitted_methods(raw_methods: object) -> tuple[str, ...]:
     if not isinstance(raw_methods, (list, tuple)) or not raw_methods:
         return ()
     submitted = [str(value) for value in raw_methods]
+    if any(value not in METHODS_BY_ID for value in submitted):
+        return ()
     normalized = normalize_method_ids(submitted)
     if len(normalized) != len(dict.fromkeys(submitted)):
         return ()
@@ -243,11 +253,11 @@ class Lotto645OptionsFlow(OptionsFlow):
 
                     if METHOD_MYUNGRI_HETU in normalized:
                         profile = extract_saju_profile(pending)
-                        if not has_complete_saju_profile(profile):
+                        if not await self.hass.async_add_executor_job(has_complete_saju_profile, profile):
                             errors["base"] = "saju_profile_required"
                         else:
                             try:
-                                validate_saju_profile(profile)
+                                await self.hass.async_add_executor_job(validate_saju_profile, profile)
                             except SajuProfileError as err:
                                 _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
                                 errors["base"] = "invalid_saju_profile"
@@ -297,7 +307,7 @@ class Lotto645OptionsFlow(OptionsFlow):
                 ).strip()
 
             try:
-                validate_saju_profile(extract_saju_profile(pending))
+                await self.hass.async_add_executor_job(validate_saju_profile, extract_saju_profile(pending))
             except SajuProfileError as err:
                 _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
                 errors["base"] = "invalid_saju_profile"

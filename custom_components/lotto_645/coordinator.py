@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+import asyncio
+import math
 import logging
 from typing import Any
 
@@ -75,6 +77,9 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         self._local_generation_nonce = 0
         self._local_generated_at: datetime | None = None
         self._suppress_ai_generation_once = False
+        self._saju_profile_valid = False
+        self._regeneration_exclusions: tuple[tuple[int, ...], ...] = ()
+        self._manual_lock = asyncio.Lock()
 
     @property
     def configured_method_ids(self) -> tuple[str, ...]:
@@ -90,7 +95,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
 
     @property
     def saju_profile_ready(self) -> bool:
-        return has_complete_saju_profile(self.saju_profile)
+        return self._saju_profile_valid
 
     @property
     def saju_profile_status(self) -> str:
@@ -143,6 +148,9 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
 
     async def _async_setup(self) -> None:
         """Load HA cache first, then the release-bundled last-known-good seed."""
+        self._saju_profile_valid = await self.hass.async_add_executor_job(
+            has_complete_saju_profile, self.saju_profile
+        )
         payload = await self._store.async_load()
         if payload:
             try:
@@ -157,6 +165,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                     self._startup_source = "storage_cache"
                 self._local_generation_nonce = max(
                     0, int(payload.get("local_generation_sequence", 0))
+                )
+                excluded = payload.get("local_excluded_combinations", [])
+                self._regeneration_exclusions = tuple(
+                    tuple(sorted(item)) for item in excluded
+                    if isinstance(item, list) and len(item) == 6 and len(set(item)) == 6
+                    and all(type(n) is int and 1 <= n <= 45 for n in item)
                 )
                 local_generated = payload.get("local_generated_at")
                 if local_generated:
@@ -194,6 +208,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 "latest_round": self.history[-1].round if self.history else 0,
                 "draws": [draw.to_storage() for draw in self.history],
                 "local_generation_sequence": self._local_generation_nonce,
+                "local_excluded_combinations": [list(item) for item in self._regeneration_exclusions],
                 "local_generated_at": (
                     self._local_generated_at.isoformat()
                     if self._local_generated_at
@@ -294,6 +309,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             self._cached_ai_recommendation = None
             self._cached_ai_generated_at = None
             self._local_generation_nonce = 0
+            self._regeneration_exclusions = ()
             self._local_generated_at = datetime.now(UTC)
             self._needs_storage_save = True
 
@@ -323,6 +339,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 self.selected_method_ids,
                 self._local_generation_nonce,
                 profile,
+                self._regeneration_exclusions,
             )
         except ValueError as err:
             raise UpdateFailed(f"로또 분석 실패: {err}") from err
@@ -377,11 +394,16 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
 
     async def async_refresh_and_regenerate(self) -> None:
         """Refresh history and rotate all local recommendations, leaving AI untouched."""
-        self._local_generation_nonce += 1
-        self._local_generated_at = datetime.now(UTC)
-        self._needs_storage_save = True
-        self._suppress_ai_generation_once = True
-        await self.async_request_refresh()
+        async with self._manual_lock:
+            previous = tuple(item.numbers for item in self.data.analysis.recommendations) if self.data else ()
+            if self.data and self.data.ai_recommendation:
+                previous += (self.data.ai_recommendation.numbers,)
+            self._regeneration_exclusions = previous
+            self._local_generation_nonce += 1
+            self._local_generated_at = datetime.now(UTC)
+            self._needs_storage_save = True
+            self._suppress_ai_generation_once = True
+            await self.async_request_refresh()
 
     def _ai_structure(self) -> vol.Schema:
         number_selector = selector.NumberSelector(
@@ -407,6 +429,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         local_games = "\n".join(
             f"- {item.label}: {', '.join(map(str, item.numbers))} / {item.reason}"
             for item in analysis.recommendations
+            if item.method_id != METHOD_MYUNGRI_HETU
         )
         summary = analysis.summary
         retry_text = (
@@ -442,11 +465,13 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         if not isinstance(data, dict):
             raise AiRecommendationError("AI Task가 구조화된 객체를 반환하지 않았습니다")
         try:
-            numbers = tuple(
-                sorted(int(data[f"number_{index}"]) for index in range(1, 7))
-            )
-        except (KeyError, TypeError, ValueError) as err:
-            raise AiRecommendationError("AI Task 추천 번호를 해석할 수 없습니다") from err
+            raw = [data[f"number_{index}"] for index in range(1, 7)]
+            if any(isinstance(n, bool) or not isinstance(n, (int, float))
+                   or not math.isfinite(n) or int(n) != n for n in raw):
+                raise ValueError("non-integral AI number")
+            numbers = tuple(sorted(int(n) for n in raw))
+        except (KeyError, TypeError, ValueError, OverflowError) as err:
+            raise AiRecommendationError("AI Task는 1~45 정수 6개를 반환해야 합니다") from err
         if len(numbers) != 6 or len(set(numbers)) != 6:
             raise AiRecommendationError("AI Task가 중복 없는 번호 6개를 반환하지 않았습니다")
         if any(number < 1 or number > 45 for number in numbers):
@@ -456,7 +481,8 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             raise AiRecommendationError("AI Task 조합이 과거 1등 조합과 완전히 같습니다")
         if any(numbers == item.numbers for item in analysis.recommendations):
             raise AiRecommendationError("AI Task 조합이 로컬 추천과 완전히 같습니다")
-        reason = str(data.get("reason", "")).strip()
+        reason = data.get("reason", "")
+        reason = reason.strip() if isinstance(reason, str) else ""
         if not reason:
             raise AiRecommendationError("AI Task가 추천 근거를 반환하지 않았습니다")
         values = set(numbers)
