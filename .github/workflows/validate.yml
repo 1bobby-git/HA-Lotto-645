@@ -11,6 +11,7 @@ permissions:
 jobs:
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,7 +19,7 @@ jobs:
           python-version: "3.13"
           cache: pip
       - name: Install test dependencies
-        run: python -m pip install --upgrade pip pytest "lunar_python==1.4.8"
+        run: python -m pip install --upgrade pip pytest "lunar_python==1.4.8" "korean_lunar_calendar==0.3.1"
       - name: Compile Python sources
         run: python -m compileall -q custom_components/lotto_645
       - name: Run analysis regression tests
@@ -26,6 +27,7 @@ jobs:
 
   hassfest:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: home-assistant/actions/hassfest@master
