@@ -1,6 +1,7 @@
 """Smoke-test actual HA classes/selectors; no live HA instance or AI provider calls."""
 from __future__ import annotations
 import asyncio
+import ast
 from dataclasses import replace
 from pathlib import Path
 import importlib
@@ -20,7 +21,6 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.data_entry_flow import FlowResultType
 
 flow_module=importlib.import_module('custom_components.lotto_645.config_flow')
-init_module=importlib.import_module('custom_components.lotto_645')
 coordinator_module=importlib.import_module('custom_components.lotto_645.coordinator')
 models=importlib.import_module('custom_components.lotto_645.models')
 const=importlib.import_module('custom_components.lotto_645.const')
@@ -34,7 +34,9 @@ def serialize_form(result):
 
 
 async def main():
-    assert init_module._RESULT_CHECKS_UTC == ((5,11,55),(5,12,20),(5,12,50),(5,13,30),(5,14,0),(6,0,40))
+    init_tree=ast.parse((ROOT/'custom_components/lotto_645/__init__.py').read_text())
+    schedule=next(ast.literal_eval(node.value) for node in init_tree.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='_RESULT_CHECKS_UTC' for target in node.targets))
+    assert schedule == ((5,11,55),(5,12,20),(5,12,50),(5,13,30),(5,14,0),(6,0,40))
     with tempfile.TemporaryDirectory() as folder:
         hass=HomeAssistant(folder)
         flow=flow_module.Lotto645OptionsFlow(types.SimpleNamespace(options={}))
