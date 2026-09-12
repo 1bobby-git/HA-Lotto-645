@@ -47,18 +47,25 @@ async def main():
         invalid=await flow.async_step_recommendations({const.CONF_SELECTED_METHODS:['myungri_hetu_day_pillar']})
         assert invalid['errors']['base']=='saju_profile_required'
         submitted={
-            'saju_calendar':'lunar', 'saju_lunar_standard':'korean', 'saju_birth_date':'2000-02-30',
-            'saju_birth_time':'14:30','saju_gender':'male','saju_birth_place':'SYNTHETIC',
+            'saju_calendar':'lunar', 'saju_lunar_standard':'korean', 'saju_birth_date':'20000230',
+            'saju_birth_time':'1430','saju_gender':'male','saju_birth_place':'SYNTHETIC',
             'saju_timezone':'Asia/Seoul','saju_lunar_leap_month':False, 'saju_true_solar_time':False,
         }
         result=await flow.async_step_saju(submitted)
         assert result['type']==FlowResultType.CREATE_ENTRY,result
+        assert result['data']['saju_birth_date']=='2000-02-30'
+        assert result['data']['saju_birth_time']=='14:30'
         saved=flow_module.Lotto645OptionsFlow(types.SimpleNamespace(options=result['data']))
         saved.hass=hass;saved.handler='synthetic';saved.flow_id='synthetic'
-        serialize_form(await saved.async_step_saju())
+        saved_form=await saved.async_step_saju()
+        serialize_form(saved_form)
+        fields=to_field_list(saved_form['data_schema'],custom_serializer=cv.custom_serializer)
+        defaults={field.get('name'):field.get('default') for field in fields}
+        assert defaults.get('saju_birth_date')=='2000-02-30'
+        assert defaults.get('saju_birth_time')=='14:30'
         good=await saved.async_step_recommendations({const.CONF_SELECTED_METHODS:['myungri_hetu_day_pillar','bayesian_shrinkage']})
         assert good['type']==FlowResultType.CREATE_ENTRY,good
-        submitted['saju_birth_date']='2000-02-31'
+        submitted['saju_birth_date']='20000231'
         rejected=await flow.async_step_saju(submitted)
         assert rejected['errors']['base']=='invalid_saju_profile'
         serialize_form(rejected)
@@ -85,6 +92,6 @@ async def main():
             except coordinator_module.AiRecommendationError:pass
             else:raise AssertionError(f'invalid AI number accepted: {bad}')
         await hass.async_stop(force=True)
-    print('PASS: real HA options menu/forms/JSON serialization/profile save/gating; coordinator manual/AI contracts')
+    print('PASS: real HA options menu/forms/JSON serialization/profile save/compact normalization/gating; coordinator manual/AI contracts')
 
 if __name__=='__main__':asyncio.run(main())
