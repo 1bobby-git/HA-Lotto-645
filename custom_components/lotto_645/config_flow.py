@@ -49,6 +49,7 @@ from .myungri import (
     has_complete_saju_profile,
     validate_saju_profile,
 )
+from .saju_calendar import normalize_birth_date, normalize_birth_time
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,6 +76,10 @@ def _optional_text_marker(key: str, options: dict[str, Any]) -> vol.Marker:
 def _required_text_marker(key: str, options: dict[str, Any]) -> vol.Marker:
     """Return a required text marker without invalid blank defaults."""
     value = str(options.get(key, "") or "").strip()
+    if key == CONF_SAJU_BIRTH_DATE:
+        value = normalize_birth_date(value)
+    elif key == CONF_SAJU_BIRTH_TIME:
+        value = normalize_birth_time(value)
     if value:
         return vol.Required(key, default=value)
     return vol.Required(key)
@@ -284,12 +289,6 @@ class Lotto645OptionsFlow(OptionsFlow):
             form_values.update(user_input)
             pending = dict(self._options)
             pending.update(user_input)
-            pending[CONF_SAJU_BIRTH_DATE] = str(
-                pending.get(CONF_SAJU_BIRTH_DATE, "") or ""
-            ).strip()
-            pending[CONF_SAJU_BIRTH_TIME] = str(
-                pending.get(CONF_SAJU_BIRTH_TIME, "") or ""
-            ).strip()
             pending[CONF_SAJU_BIRTH_PLACE] = str(
                 pending.get(CONF_SAJU_BIRTH_PLACE, "") or ""
             ).strip()
@@ -307,6 +306,12 @@ class Lotto645OptionsFlow(OptionsFlow):
                 ).strip()
 
             try:
+                pending[CONF_SAJU_BIRTH_DATE] = normalize_birth_date(
+                    pending.get(CONF_SAJU_BIRTH_DATE, "")
+                )
+                pending[CONF_SAJU_BIRTH_TIME] = normalize_birth_time(
+                    pending.get(CONF_SAJU_BIRTH_TIME, "")
+                )
                 await self.hass.async_add_executor_job(validate_saju_profile, extract_saju_profile(pending))
             except SajuProfileError as err:
                 _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
