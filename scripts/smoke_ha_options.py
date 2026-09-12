@@ -74,6 +74,7 @@ async def main():
         obj=object.__new__(cls)
         obj.entry=types.SimpleNamespace(options={})
         obj._manual_lock=asyncio.Lock();obj._local_generation_nonce=0
+        obj._local_generated_at=None
         obj._prediction_snapshot=None;obj._draw_evaluation=None;obj._needs_storage_save=False
         rec=models.Recommendation(1,'weighted_frequency','local','stats',(1,2,3,4,5,6),'local reason',.5,{})
         saju=models.Recommendation(2,'myungri_hetu_day_pillar','saju','saju',(7,8,9,10,11,12),'DO NOT SEND PERSONAL SAJU',.5,{})

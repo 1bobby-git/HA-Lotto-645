@@ -55,11 +55,11 @@ class LottoApiClient:
         self._official_requests = 0
 
     async def async_fetch_shared_mirror(
-        self,
+        self, *, force: bool = False
     ) -> tuple[list[LottoDraw] | None, dict[str, Any]]:
-        """Fetch the repository mirror once, supporting conditional ETag requests."""
+        """Fetch the shared mirror; manual refresh may force a complete response."""
         headers = dict(self._headers)
-        if self._mirror_etag:
+        if self._mirror_etag and not force:
             headers["If-None-Match"] = self._mirror_etag
         try:
             async with asyncio.timeout(20):
