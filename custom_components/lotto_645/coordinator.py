@@ -252,9 +252,25 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         ai_recommendation: Recommendation | None,
         ai_generated_at: datetime | None,
     ) -> dict[str, Any]:
-        recommendations = [item.to_storage() for item in analysis.recommendations]
+        def minimal_item(item: Recommendation) -> dict[str, Any]:
+            # The result checker only needs identity + six numbers.  Do not copy
+            # large analysis details or derived Saju context into the persistent
+            # prediction snapshot.
+            return {
+                "index": item.index,
+                "method_id": item.method_id,
+                "label": item.label,
+                "method": item.method,
+                "numbers": list(item.numbers),
+                "reason": "",
+                "score": None,
+                "details": {},
+                "source": item.source,
+            }
+
+        recommendations = [minimal_item(item) for item in analysis.recommendations]
         if ai_recommendation is not None:
-            recommendations.append(ai_recommendation.to_storage())
+            recommendations.append(minimal_item(ai_recommendation))
         return {
             "target_round": analysis.target_round,
             "based_on_round": analysis.based_on_round,
@@ -335,6 +351,28 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 self.data.ai_recommendation,
                 self.data.ai_generated_at,
             )
+        elif self._prediction_snapshot is None and self.history:
+            # Upgrade compatibility: v1.7 and older did not persist recommendation
+            # snapshots.  Reconstruct the currently displayed target round from
+            # the cached pre-draw history before accepting a newer mirror round.
+            try:
+                profile = self.saju_profile if self.saju_profile_ready else None
+                cached_analysis = await self.hass.async_add_executor_job(
+                    build_analysis,
+                    self.history,
+                    self.selected_method_ids,
+                    self._local_generation_nonce,
+                    profile,
+                    self._regeneration_exclusions,
+                )
+            except ValueError as err:
+                _LOGGER.debug("기존 추천 스냅샷 재구성 생략: %s", err)
+            else:
+                self._set_prediction_snapshot(
+                    cached_analysis,
+                    self._cached_ai_recommendation,
+                    self._cached_ai_generated_at,
+                )
         changed = False
         source_status = self._startup_source or "cache"
         old_latest_round = self.history[-1].round if self.history else 0
