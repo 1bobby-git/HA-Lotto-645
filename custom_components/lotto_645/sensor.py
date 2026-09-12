@@ -6,8 +6,10 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
+    DOMAIN,
     AI_METHOD_ID,
     DISCLAIMER,
     FIRST_PRIZE_ODDS,
@@ -35,6 +37,7 @@ async def async_setup_entry(
         LottoLatestDrawSensor(coordinator),
         LottoDrawNumbersSensor(coordinator),
         LottoWinningStatusSensor(coordinator),
+        LottoPurchasedTicketsSensor(coordinator),
     ]
     if METHOD_MYUNGRI_HETU in coordinator.configured_method_ids:
         entities.append(LottoSajuProfileSensor(coordinator))
@@ -59,8 +62,10 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_recommendations"
 
     @property
-    def native_value(self) -> int:
-        return self.coordinator.data.analysis.target_round
+    def native_value(self) -> str:
+        data = self.coordinator.data
+        game_count = len(data.analysis.recommendations) + (1 if data.ai_recommendation else 0)
+        return f"{data.analysis.target_round}회 추천 · {game_count}게임"
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -70,6 +75,8 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
         if data.ai_recommendation is not None:
             games.append(data.ai_recommendation.as_attributes())
         return {
+            "purpose": "선택한 방식별 추천번호·근거·생성시각을 모은 요약입니다. 센서 값은 추천 대상 회차이며 점수나 당첨 개수가 아닙니다.",
+            "how_to_view": "games 속성은 방식별 6개 추천번호와 핵심 근거입니다. 실제 결과는 n회 추첨번호·당첨 여부, 직접 입력한 구매번호는 내 구매번호 센서에서 확인하세요.",
             "target_round": analysis.target_round,
             "based_on_round": analysis.based_on_round,
             "history_draws": data.history_count,
@@ -302,8 +309,14 @@ class LottoAiRecommendationSensor(Lotto645Entity, SensorEntity):
 class LottoDrawNumbersSensor(Lotto645Entity, SensorEntity):
     """Show the six main numbers of the latest completed official draw."""
 
-    _attr_name = "추첨번호"
+    _attr_has_entity_name = False
     _attr_icon = "mdi:counter"
+
+    @property
+    def name(self) -> str:
+        """Round-aware display name with a stable registry identity."""
+        data = self.coordinator.data
+        return f"{data.latest_draw.round}회 추첨번호" if data else "추첨번호"
 
     def __init__(self, coordinator: Lotto645Coordinator) -> None:
         super().__init__(coordinator)
@@ -330,71 +343,97 @@ class LottoDrawNumbersSensor(Lotto645Entity, SensorEntity):
         }
 
 
+class LottoPurchasedTicketsSensor(Lotto645Entity, SensorEntity):
+    """Show A–E for the last edited purchased round, including its result."""
+
+    _attr_name = "내 구매번호"
+    _attr_icon = "mdi:ticket-account"
+
+    def __init__(self, coordinator: Lotto645Coordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_purchased_tickets"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        if self.coordinator.purchase_storage_error:
+            return "저장소 확인 필요"
+        report = self.coordinator.purchase_book.report(self.coordinator.history)
+        if report["status"] == "not_registered":
+            return "구매번호 미등록"
+        if report["status"] == "waiting":
+            return f"{report['round']}회 · {report['saved_game_count']}게임 · 추첨 대기"
+        if report["winning_game_count"]:
+            return f"{report['round']}회 · {report['winning_game_count']}개 당첨 · 최고 {report['highest_prize']}"
+        return f"{report['round']}회 · 전체 미당첨"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        report = self.coordinator.purchase_book.report(self.coordinator.history)
+        return {**report,
+                "storage_error": self.coordinator.purchase_storage_error,
+                "where_to_enter": "구성 > 직접 구매번호 입력·수정 > 회차 > A~E 게임 저장",
+                "how_to_refresh": "새 추첨 결과는 공유 미러 발표 후 자동 확인 일정, 일반 주기 또는 즉시 새로고침으로 가져옵니다. 구매번호 자체는 재생성하지 않습니다.",
+                "privacy": "구매번호는 HA 로컬에만 저장합니다. AI 프롬프트·공유 미러에 보내지 않습니다."}
+
+
 class LottoWinningStatusSensor(Lotto645Entity, SensorEntity):
-    """Summarize how the saved recommendations performed after a draw."""
+    """Keep recommendation and purchased outcomes separate within one draw."""
 
     _unrecorded_attributes = frozenset({"results", "winners", "losers"})
-    _attr_name = "당첨 여부"
+    _attr_has_entity_name = False
     _attr_icon = "mdi:ticket-percent-outline"
+
+    @property
+    def name(self) -> str:
+        evaluation = self.coordinator.winning_summary
+        return f"{evaluation['round']}회 당첨 여부" if evaluation else "당첨 여부"
 
     def __init__(self, coordinator: Lotto645Coordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.entry.entry_id}_winning_status"
 
     @property
+    def available(self) -> bool:
+        return self.coordinator.data is not None
+
+    @property
     def native_value(self) -> str:
-        evaluation = self.coordinator.last_draw_evaluation
-        if not evaluation:
-            return "판정 대기"
-        winning_count = int(evaluation.get("winning_game_count", 0))
+        evaluation = self.coordinator.winning_summary
+        if not evaluation or evaluation["status"] != "evaluated":
+            return "판정할 저장번호 없음"
+        winning_count = evaluation["winning_game_count"]
         if winning_count:
-            return f"{winning_count}개 당첨 · 최고 {evaluation.get('highest_prize', '당첨')}"
+            return f"{winning_count}개 당첨 · 최고 {evaluation['highest_prize']}"
         return "전체 미당첨"
 
     def _decorate_result(self, result: dict) -> dict:
         method_id = str(result.get("method_id", ""))
-        if method_id == AI_METHOD_ID:
+        if result.get("source") == "purchased":
+            unique_id = f"{self.coordinator.entry.entry_id}_purchased_tickets"
+        elif method_id == AI_METHOD_ID:
             unique_id = f"{self.coordinator.entry.entry_id}_ai_recommendation"
         else:
             unique_id = f"{self.coordinator.entry.entry_id}_method_{method_id}"
-        return {**result, "recommendation_sensor_unique_id": unique_id}
+        registry = er.async_get(self.coordinator.hass)
+        return {**result, "recommendation_sensor_unique_id": unique_id,
+                "entity_id": registry.async_get_entity_id("sensor", DOMAIN, unique_id)}
 
     @property
     def extra_state_attributes(self) -> dict:
-        evaluation = self.coordinator.last_draw_evaluation
+        evaluation = self.coordinator.winning_summary
         if not evaluation:
-            return {
-                "status": "waiting",
-                "message": (
-                    "현재 추천 대상 회차의 추첨번호가 갱신되면 저장된 모든 추천 센서를 "
-                    "자동으로 대조해 1~5등 또는 미당첨을 판정합니다."
-                ),
+            return {"status": "waiting", "message": "추첨번호 확인 후 같은 회차의 저장번호를 비교합니다."}
+        results = [self._decorate_result(item) for item in evaluation["results"]]
+        return {**evaluation, "results": results,
+                "winners": [row for row in results if row.get("prize_rank") is not None],
+                "losers": [row for row in results if row.get("prize_rank") is None],
                 "prize_rules": "1등=6개, 2등=5개+보너스, 3등=5개, 4등=4개, 5등=3개",
-            }
-        results = [self._decorate_result(item) for item in evaluation.get("results", [])]
-        winners = [item for item in results if item.get("status") == "당첨"]
-        losers = [item for item in results if item.get("status") == "미당첨"]
-        return {
-            "status": "evaluated",
-            "round": evaluation.get("round"),
-            "draw_date": evaluation.get("draw_date"),
-            "winning_numbers": evaluation.get("winning_numbers"),
-            "bonus_number": evaluation.get("bonus_number"),
-            "evaluated_at": evaluation.get("evaluated_at"),
-            "prediction_based_on_round": evaluation.get("prediction_based_on_round"),
-            "prediction_generation_sequence": evaluation.get("prediction_generation_sequence"),
-            "prediction_generated_at": evaluation.get("prediction_generated_at"),
-            "checked_game_count": evaluation.get("checked_game_count", 0),
-            "winning_game_count": evaluation.get("winning_game_count", 0),
-            "losing_game_count": evaluation.get("losing_game_count", 0),
-            "highest_prize": evaluation.get("highest_prize"),
-            "highest_prize_sensor": evaluation.get("highest_prize_sensor"),
-            "results": results,
-            "winners": winners,
-            "losers": losers,
-            "prize_rules": "1등=6개, 2등=5개+보너스, 3등=5개, 4등=4개, 5등=3개",
-            "note": "실제 entity_id는 사용자가 이름을 변경할 수 있으므로 센서명과 unique_id를 함께 제공합니다.",
-        }
+                "update_behavior": "수동 새로고침으로 새 추첨번호 수신 후, 추첨 전 저장한 추천과 해당 회차 구매번호를 대조합니다.",
+                "note": "추천 당첨은 실제 구매 당첨과 별도입니다. 구매번호도 사용자 입력 대조이며 지급 확인이 아닙니다."}
 
 
 class LottoLatestDrawSensor(Lotto645Entity, SensorEntity):
