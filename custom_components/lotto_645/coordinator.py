@@ -44,7 +44,10 @@ from .history import LottoHistoryError, load_bundled_history
 from .methods import DEFAULT_METHOD_IDS, METHOD_MYUNGRI_HETU, normalize_method_ids
 from .models import AnalysisResult, Lotto645Data, LottoDraw, Recommendation
 from .myungri import extract_saju_profile, has_complete_saju_profile
-from .result_evaluator import evaluate_recommendations
+from .fast_result_state import FastResultState, evaluate_saved
+from .review import ReviewBook
+from .review_state import ReviewState
+from .published_results import draw_cutoff
 from .purchased_tickets import PurchaseBook, combined_result
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,7 +57,7 @@ class AiRecommendationError(HomeAssistantError):
     """Raised when an AI Task result cannot be accepted safely."""
 
 
-class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
+class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lotto645Data]):
     """Coordinate safe history updates, local regeneration, Saju and optional AI Tasks."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -85,6 +88,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         self._draw_evaluation: dict[str, Any] | None = None
         self._manual_result_refresh_requested = False
         self._manual_lock = asyncio.Lock()
+        self.review_book = ReviewBook()
+        self.review_storage_error = False
+        self._review_dirty = False
+        self._review_save_error = False
+        self._review_save_lock = asyncio.Lock()
+        self._review_store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.reviews.{entry.entry_id}")
         self.purchase_book = PurchaseBook()
         self.purchase_storage_error = False
         self._purchase_lock = asyncio.Lock()
@@ -162,26 +171,18 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         """Return the latest persisted recommendation-vs-draw evaluation."""
         return self._draw_evaluation
 
-    @property
-    def winning_summary(self) -> dict[str, Any] | None:
-        """Completed draw results; never mix current recommendations with old draws."""
-        if self.data is None:
-            return None
-        draw = self.data.latest_draw
-        result = combined_result(draw, self._draw_evaluation, self.purchase_book.report(self.history, draw.round))
-        result["purchase_storage_error"] = self.purchase_storage_error
-        result["pending_purchased_rounds"] = sorted(
-            int(key) for key in self.purchase_book.records if int(key) > draw.round
-        )
-        return result
-
     async def async_save_purchase_record(
-        self, round_no: int, values: dict[str, Any], *, clear: bool = False
+        self, round_no: int, values: dict[str, Any], *, clear: bool = False,
+        expected_revision: str | None = None
     ) -> None:
         """Save all five lines atomically without network, AI or regeneration."""
         if self.purchase_storage_error:
             raise HomeAssistantError("purchase_storage_unavailable")
         async with self._purchase_lock:
+            if expected_revision is not None:
+                current = self.purchase_book.records.get(str(round_no), {}).get("saved_at", "")
+                if current != expected_revision:
+                    raise HomeAssistantError("purchase_revision_conflict")
             updated = self.purchase_book.updated(round_no, values, clear=clear)
             await self._purchase_store.async_save(updated.to_storage())
             # Do not replace the in-memory copy before a successful durable write.
@@ -190,6 +191,11 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
 
     async def _async_setup(self) -> None:
         """Load HA cache first, then the release-bundled last-known-good seed."""
+        try:
+            self.review_book = ReviewBook.from_storage(await self._review_store.async_load())
+        except (ValueError, TypeError, KeyError, HomeAssistantError, OSError):
+            self.review_storage_error = True
+            _LOGGER.error("리뷰 저장소 오류: 원본을 보존하고 덮어쓰지 않습니다")
         try:
             self.purchase_book = PurchaseBook.from_storage(await self._purchase_store.async_load())
         except (ValueError, TypeError, KeyError, HomeAssistantError, OSError):
@@ -201,6 +207,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         )
         payload = await self._store.async_load()
         if payload:
+            try:
+                self._restore_fast_state(payload)
+            except (ValueError, TypeError, KeyError):
+                # A damaged provisional overlay must not discard valid history.
+                self._fast_result = None
+                self._frozen_result_snapshot = None
             try:
                 prediction_snapshot = payload.get("prediction_snapshot")
                 if isinstance(prediction_snapshot, dict):
@@ -259,8 +271,24 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         self._needs_storage_save = True
 
     async def _save_storage(self) -> None:
+        self._sync_reviews()
+        if not self.review_storage_error:
+            async with self._review_save_lock:
+                while self._review_dirty:
+                    payload = self.review_book.to_storage()
+                    try:
+                        await self._review_store.async_save(payload)
+                    except (OSError, HomeAssistantError):
+                        self._review_save_error = True
+                        _LOGGER.warning("리뷰 저장 실패: 기존 저장본을 유지하고 다음 갱신에 재시도합니다")
+                        break
+                    self._review_save_error = False
+                    # A snapshot may have changed while the write yielded.
+                    self._review_dirty = payload != self.review_book.to_storage()
         await self._store.async_save(
             {
+                "fast_result": getattr(self, "_fast_result", None),
+                "frozen_result_snapshot": getattr(self, "_frozen_result_snapshot", None),
                 "latest_round": self.history[-1].round if self.history else 0,
                 "draws": [draw.to_storage() for draw in self.history],
                 "local_generation_sequence": self._local_generation_nonce,
@@ -328,9 +356,23 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         ai_recommendation: Recommendation | None,
         ai_generated_at: datetime | None,
     ) -> None:
+        # Do not replace the result's pre-publication snapshot with numbers
+        # generated after that draw was reported while official history lags.
+        state = getattr(self, "_fast_result", None) or {}
+        if analysis.target_round <= state.get("round", 0):
+            return
         snapshot = self._build_prediction_snapshot(
             analysis, ai_recommendation, ai_generated_at
         )
+        if (self._prediction_snapshot
+                and self._prediction_snapshot.get("target_round") == analysis.target_round
+                and datetime.now(UTC) >= draw_cutoff(analysis.target_round)):
+            return
+        if hasattr(self, "review_book") and not self.review_storage_error:
+            if self.review_book.record_snapshot(snapshot):
+                self._review_dirty = True
+                # New snapshots may not have a result yet, but must be durable.
+                self._needs_storage_save = True
         if snapshot != self._prediction_snapshot:
             self._prediction_snapshot = snapshot
             self._needs_storage_save = True
@@ -345,26 +387,17 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             return
         if target_round <= 0:
             return
-        if self._draw_evaluation and self._draw_evaluation.get("round") == target_round:
-            return
         draw = next((item for item in self.history if item.round == target_round), None)
         if draw is None:
             return
-        try:
-            recommendations = tuple(
-                Recommendation.from_storage(item)
-                for item in snapshot.get("recommendations", [])
-                if isinstance(item, dict)
-            )
-        except (KeyError, TypeError, ValueError) as err:
-            _LOGGER.warning("저장된 추천 스냅샷을 당첨 판정에 사용할 수 없습니다: %s", err)
+        if (self._draw_evaluation and self._draw_evaluation.get("round") == target_round
+                and self._draw_evaluation.get("winning_numbers") == list(draw.numbers)
+                and self._draw_evaluation.get("bonus_number") == draw.bonus
+                and self._draw_evaluation.get("snapshot_policy") == "pre_draw_v1"):
             return
-        self._draw_evaluation = evaluate_recommendations(
-            draw,
-            recommendations,
-            prediction_snapshot=snapshot,
-            evaluated_at=datetime.now(UTC),
-        )
+        # Apply the same timestamp policy to official-first and fast-overlay
+        # results. Older cached evaluations are recomputed once with this policy.
+        self._draw_evaluation = evaluate_saved(snapshot, draw)
         self._needs_storage_save = True
         _LOGGER.info(
             "%s회 추천 결과 판정 완료: %s게임 중 %s게임 당첨, 최고 %s",
@@ -385,6 +418,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
 
     async def _async_update_data(self) -> Lotto645Data:
         """Refresh data and atomically evaluate a newly completed draw."""
+        self._sync_reviews()
         manual_result_refresh = self._manual_result_refresh_requested
         self._manual_result_refresh_requested = False
         # async_refresh_and_regenerate() captures the exact pre-refresh ticket
@@ -503,7 +537,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             self._local_generated_at = datetime.now(UTC)
             self._needs_storage_save = True
 
-        if changed or self._needs_storage_save:
+        if changed or self._needs_storage_save or self._review_dirty:
             await self._save_storage()
 
         if self.data is not None and not changed:
@@ -616,6 +650,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                     self.data.ai_generated_at,
                 )
             self._manual_result_refresh_requested = True
+            self._suppress_ai_generation_once = True
             await self.async_request_refresh()
 
     def _ai_structure(self) -> vol.Schema:

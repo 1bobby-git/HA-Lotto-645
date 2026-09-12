@@ -4,9 +4,9 @@ from datetime import timedelta
 
 DOMAIN = "lotto_645"
 NAME = "Lotto 6/45 Analysis"
-VERSION = "1.9.0"
+VERSION = "1.10.0"
 
-PLATFORMS = ["sensor", "button"]
+PLATFORMS = ["sensor", "button", "binary_sensor"]
 UPDATE_INTERVAL = timedelta(hours=6)
 STORAGE_VERSION = 3
 STORAGE_KEY_PREFIX = f"{DOMAIN}.history"

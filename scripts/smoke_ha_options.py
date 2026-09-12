@@ -39,6 +39,10 @@ async def main():
     assert schedule == ((5,11,55),(5,12,20),(5,12,50),(5,13,30),(5,14,0),(6,0,40))
     with tempfile.TemporaryDirectory() as folder:
         hass=HomeAssistant(folder)
+        from homeassistant.helpers import device_registry as dr, entity_registry as er
+        dr.async_setup(hass)
+        await dr.async_load(hass)
+        await er.async_get(hass).async_load()
         flow=flow_module.Lotto645OptionsFlow(types.SimpleNamespace(options={}))
         flow.hass=hass;flow.handler='synthetic-config-entry';flow.flow_id='synthetic-flow'
         menu=await flow.async_step_init()
@@ -96,7 +100,7 @@ async def main():
         obj.history=[obj.data.latest_draw]
         obj._prediction_snapshot={
             "target_round":30,"based_on_round":29,"local_generation_sequence":0,
-            "local_generated_at":None,"recommendations":[
+            "local_generated_at":"2003-06-27T10:00:00+00:00","recommendations":[
                 models.Recommendation(1,"old","old sensor","test",(30,31,32,1,2,3),"r",.5,{}).to_storage()
             ]
         }
@@ -113,7 +117,7 @@ async def main():
         sensor_module=importlib.import_module('custom_components.lotto_645.sensor')
         from homeassistant.helpers.storage import Store
         obj.hass=hass
-        obj.entry=types.SimpleNamespace(entry_id='purchase-smoke', options={
+        obj.entry=types.SimpleNamespace(entry_id='purchase-smoke', domain=const.DOMAIN, options={
             const.CONF_SELECTED_METHODS:['weighted_frequency'], 'saju_birth_date':'2000-01-01',
         }, runtime_data=obj)
         obj.purchase_book=purchase_module.PurchaseBook()
@@ -184,7 +188,9 @@ async def main():
         before_nonce=obj._local_generation_nonce
         before_ai=obj._cached_ai_recommendation
         calls=obj.async_request_refresh.await_count
+        obj._suppress_ai_generation_once=False
         await obj.async_check_draw_result()
+        assert obj._suppress_ai_generation_once is True
         assert obj._local_generation_nonce==before_nonce
         assert obj._cached_ai_recommendation is before_ai
         assert obj._manual_result_refresh_requested is True
@@ -205,6 +211,89 @@ async def main():
         obj.purchase_storage_error=False
         await obj.async_save_purchase_record(31, {}, clear=True)
         assert '30' in obj.purchase_book.records and '31' not in obj.purchase_book.records
+        # New panel backend: real HA decorators with an admin-authenticated mock
+        # connection. Parsing a QR is a preview only, not a purchase write.
+        import inspect
+        from unittest.mock import patch
+        panel_module=importlib.import_module('custom_components.lotto_645.ticket_panel')
+        from homeassistant.exceptions import Unauthorized
+        unauthorized=types.SimpleNamespace(user=types.SimpleNamespace(is_admin=False))
+        try:
+            panel_module.qr_preview(hass,unauthorized,{'id':50,'entry_id':'purchase-smoke','qr':'ignored'})
+        except Unauthorized:
+            pass
+        else:
+            raise AssertionError('QR endpoint permitted non-admin')
+        connection=types.SimpleNamespace(user=types.SimpleNamespace(is_admin=True),send_result=Mock(),send_error=Mock())
+        original=obj.purchase_book.to_storage()
+        with patch.object(hass, 'config_entries', types.SimpleNamespace(async_get_entry=lambda entry_id: obj.entry if entry_id == obj.entry.entry_id else None)):
+            await inspect.unwrap(panel_module.qr_preview)(hass,connection,{'id':51,'entry_id':'purchase-smoke',
+                'qr':'https://m.dhlottery.co.kr/qr.do?method=winQr&v=0031q0102030405060000000000'})
+            preview=connection.send_result.call_args.args[1]
+            assert preview['round']==31 and preview['values']['game_a']=='1, 2, 3, 4, 5, 6'
+            assert obj.purchase_book.to_storage()==original
+            await inspect.unwrap(panel_module.purchases_save)(hass,connection,{'id':52,'entry_id':'purchase-smoke',
+                'round':31,'revision':'','clear':False,'values':preview['values']})
+            assert '31' in obj.purchase_book.records
+            await inspect.unwrap(panel_module.purchases_save)(hass,connection,{'id':53,'entry_id':'purchase-smoke',
+                'round':31,'revision':'','clear':False,'values':{'game_a':'10 11 12 13 14 15'}})
+            assert connection.send_error.call_args.args[1]=='purchase_revision_conflict'
+            assert obj.purchase_book.records['31']['games'][0]['numbers']==[1,2,3,4,5,6]
+        # New review storage, category grouping and binary prize details use
+        # actual HA entity classes/registry. No fabricated user tickets.
+        review_module=importlib.import_module('custom_components.lotto_645.review')
+        binary_module=importlib.import_module('custom_components.lotto_645.binary_sensor')
+        button_module=importlib.import_module('custom_components.lotto_645.button')
+        from homeassistant.helpers.entity import EntityCategory
+        obj.review_book=review_module.ReviewBook();obj.review_storage_error=False
+        obj._review_dirty=False;obj._review_save_error=False;obj._review_save_lock=asyncio.Lock()
+        obj._review_store=Store(hass,1,'lotto_review_smoke')
+        obj._store=Store(hass,3,'lotto_history_review_smoke')
+        obj._regeneration_exclusions=();obj._local_generated_at=None
+        obj._frozen_result_snapshot=None;obj._fast_result=None
+        obj._prediction_snapshot={"target_round":30,"based_on_round":29,
+            "local_generated_at":"2003-06-27T10:00:00+00:00",
+            "recommendations":[models.Recommendation(1,"old","old sensor","test",(30,31,32,1,2,3),"",None,{}).to_storage()]}
+        obj._sync_reviews()
+        await obj._save_storage()
+        restored=review_module.ReviewBook.from_storage(await obj._review_store.async_load())
+        assert restored.summary('old')['reviewed_rounds']==1
+        assert obj.review_for_method('old')['winning_rounds']==1
+        # Method label reads the actual local review, not the engine's fit score.
+        game_sensor=sensor_module.LottoGameSensor(obj,'weighted_frequency')
+        assert game_sensor.name.startswith('☆평가대기')
+        obj._review_summaries['weighted_frequency']={'mean_score':80.,'stars':4.,'reviewed_rounds':1}
+        assert game_sensor.name.startswith('★4.0 · 80.0점')
+        assert game_sensor.entity_category is None
+        assert summary_sensor.entity_category==EntityCategory.DIAGNOSTIC
+        assert sensor_module.LottoMethodGuideSensor(obj).entity_category==EntityCategory.DIAGNOSTIC
+        assert numbers_sensor.device_info['identifiers'] != game_sensor.device_info['identifiers']
+        detail=binary_module.LottoWinningDetailSensor(obj)
+        assert detail.name=='30회 당첨 상세'
+        assert detail.is_on is True
+        attrs=detail.extra_state_attributes
+        assert attrs['winning_game_count']==2
+        assert attrs['winners'][0]['recommended_numbers']
+        assert attrs['winners'][0]['prize_rank'] is not None
+        assert all('entity_id' in row for row in attrs['results'])
+        assert attrs['review_notice']
+        result_button=button_module.LottoResultCheckButton(obj)
+        obj.async_poll_published_results=AsyncMock()
+        await result_button.async_press()
+        obj.async_poll_published_results.assert_awaited_once_with(force=True)
+        # Unknown is never reported as false/no-win on a pending/conflicted draw.
+        obj._fast_result={'status':'conflict','round':31,'sources':[]}
+        assert detail.is_on is None
+        assert detail.extra_state_attributes['results']==[]
+        # A store write failure keeps the ledger dirty for retry, not a fake success.
+        obj._fast_result=None;obj._review_dirty=True
+        actual_review_store=obj._review_store
+        obj._review_store=types.SimpleNamespace(async_save=AsyncMock(side_effect=OSError('test disk error')))
+        await obj._save_storage()
+        assert obj._review_dirty and obj._review_save_error
+        obj._review_store=actual_review_store
+        await obj._save_storage()
+        assert not obj._review_dirty and not obj._review_save_error
         await hass.async_stop(force=True)
     print('PASS: real HA options menu/forms/JSON serialization/profile save/compact normalization/gating; coordinator manual/AI contracts; purchased five-line round storage, restore, atomic save and draw-name checks')
 

@@ -1,0 +1,11 @@
+{
+  "status": "source_available_upload_pending",
+  "source_dimensions": [2048, 682],
+  "source_file_sha256": "88f442d0d73cb9c4b378059297dfa1b8d3f334fb5e2dc9599404e5eee042ed3d",
+  "source_rgba_sha256": "49c50d32ada65824bebca839b2f50fc76bcf509d5ffabe432032f913b7a15c5d",
+  "icon_crop": [26, 112, 576, 576],
+  "horizontal_resize_allowed": false,
+  "palette_quantization_allowed": false,
+  "redraw_allowed": false,
+  "note": "Only the supplied pixels may be used. Existing small branding files are not a verified replacement."
+}

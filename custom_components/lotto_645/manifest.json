@@ -8,6 +8,12 @@
     "@1bobby-git"
   ],
   "config_flow": true,
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/1bobby-git/HA-Lotto-645",
   "integration_type": "service",
   "iot_class": "cloud_polling",
@@ -16,5 +22,5 @@
     "korean-lunar-calendar==0.4.0",
     "lunar_python==1.4.8"
   ],
-  "version": "1.9.0"
+  "version": "1.10.0"
 }
