@@ -165,7 +165,7 @@ async def main():
         assert numbers_sensor.name=='31회 추첨번호' and numbers_sensor.unique_id==unique
         obj.data=old_data
         summary_sensor=sensor_module.LottoRecommendationsSensor(obj)
-        assert summary_sensor.native_value=='31회 추천 · 1게임'
+        assert summary_sensor.native_value=='31회 추천 · 3게임'
         assert '추천 대상 회차' in summary_sensor.extra_state_attributes['purpose']
         purchased_sensor=sensor_module.LottoPurchasedTicketsSensor(obj)
         assert purchased_sensor.native_value=='30회 · 1개 당첨 · 최고 1등'
