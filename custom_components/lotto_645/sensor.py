@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    AI_METHOD_ID,
     DISCLAIMER,
     FIRST_PRIZE_ODDS,
     PUBLIC_FORMULA_NOTICE,
@@ -32,6 +33,8 @@ async def async_setup_entry(
         LottoRecommendationsSensor(coordinator),
         LottoMethodGuideSensor(coordinator),
         LottoLatestDrawSensor(coordinator),
+        LottoDrawNumbersSensor(coordinator),
+        LottoWinningStatusSensor(coordinator),
     ]
     if METHOD_MYUNGRI_HETU in coordinator.configured_method_ids:
         entities.append(LottoSajuProfileSensor(coordinator))
@@ -294,6 +297,104 @@ class LottoAiRecommendationSensor(Lotto645Entity, SensorEntity):
         if data.ai_recommendation is not None:
             attributes.update(data.ai_recommendation.as_attributes())
         return attributes
+
+
+class LottoDrawNumbersSensor(Lotto645Entity, SensorEntity):
+    """Show the six main numbers of the latest completed official draw."""
+
+    _attr_name = "추첨번호"
+    _attr_icon = "mdi:counter"
+
+    def __init__(self, coordinator: Lotto645Coordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_draw_numbers"
+
+    @property
+    def native_value(self) -> str:
+        draw = self.coordinator.data.latest_draw
+        return ", ".join(str(number) for number in draw.numbers)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        draw = self.coordinator.data.latest_draw
+        return {
+            "round": draw.round,
+            "draw_date": draw.draw_date,
+            "winning_numbers": list(draw.numbers),
+            "bonus_number": draw.bonus,
+            "first_prize_winners": draw.first_prize_winners,
+            "first_prize_amount": draw.first_prize_amount,
+            "source_status": self.coordinator.data.source_status,
+            "data_source": SOURCE_NAME,
+            "source_url": SOURCE_RESULT_URL,
+        }
+
+
+class LottoWinningStatusSensor(Lotto645Entity, SensorEntity):
+    """Summarize how the saved recommendations performed after a draw."""
+
+    _unrecorded_attributes = frozenset({"results", "winners", "losers"})
+    _attr_name = "당첨 여부"
+    _attr_icon = "mdi:ticket-percent-outline"
+
+    def __init__(self, coordinator: Lotto645Coordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_winning_status"
+
+    @property
+    def native_value(self) -> str:
+        evaluation = self.coordinator.last_draw_evaluation
+        if not evaluation:
+            return "판정 대기"
+        winning_count = int(evaluation.get("winning_game_count", 0))
+        if winning_count:
+            return f"{winning_count}개 당첨 · 최고 {evaluation.get('highest_prize', '당첨')}"
+        return "전체 미당첨"
+
+    def _decorate_result(self, result: dict) -> dict:
+        method_id = str(result.get("method_id", ""))
+        if method_id == AI_METHOD_ID:
+            unique_id = f"{self.coordinator.entry.entry_id}_ai_recommendation"
+        else:
+            unique_id = f"{self.coordinator.entry.entry_id}_method_{method_id}"
+        return {**result, "recommendation_sensor_unique_id": unique_id}
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        evaluation = self.coordinator.last_draw_evaluation
+        if not evaluation:
+            return {
+                "status": "waiting",
+                "message": (
+                    "현재 추천 대상 회차의 추첨번호가 갱신되면 저장된 모든 추천 센서를 "
+                    "자동으로 대조해 1~5등 또는 미당첨을 판정합니다."
+                ),
+                "prize_rules": "1등=6개, 2등=5개+보너스, 3등=5개, 4등=4개, 5등=3개",
+            }
+        results = [self._decorate_result(item) for item in evaluation.get("results", [])]
+        winners = [item for item in results if item.get("status") == "당첨"]
+        losers = [item for item in results if item.get("status") == "미당첨"]
+        return {
+            "status": "evaluated",
+            "round": evaluation.get("round"),
+            "draw_date": evaluation.get("draw_date"),
+            "winning_numbers": evaluation.get("winning_numbers"),
+            "bonus_number": evaluation.get("bonus_number"),
+            "evaluated_at": evaluation.get("evaluated_at"),
+            "prediction_based_on_round": evaluation.get("prediction_based_on_round"),
+            "prediction_generation_sequence": evaluation.get("prediction_generation_sequence"),
+            "prediction_generated_at": evaluation.get("prediction_generated_at"),
+            "checked_game_count": evaluation.get("checked_game_count", 0),
+            "winning_game_count": evaluation.get("winning_game_count", 0),
+            "losing_game_count": evaluation.get("losing_game_count", 0),
+            "highest_prize": evaluation.get("highest_prize"),
+            "highest_prize_sensor": evaluation.get("highest_prize_sensor"),
+            "results": results,
+            "winners": winners,
+            "losers": losers,
+            "prize_rules": "1등=6개, 2등=5개+보너스, 3등=5개, 4등=4개, 5등=3개",
+            "note": "실제 entity_id는 사용자가 이름을 변경할 수 있으므로 센서명과 unique_id를 함께 제공합니다.",
+        }
 
 
 class LottoLatestDrawSensor(Lotto645Entity, SensorEntity):

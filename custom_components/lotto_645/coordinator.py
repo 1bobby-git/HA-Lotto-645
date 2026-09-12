@@ -44,6 +44,7 @@ from .history import LottoHistoryError, load_bundled_history
 from .methods import DEFAULT_METHOD_IDS, METHOD_MYUNGRI_HETU, normalize_method_ids
 from .models import AnalysisResult, Lotto645Data, LottoDraw, Recommendation
 from .myungri import extract_saju_profile, has_complete_saju_profile
+from .result_evaluator import evaluate_recommendations
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -79,6 +80,8 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         self._suppress_ai_generation_once = False
         self._saju_profile_valid = False
         self._regeneration_exclusions: tuple[tuple[int, ...], ...] = ()
+        self._prediction_snapshot: dict[str, Any] | None = None
+        self._draw_evaluation: dict[str, Any] | None = None
         self._manual_lock = asyncio.Lock()
 
     @property
@@ -146,6 +149,11 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
     def local_generated_at(self) -> datetime | None:
         return self._local_generated_at
 
+    @property
+    def last_draw_evaluation(self) -> dict[str, Any] | None:
+        """Return the latest persisted recommendation-vs-draw evaluation."""
+        return self._draw_evaluation
+
     async def _async_setup(self) -> None:
         """Load HA cache first, then the release-bundled last-known-good seed."""
         self._saju_profile_valid = await self.hass.async_add_executor_job(
@@ -154,6 +162,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         payload = await self._store.async_load()
         if payload:
             try:
+                prediction_snapshot = payload.get("prediction_snapshot")
+                if isinstance(prediction_snapshot, dict):
+                    self._prediction_snapshot = prediction_snapshot
+                draw_evaluation = payload.get("draw_evaluation")
+                if isinstance(draw_evaluation, dict):
+                    self._draw_evaluation = draw_evaluation
                 draws = [
                     LottoDraw.from_storage(item) for item in payload.get("draws", [])
                 ]
@@ -189,6 +203,8 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 self._cached_ai_generated_at = None
                 self._local_generation_nonce = 0
                 self._local_generated_at = None
+                self._prediction_snapshot = None
+                self._draw_evaluation = None
                 _LOGGER.warning("로또 로컬 캐시를 읽지 못했습니다: %s", err)
 
         if self.history:
@@ -224,9 +240,83 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                     if self._cached_ai_generated_at
                     else None
                 ),
+                "prediction_snapshot": self._prediction_snapshot,
+                "draw_evaluation": self._draw_evaluation,
             }
         )
         self._needs_storage_save = False
+
+    def _build_prediction_snapshot(
+        self,
+        analysis: AnalysisResult,
+        ai_recommendation: Recommendation | None,
+        ai_generated_at: datetime | None,
+    ) -> dict[str, Any]:
+        recommendations = [item.to_storage() for item in analysis.recommendations]
+        if ai_recommendation is not None:
+            recommendations.append(ai_recommendation.to_storage())
+        return {
+            "target_round": analysis.target_round,
+            "based_on_round": analysis.based_on_round,
+            "local_generation_sequence": self._local_generation_nonce,
+            "local_generated_at": (
+                self._local_generated_at.isoformat() if self._local_generated_at else None
+            ),
+            "ai_generated_at": ai_generated_at.isoformat() if ai_generated_at else None,
+            "recommendations": recommendations,
+        }
+
+    def _set_prediction_snapshot(
+        self,
+        analysis: AnalysisResult,
+        ai_recommendation: Recommendation | None,
+        ai_generated_at: datetime | None,
+    ) -> None:
+        snapshot = self._build_prediction_snapshot(
+            analysis, ai_recommendation, ai_generated_at
+        )
+        if snapshot != self._prediction_snapshot:
+            self._prediction_snapshot = snapshot
+            self._needs_storage_save = True
+
+    def _evaluate_prediction_snapshot(self) -> None:
+        snapshot = self._prediction_snapshot
+        if not isinstance(snapshot, dict):
+            return
+        try:
+            target_round = int(snapshot.get("target_round", 0))
+        except (TypeError, ValueError):
+            return
+        if target_round <= 0:
+            return
+        if self._draw_evaluation and self._draw_evaluation.get("round") == target_round:
+            return
+        draw = next((item for item in self.history if item.round == target_round), None)
+        if draw is None:
+            return
+        try:
+            recommendations = tuple(
+                Recommendation.from_storage(item)
+                for item in snapshot.get("recommendations", [])
+                if isinstance(item, dict)
+            )
+        except (KeyError, TypeError, ValueError) as err:
+            _LOGGER.warning("저장된 추천 스냅샷을 당첨 판정에 사용할 수 없습니다: %s", err)
+            return
+        self._draw_evaluation = evaluate_recommendations(
+            draw,
+            recommendations,
+            prediction_snapshot=snapshot,
+            evaluated_at=datetime.now(UTC),
+        )
+        self._needs_storage_save = True
+        _LOGGER.info(
+            "%s회 추천 결과 판정 완료: %s게임 중 %s게임 당첨, 최고 %s",
+            target_round,
+            self._draw_evaluation.get("checked_game_count", 0),
+            self._draw_evaluation.get("winning_game_count", 0),
+            self._draw_evaluation.get("highest_prize", "미당첨"),
+        )
 
     @staticmethod
     def _history_changed(left: list[LottoDraw], right: list[LottoDraw]) -> bool:
@@ -239,6 +329,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
 
     async def _async_update_data(self) -> Lotto645Data:
         """Prefer the shared mirror; never crawl official history from HA clients."""
+        if self.data is not None:
+            self._set_prediction_snapshot(
+                self.data.analysis,
+                self.data.ai_recommendation,
+                self.data.ai_generated_at,
+            )
         changed = False
         source_status = self._startup_source or "cache"
         old_latest_round = self.history[-1].round if self.history else 0
@@ -306,6 +402,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             )
 
         if self.history[-1].round != old_latest_round:
+            self._evaluate_prediction_snapshot()
             self._cached_ai_recommendation = None
             self._cached_ai_generated_at = None
             self._local_generation_nonce = 0
@@ -377,6 +474,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
                 ai_error = str(err)
                 _LOGGER.warning("AI 로또 추천 자동 생성 실패: %s", err)
 
+        self._set_prediction_snapshot(analysis, ai_recommendation, ai_generated_at)
         if self._needs_storage_save:
             await self._save_storage()
 
@@ -569,6 +667,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             ai_error=None,
             ai_generated_at=generated_at,
         )
+        self._set_prediction_snapshot(self.data.analysis, recommendation, generated_at)
         await self._save_storage()
         self.async_update_listeners()
         return recommendation

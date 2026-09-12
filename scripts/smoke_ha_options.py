@@ -74,6 +74,7 @@ async def main():
         obj=object.__new__(cls)
         obj.entry=types.SimpleNamespace(options={})
         obj._manual_lock=asyncio.Lock();obj._local_generation_nonce=0
+        obj._prediction_snapshot=None;obj._draw_evaluation=None;obj._needs_storage_save=False
         rec=models.Recommendation(1,'weighted_frequency','local','stats',(1,2,3,4,5,6),'local reason',.5,{})
         saju=models.Recommendation(2,'myungri_hetu_day_pillar','saju','saju',(7,8,9,10,11,12),'DO NOT SEND PERSONAL SAJU',.5,{})
         ai=models.Recommendation(3,'home_assistant_ai','ai','ai',(13,14,15,16,17,18),'ai',None,{},'ai_task')
@@ -86,6 +87,15 @@ async def main():
         assert set(obj._regeneration_exclusions)=={rec.numbers,saju.numbers,ai.numbers}
         assert 'DO NOT SEND PERSONAL SAJU' not in obj._ai_prompt(obj.data.analysis,1)
         obj.history=[obj.data.latest_draw]
+        obj._prediction_snapshot={
+            "target_round":30,"based_on_round":29,"local_generation_sequence":0,
+            "local_generated_at":None,"recommendations":[
+                models.Recommendation(1,"old","old sensor","test",(30,31,32,1,2,3),"r",.5,{}).to_storage()
+            ]
+        }
+        obj._evaluate_prediction_snapshot()
+        assert obj._draw_evaluation["round"]==30
+        assert obj._draw_evaluation["results"][0]["prize"]=="5등"
         for bad in (1.5,True,float('nan'),float('inf')):
             payload={f'number_{i}':i for i in range(1,7)};payload['number_1']=bad;payload['reason']='x'
             try:obj._parse_ai_result(payload,obj.data.analysis)
