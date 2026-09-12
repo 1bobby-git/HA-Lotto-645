@@ -1,0 +1,28 @@
+name: Ticket Workspace
+on:
+  push:
+    branches: [feat/v1.9.0-purchased-ticket-results]
+    paths: [.github/workflows/ticket-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Export tracked files and pure Python dependencies
+        run: |
+          mkdir -p /tmp/ticket-workspace/wheels
+          git archive --format=zip HEAD > /tmp/ticket-workspace/source.zip
+          python -m pip wheel --no-deps --wheel-dir /tmp/ticket-workspace/wheels lunar_python==1.4.8 korean-lunar-calendar==0.4.0 voluptuous
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ticket-workspace
+          path: /tmp/ticket-workspace/
+          retention-days: 1
