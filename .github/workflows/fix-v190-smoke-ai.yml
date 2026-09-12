@@ -1,0 +1,39 @@
+name: Fix v1.9 AI Smoke
+on:
+  push:
+    branches: [feat/v1.9.0-purchased-ticket-results]
+    paths: [.github/workflows/fix-v190-smoke-ai.yml]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Initialize real coordinator AI cache contract in smoke fixture
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/smoke_ha_options.py')
+          s=p.read_text()
+          anchor="        obj.data=models.Lotto645Data(models.LottoDraw(30,'2026-09-05',(30,31,32,33,34,35),36),models.AnalysisResult(31,30,(rec,saju),{}),30,datetime.now(timezone.utc),'cache',ai)\n"
+          addition=anchor+"        obj._cached_ai_recommendation=ai;obj._cached_ai_generated_at=None\n"
+          if anchor not in s:
+              raise SystemExit('coordinator smoke fixture anchor not found')
+          if 'obj._cached_ai_recommendation=ai' not in s:
+              s=s.replace(anchor,addition,1)
+          p.write_text(s)
+          PY
+          python -m compileall -q scripts
+          git diff --check
+      - name: Commit and remove one-shot workflow
+        run: |
+          rm .github/workflows/fix-v190-smoke-ai.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test: initialize coordinator AI cache in result smoke'
+          git push
