@@ -1,0 +1,46 @@
+name: Check Historical Original Logo
+on:
+  push:
+    branches: [feat/v1.10.0-fast-results-qr]
+    paths: [.github/workflows/check-original-brand.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -q Pillow
+      - name: Look for an already-stored exact original, without altering history
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          import subprocess,io,hashlib,json,base64,re
+          target='49c50d32ada65824bebca839b2f50fc76bcf509d5ffabe432032f913b7a15c5d'
+          matches=[];seen=set();candidates=[]
+          for line in subprocess.check_output(['git','rev-list','--objects','--all']).decode().splitlines():
+              bits=line.split(' ',1)
+              if len(bits)<2:continue
+              sha,name=bits
+              if sha in seen or not (name.lower().endswith(('.png','.svg','.webp')) and any(w in name.lower() for w in ('brand','logo','icon'))):continue
+              seen.add(sha)
+              raw=subprocess.check_output(['git','cat-file','blob',sha])
+              if len(raw)>5000000:continue
+              blobs=[raw] if not name.endswith('.svg') else [base64.b64decode(b) for b in re.findall(rb'data:image/png;base64,([A-Za-z0-9+/=]+)',raw)]
+              for data in blobs:
+                  try:
+                      im=Image.open(io.BytesIO(data)).convert('RGBA')
+                      if im.width<1000:continue
+                      digest=hashlib.sha256(im.tobytes()).hexdigest()
+                      candidates.append({'sha':sha,'path':name,'bytes':len(data),'size':im.size,'pixels':digest})
+                      if im.size==(2048,682) and digest==target:matches.append(candidates[-1])
+                  except Exception:pass
+          print(json.dumps({'matches':matches,'large_candidates':candidates},ensure_ascii=False,indent=2))
+          PY
