@@ -14,9 +14,9 @@ ROOT=Path(__file__).resolve().parents[1]
 for name,path in [('custom_components',ROOT/'custom_components'),('custom_components.lotto_645',ROOT/'custom_components/lotto_645')]:
     module=types.ModuleType(name);module.__path__=[str(path)];sys.modules.setdefault(name,module)
 
-import voluptuous_serialize
+from probatio import to_field_list
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import selector
+from homeassistant.helpers import config_validation as cv
 from homeassistant.data_entry_flow import FlowResultType
 
 flow_module=importlib.import_module('custom_components.lotto_645.config_flow')
@@ -26,7 +26,7 @@ const=importlib.import_module('custom_components.lotto_645.const')
 
 
 def serialize_form(result):
-    schema=voluptuous_serialize.convert(result['data_schema'],custom_serializer=selector.custom_serializer)
+    schema=to_field_list(result['data_schema'],custom_serializer=cv.custom_serializer)
     json.dumps(schema,allow_nan=False)
     for field in schema:
         assert field.get('default','missing') is not None
