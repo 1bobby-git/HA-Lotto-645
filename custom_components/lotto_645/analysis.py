@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from itertools import combinations
+from heapq import heappush, heapreplace
 import math
 from statistics import fmean, median
 from typing import Any
@@ -69,10 +70,29 @@ def _z_residual(count: float, trials: int, probability: float) -> float:
 
 
 def _rank01(values: dict[int, float]) -> dict[int, float]:
+    """Average-rank ties; equal evidence must not favor a larger ball number."""
+    if any(not math.isfinite(value) for value in values.values()):
+        raise ValueError("분석 지표에 유효하지 않은 숫자가 있습니다")
     ordered = sorted(values, key=lambda number: (values[number], number))
     if len(ordered) <= 1:
         return {number: 0.5 for number in ordered}
-    return {number: index / (len(ordered) - 1) for index, number in enumerate(ordered)}
+    result: dict[int, float] = {}
+    start = 0
+    while start < len(ordered):
+        end = start + 1
+        while end < len(ordered) and values[ordered[end]] == values[ordered[start]]:
+            end += 1
+        rank = (start + end - 1) / (2 * (len(ordered) - 1))
+        for number in ordered[start:end]:
+            result[number] = rank
+        start = end
+    return result
+
+
+def _bayesian_feature(values: dict[int, float]) -> dict[int, float]:
+    """Keep posterior effect size: rank-transforming would undo shrinkage."""
+    return {number: 0.5 + 0.5 * math.tanh(value / NUMBER_PROBABILITY)
+            for number, value in values.items()}
 
 
 def _gap_since_last(history: list[LottoDraw], number: int) -> int:
@@ -194,7 +214,10 @@ def _cycle_fit(history: list[LottoDraw], current_gaps: dict[int, int]) -> dict[i
     for number in NUMBERS:
         points = occurrences[number]
         intervals = [points[i] - points[i - 1] for i in range(1, len(points))]
-        typical = float(median(intervals)) if intervals else 7.0
+        if not intervals:
+            result[number] = 0.0  # no observed cycle; neutral, not an invented 7-day cycle
+            continue
+        typical = float(median(intervals))
         distance = abs((current_gaps[number] + 1) - typical)
         result[number] = -distance / max(typical, 1.0)
     return result
@@ -267,6 +290,12 @@ def _feature_maps(
         "myungri_resonance": dict(myungri["number_resonance"]),
     }
     ranked = {name: _rank01(values) for name, values in raw_features.items()}
+    ranked["bayesian_60"] = _bayesian_feature(bayesian_60)
+    ranked["myungri_resonance"] = dict(myungri["number_resonance"])
+    # Missing recurrence observations are neutral even among observed cycles.
+    for number in NUMBERS:
+        if count_long[number] < 2:
+            ranked["cycle_fit"][number] = 0.5
     context = {
         "z_long": z_long,
         "z10": z10,
@@ -290,6 +319,7 @@ def _feature_maps(
 def _method_number_scores(method: MethodDefinition, ranked: dict[str, dict[int, float]]) -> dict[int, float]:
     return {
         number: sum(weight * ranked[feature][number] for feature, weight in method.weights.items())
+        / sum(method.weights.values())
         for number in NUMBERS
     }
 
@@ -328,9 +358,30 @@ def _delta_score(combo: tuple[int, ...]) -> float:
     return max(0.0, 0.42 * within_15 + 0.21 * uniqueness + 0.18 * max_delta_score + 0.19 * range_score - 0.20 * repeated_penalty)
 
 
+def match_probability(matches: int) -> float:
+    """Exact overlap-category mass for two 6-subsets of 45, not ticket odds."""
+    if not 0 <= matches <= DRAW_SIZE:
+        return 0.0
+    return math.comb(6, matches) * math.comb(39, 6 - matches) / math.comb(45, 6)
+
+
+_CARRYOVER_MASSES = tuple(match_probability(k) for k in range(7))
+
+
 def _carryover_score(combo: tuple[int, ...], latest_numbers: set[int]) -> float:
     overlap = len(set(combo) & latest_numbers)
-    return {0: 0.38, 1: 1.0, 2: 0.88, 3: 0.35}.get(overlap, 0.0)
+    return _CARRYOVER_MASSES[overlap] / max(_CARRYOVER_MASSES)
+
+
+def _component_weights(method: MethodDefinition) -> dict[str, float]:
+    weights = {
+        "individual": 0.66, "pair": method.pair_weight,
+        "triplet": method.triplet_weight, "diversity": method.diversity_weight,
+        "balance": method.balance_weight, "delta": method.delta_weight,
+        "carryover": method.carryover_weight, "myungri": method.myungri_weight,
+    }
+    total = sum(weights.values())
+    return {key: value / total for key, value in weights.items() if value}
 
 
 def _build_seen_subset_counts(history: list[LottoDraw]) -> tuple[Counter[tuple[int, ...]], Counter[tuple[int, ...]]]:
@@ -354,11 +405,11 @@ def _score_components(combo: tuple[int, ...], number_scores: dict[int, float], m
         "individual": fmean(number_scores[number] for number in combo),
         "pair": (fmean(pair_values) + 1.0) / 2.0,
         "triplet": triplet_value,
-        "diversity": _combo_diversity(combo, context["velocity"]),
-        "balance": _balance_score(combo),
-        "delta": _delta_score(combo),
-        "carryover": _carryover_score(combo, latest_numbers),
-        "myungri": combo_myungri_score(combo, context["myungri"]),
+        "diversity": _combo_diversity(combo, context["velocity"]) if method.diversity_weight else 0.5,
+        "balance": _balance_score(combo) if method.balance_weight else 0.5,
+        "delta": _delta_score(combo) if method.delta_weight else 0.5,
+        "carryover": _carryover_score(combo, latest_numbers) if method.carryover_weight else 0.5,
+        "myungri": combo_myungri_score(combo, context["myungri"]) if method.myungri_weight else 0.5,
     }
 
 
@@ -371,17 +422,8 @@ def _combo_score(combo: tuple[int, ...], number_scores: dict[int, float], method
     penalty = latest_penalty_rate * latest_overlap
     penalty += 0.012 * min(repeated_quad, 3)
     penalty += 0.026 * min(repeated_quint, 2)
-    score = (
-        0.66 * components["individual"]
-        + method.pair_weight * components["pair"]
-        + method.triplet_weight * components["triplet"]
-        + method.diversity_weight * components["diversity"]
-        + method.balance_weight * components["balance"]
-        + method.delta_weight * components["delta"]
-        + method.carryover_weight * components["carryover"]
-        + method.myungri_weight * components["myungri"]
-        - penalty
-    )
+    weights = context.get("component_weights") or _component_weights(method)
+    score = max(0.0, min(1.0, sum(weights[key] * components[key] for key in weights) - penalty))
     components["historical_similarity_penalty"] = penalty
     return score, components
 
@@ -390,7 +432,7 @@ def _candidate_pool(method: MethodDefinition, number_scores: dict[int, float]) -
     ordered = sorted(NUMBERS, key=lambda number: (-number_scores[number], number))
     base_count = max(14, method.pool_size - 10)
     selected: list[int] = ordered[:base_count]
-    for start, end in ((1, 9), (10, 19), (20, 29), (30, 39), (40, 45)):
+    for start, end in ((1, 10), (11, 20), (21, 30), (31, 40), (41, 45)):
         bucket = [number for number in ordered if start <= number <= end]
         for number in bucket[:2]:
             if number not in selected:
@@ -404,42 +446,51 @@ def _candidate_pool(method: MethodDefinition, number_scores: dict[int, float]) -
 
 
 def _select_candidate(method: MethodDefinition, history: list[LottoDraw], ranked: dict[str, dict[int, float]], context: dict[str, Any], selected: list[tuple[int, ...]], past_combos: set[tuple[int, ...]], quads: Counter[tuple[int, ...]], quints: Counter[tuple[int, ...]], generation_nonce: int) -> tuple[tuple[int, ...], float, dict[str, float]]:
+    """Bounded top-k search; never fall back to a duplicate or a prior ticket."""
     number_scores = _method_number_scores(method, ranked)
     pool = _candidate_pool(method, number_scores)
     latest_numbers = set(history[-1].numbers)
-    scored: list[tuple[float, tuple[int, ...], dict[str, float]]] = []
+    forbidden = past_combos | set(selected) | set(context.get("excluded_combinations", ()))
+    context["component_weights"] = _component_weights(method)
+    heap: list[tuple[float, tuple[int, ...], tuple[int, ...]]] = []
     for combo in combinations(pool, 6):
-        if combo in past_combos:
+        if combo in forbidden:
             continue
-        score, components = _combo_score(combo, number_scores, method, context, latest_numbers, quads, quints)
-        scored.append((score, combo, components))
-    scored.sort(key=lambda item: (-item[0], item[1]))
+        score, _ = _combo_score(combo, number_scores, method, context, latest_numbers, quads, quints)
+        # Negative tuple retains the old deterministic preference for small tuples
+        # only as a documented tie-break, not as fake evidence in feature ranks.
+        item = (score, tuple(-number for number in combo), combo)
+        if len(heap) < 1200:
+            heappush(heap, item)
+        elif item > heap[0]:
+            heapreplace(heap, item)
+    scored = sorted(heap, reverse=True)
     if not scored:
-        raise ValueError("추천 가능한 조합을 생성하지 못했습니다")
-
+        raise ValueError("이전 추천을 제외한 유효한 후보가 없습니다")
     usage = Counter(number for previous in selected for number in previous)
-    for max_overlap in (3, 4, 5):
-        qualified: list[tuple[float, tuple[int, ...], dict[str, float]]] = []
-        for item in scored[:1200]:
-            score, combo, components = item
-            if any(usage[number] >= 3 for number in combo):
-                continue
-            if all(len(set(combo) & set(previous)) <= max_overlap for previous in selected):
-                qualified.append(item)
-                if len(qualified) >= 64:
-                    break
+    qualified = []
+    # A fixed global cap of 3 cannot hold for many selected methods. Relax
+    # diversity explicitly; uniqueness and past-winner exclusions are never relaxed.
+    for usage_cap in (3, max(4, len(selected) + 1)):
+        for max_overlap in (3, 4, 5):
+            qualified = [item for item in scored
+                         if all(usage[number] < usage_cap for number in item[2])
+                         and all(len(set(item[2]) & set(previous)) <= max_overlap
+                                 for previous in selected)][:64]
+            if qualified:
+                break
         if qualified:
-            if generation_nonce <= 0 or len(qualified) == 1:
-                return qualified[0][1], qualified[0][0], qualified[0][2]
-            window = min(len(qualified), 48)
-            if window == 1:
-                return qualified[0][1], qualified[0][0], qualified[0][2]
-            offset = sum(ord(char) for char in method.method_id) % (window - 1)
-            index = 1 + ((generation_nonce - 1 + offset) % (window - 1))
-            score, combo, components = qualified[index]
-            return combo, score, components
-
-    return scored[0][1], scored[0][0], scored[0][2]
+            break
+    if not qualified:
+        qualified = scored[:64]  # already filtered for all hard exclusions
+    index = 0
+    if generation_nonce > 0 and len(qualified) > 1:
+        window = min(len(qualified), 48)
+        offset = sum(ord(char) for char in method.method_id) % (window - 1)
+        index = 1 + ((generation_nonce - 1 + offset) % (window - 1))
+    score, _, combo = qualified[index]
+    _, components = _combo_score(combo, number_scores, method, context, latest_numbers, quads, quints)
+    return combo, score, components
 
 
 def _max_past_overlap(combo: tuple[int, ...], history: Iterable[LottoDraw]) -> int:
@@ -458,6 +509,7 @@ def _recommendation_reason(method: MethodDefinition, combo: tuple[int, ...], con
     gap: dict[int, int] = context["gap"]
     phase_leaders = sorted(combo, key=lambda n: (-abs(velocity[n]), n))[:2]
     transition_leaders = sorted(combo, key=lambda n: (-transition[n], n))[:2]
+    hot_leaders = sorted(combo, key=lambda n: (-velocity[n], n))[:2]
     overdue_leaders = sorted(combo, key=lambda n: (-gap[n], n))[:2]
     pair, pair_value = _strongest_pair(combo, context)
 
@@ -479,7 +531,7 @@ def _recommendation_reason(method: MethodDefinition, combo: tuple[int, ...], con
             METHOD_TRANSITION_GAP: f"다음 회차 전이 상위 {transition_leaders[0]}·{transition_leaders[1]}와 미출현 간격·시간축 곡률, {pair[0]}-{pair[1]} 연결을 결합",
             METHOD_MULTISCALE_RESONANCE: f"여러 시간대의 변화가 동시에 강한 {phase_leaders[0]}·{phase_leaders[1]}와 전이·그래프·간격을 공명 점수로 결합",
             METHOD_WEIGHTED_FREQUENCY: f"최근 10·30·100회 및 전체 빈도를 가중 합산하고 {pair[0]}-{pair[1]} 동반출현과 구간 균형을 보정",
-            METHOD_HOT_NUMBERS: f"최근 출현 상승세가 큰 {phase_leaders[0]}·{phase_leaders[1]}를 중심으로 핫넘버 집중과 번호대 쏠림을 함께 제어",
+            METHOD_HOT_NUMBERS: f"선택 조합 내 최근 출현 변화가 높은 {hot_leaders[0]}·{hot_leaders[1]}를 중심으로 핫넘버 집중과 번호대 쏠림을 함께 제어",
             METHOD_OVERDUE_GAP: f"현재 미출현 간격이 긴 {overdue_leaders[0]}·{overdue_leaders[1]}를 포함하되 콜드넘버 과집중과 장기 극단값을 제한",
             METHOD_PAIR_COOCCURRENCE: f"전체+최근 120회 동반출현 그래프 중심 조합이며 가장 강한 내부 연결은 {pair[0]}-{pair[1]}",
             METHOD_TRIPLET_COOCCURRENCE: f"세 번호 동시출현 구조와 2개 번호 연결을 함께 평가; 핵심 내부 연결 {pair[0]}-{pair[1]}",
@@ -516,6 +568,7 @@ def build_analysis(
     method_ids: Sequence[str] | None = None,
     generation_nonce: int = 0,
     saju_profile: dict[str, Any] | None = None,
+    excluded_combinations: Sequence[tuple[int, ...]] = (),
 ) -> AnalysisResult:
     """Build one recommendation per selected method.
 
@@ -531,8 +584,18 @@ def build_analysis(
     if history[0].round != 1 or actual_rounds != expected_rounds:
         raise ValueError("1회부터 최신 회차까지 연속된 전체 데이터가 필요합니다")
 
-    selected_method_ids = normalize_method_ids(method_ids if method_ids is not None else DEFAULT_METHOD_IDS)
-    ranked, context = _feature_maps(history, saju_profile)
+    selected_method_ids = (() if method_ids is not None and not method_ids else
+                           normalize_method_ids(method_ids if method_ids is not None else DEFAULT_METHOD_IDS))
+    for draw in history:
+        if (len(draw.numbers) != 6 or len(set(draw.numbers)) != 6
+                or any(type(number) is not int or not 1 <= number <= 45 for number in draw.numbers)
+                or tuple(sorted(draw.numbers)) != tuple(draw.numbers)
+                or type(draw.bonus) is not int or not 1 <= draw.bonus <= 45
+                or draw.bonus in draw.numbers):
+            raise ValueError("유효하지 않은 당첨 회차 데이터입니다")
+    profile = saju_profile if METHOD_MYUNGRI_HETU in selected_method_ids else None
+    ranked, context = _feature_maps(history, profile)
+    context["excluded_combinations"] = tuple(tuple(sorted(combo)) for combo in excluded_combinations)
     if (
         METHOD_MYUNGRI_HETU in selected_method_ids
         and context["myungri"].get("status") != "ready"
@@ -555,6 +618,13 @@ def build_analysis(
             {
                 "generation_sequence": generation_nonce,
                 "score_components": {key: round(value, 4) for key, value in components.items()},
+                "score_component_weights": {key: round(value, 6) for key, value in _component_weights(method).items()},
+                "score_meaning": "0~1의 후보 적합도이며 당첨 확률이 아닙니다",
+                "validation_scope": "계산 규칙 및 출력 조건 검증; 예측 효과 미입증",
+                "number_feature_weights": {key: round(value / sum(method.weights.values()), 6)
+                                           for key, value in method.weights.items()},
+                "number_feature_scores": {str(n): {key: round(ranked[key][n], 6)
+                                                   for key in method.weights} for n in combo},
                 "exact_past_first_prize_match": False,
                 "max_numbers_matching_any_past_first_prize": _max_past_overlap(combo, history),
                 "latest_draw_overlap": len(set(combo) & set(history[-1].numbers)),
@@ -579,7 +649,7 @@ def build_analysis(
     triplet_strength = context["triplet_strength_raw"]
     myungri = context["myungri"]
     summary = {
-        "algorithm": "selectable_multi_formula_v5_personal_saju",
+        "algorithm": "selectable_multi_formula_v6_audited_saju",
         "generation_sequence": generation_nonce,
         "history_draws": len(history),
         "selected_method_ids": list(selected_method_ids),

@@ -1,29 +1,69 @@
 name: Validate
-
 on:
   push:
   pull_request:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
-          cache: pip
+          python-version: '3.14'
       - name: Install test dependencies
-        run: python -m pip install --upgrade pip pytest "lunar_python==1.4.8"
+        run: python -m pip install -q pytest 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0'
       - name: Compile Python sources
-        run: python -m compileall -q custom_components/lotto_645
-      - name: Run analysis regression tests
+        run: python -m compileall -q custom_components/lotto_645 scripts
+      - name: Run all regression and rule-table tests
         run: python -m pytest -q
+  ha-options:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install declared Home Assistant baseline
+        run: python -m pip install -q 'homeassistant==2026.9.0' 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0'
+      - name: Install HA integration manifest requirements
+        run: |
+          python - <<'PY'
+          import importlib.util
+          import json
+          from pathlib import Path
+          import subprocess
+          import sys
 
+          root = Path(next(iter(importlib.util.find_spec('homeassistant').submodule_search_locations))) / 'components'
+          # AI Task imports these media domains in Python even when they are
+          # not listed in its manifest dependencies. Install their production
+          # requirements too; do not replace real HA modules with test stubs.
+          pending = ['ai_task', 'camera', 'stream', 'image']
+          visited = set()
+          requirements = set()
+          while pending:
+              domain = pending.pop()
+              if domain in visited:
+                  continue
+              visited.add(domain)
+              manifest = json.loads((root / domain / 'manifest.json').read_text())
+              requirements.update(manifest.get('requirements', []))
+              pending.extend(manifest.get('dependencies', []))
+          print('Install declared requirements for:', ', '.join(sorted(visited)), flush=True)
+          if requirements:
+              subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', *sorted(requirements)], check=True)
+          PY
+      - name: Exercise real HA OptionsFlow and selector serialization
+        run: python scripts/smoke_ha_options.py
   hassfest:
     runs-on: ubuntu-latest
     steps:
