@@ -1,55 +1,53 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["Validate"]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: write
+  actions: read
+
+concurrency:
+  group: lotto-hacs-release
+  cancel-in-progress: false
 
 jobs:
   release:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-
-      - name: Read integration version
-        id: version
-        shell: bash
-        run: |
-          VERSION=$(python - <<'PY'
-          import json
-          from pathlib import Path
-          data = json.loads(Path('custom_components/lotto_645/manifest.json').read_text(encoding='utf-8'))
-          print(data['version'])
-          PY
-          )
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Check whether release already exists
-        id: existing
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Publish only the validated main commit for HACS
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
+          VALIDATED_SHA: ${{ github.event.workflow_run.head_sha }}
         shell: bash
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          HEAD_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [ "$HEAD_SHA" != "$VALIDATED_SHA" ]; then
+            echo "A newer main commit is awaiting its own validation; skip stale release"
+            exit 0
           fi
-
-      - name: Publish GitHub release for HACS
-        if: steps.existing.outputs.exists != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
-        shell: bash
-        run: |
-          gh release create "$TAG" \
-            --target "$GITHUB_SHA" \
-            --title "$TAG" \
-            --generate-notes
+          VERSION=$(python -c 'import json; print(json.load(open("custom_components/lotto_645/manifest.json"))["version"])')
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid stable integration version" >&2
+            exit 1
+          fi
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; never move an existing tag"
+          else
+            gh release create "$TAG" --target "$VALIDATED_SHA" --title "$TAG" --generate-notes
+          fi
