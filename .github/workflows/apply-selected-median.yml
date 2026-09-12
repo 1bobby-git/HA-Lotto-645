@@ -1,0 +1,201 @@
+name: Apply Selected Median Consensus
+
+on:
+  push:
+    branches: ["feat/v1.7.0-selected-median-consensus"]
+    paths: [".github/workflows/apply-selected-median.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v1.7.0-selected-median-consensus
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Apply source changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'pattern not found in {path}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # methods.py: add an aggregate method that uses the median of the other selected local methods.
+          path = 'custom_components/lotto_645/methods.py'
+          replace_once(path,
+              'METHOD_PUBLIC_ENSEMBLE: Final = "public_ensemble"\n# Keep the legacy ID for existing config-entry compatibility.\n',
+              'METHOD_PUBLIC_ENSEMBLE: Final = "public_ensemble"\nMETHOD_SELECTED_MEDIAN: Final = "selected_median_consensus"\n# Keep the legacy ID for existing config-entry compatibility.\n')
+          replace_once(path,
+              '        myungri_weight=0.52,\n        pool_size=22,\n    ),\n)\n',
+              '        myungri_weight=0.52,\n        pool_size=22,\n    ),\n    MethodDefinition(\n        METHOD_SELECTED_MEDIAN,\n        "합의 추천 · 선택 방식 중앙값",\n        "선택 방식 집계",\n        (\n            "현재 함께 선택한 다른 로컬 추천 방식들의 1~45 번호별 0~1 적합도를 모아 각 번호의 중앙값을 계산합니다. "\n            "한 방식의 극단값이 전체를 끌고 가지 않도록 중앙값을 사용하며, 그 중앙값이 높은 번호들로 최종 6개 조합을 만듭니다. "\n            "AI 추천은 집계에서 제외하고, 명리 방식은 사용자가 함께 선택한 경우에만 포함합니다. 의미 있는 중앙값을 위해 다른 추천 방식 2개 이상이 필요합니다."\n        ),\n        {},\n        pool_size=26,\n    ),\n)\n')
+          replace_once(path,
+              '            "requirements": (\n                "생년월일, 출생시간, 양력/음력, 성별, 출생지, 시간대"\n                if method.method_id == METHOD_MYUNGRI_HETU\n                else "없음"\n            ),\n',
+              '            "requirements": (\n                "생년월일, 출생시간, 양력/음력, 성별, 출생지, 시간대"\n                if method.method_id == METHOD_MYUNGRI_HETU\n                else "다른 추천 방식 2개 이상"\n                if method.method_id == METHOD_SELECTED_MEDIAN\n                else "없음"\n            ),\n')
+
+          # analysis.py: compute robust per-number medians from the methods selected by the user.
+          path = 'custom_components/lotto_645/analysis.py'
+          replace_once(path,
+              '    METHOD_PUBLIC_ENSEMBLE,\n    METHOD_RECENCY_DECAY,\n',
+              '    METHOD_PUBLIC_ENSEMBLE,\n    METHOD_SELECTED_MEDIAN,\n    METHOD_RECENCY_DECAY,\n')
+          replace_once(path,
+              'def _method_number_scores(method: MethodDefinition, ranked: dict[str, dict[int, float]]) -> dict[int, float]:\n    return {\n        number: sum(weight * ranked[feature][number] for feature, weight in method.weights.items())\n        / sum(method.weights.values())\n        for number in NUMBERS\n    }\n\n\n',
+              '''def _method_number_scores(method: MethodDefinition, ranked: dict[str, dict[int, float]]) -> dict[int, float]:\n    if method.method_id == METHOD_SELECTED_MEDIAN:\n        values = ranked.get("_selected_median_consensus")\n        if values is None:\n            raise ValueError("선택 방식 중앙값 계산 정보가 준비되지 않았습니다")\n        return dict(values)\n    return {\n        number: sum(weight * ranked[feature][number] for feature, weight in method.weights.items())\n        / sum(method.weights.values())\n        for number in NUMBERS\n    }\n\n\ndef _prepare_selected_median(\n    selected_method_ids: Sequence[str],\n    ranked: dict[str, dict[int, float]],\n) -> dict[str, Any]:\n    """Build a robust consensus score from the user's other selected methods.\n\n    The median is calculated on each method's already-normalized 0..1 number\n    suitability score.  Final six-number outputs are not averaged position by\n    position because doing that would create artificial numbers unrelated to the\n    underlying method evidence.\n    """\n    contributors = tuple(\n        method_id for method_id in selected_method_ids\n        if method_id != METHOD_SELECTED_MEDIAN\n    )\n    if len(contributors) < 2:\n        raise ValueError("선택 방식 중앙값은 다른 추천 방식을 2개 이상 함께 선택해야 합니다")\n    source_scores = {\n        method_id: _method_number_scores(METHODS_BY_ID[method_id], ranked)\n        for method_id in contributors\n    }\n    medians: dict[int, float] = {}\n    spreads: dict[int, float] = {}\n    for number in NUMBERS:\n        values = [source_scores[method_id][number] for method_id in contributors]\n        medians[number] = float(median(values))\n        spreads[number] = max(values) - min(values)\n    ranked["_selected_median_consensus"] = medians\n    return {\n        "source_method_ids": list(contributors),\n        "source_method_labels": [METHODS_BY_ID[method_id].label for method_id in contributors],\n        "source_count": len(contributors),\n        "median_scores": medians,\n        "score_spreads": spreads,\n        "vote_counts": {number: 0 for number in NUMBERS},\n        "rule": "선택한 다른 로컬 방식들의 번호별 0~1 적합도 중앙값; AI 제외",\n    }\n\n\n''')
+          replace_once(path,
+              '    if method.method_id == METHOD_MYUNGRI_HETU:\n        meta = context["myungri"]\n',
+              '''    if method.method_id == METHOD_SELECTED_MEDIAN:\n        meta = context["selected_median_consensus"]\n        votes = meta.get("vote_counts", {})\n        vote_leaders = sorted(combo, key=lambda n: (-votes.get(n, 0), -meta["median_scores"][n], n))[:2]\n        reason = (\n            f"선택한 다른 {meta['source_count']}개 방식의 번호별 적합도 중앙값을 사용; "\n            f"선택결과 중 지지표가 높은 {vote_leaders[0]}·{vote_leaders[1]}, "\n            f"중앙값 상위 조합을 과거 1등·중복 제외 조건으로 확정"\n        )\n    elif method.method_id == METHOD_MYUNGRI_HETU:\n        meta = context["myungri"]\n''')
+          replace_once(path,
+              '    if method.method_id == METHOD_MYUNGRI_HETU:\n        details.update(combo_myungri_details(combo, context["myungri"]))\n    return reason, details\n',
+              '''    if method.method_id == METHOD_SELECTED_MEDIAN:\n        meta = context["selected_median_consensus"]\n        details.update(\n            {\n                "consensus_source_method_ids": meta["source_method_ids"],\n                "consensus_source_methods": meta["source_method_labels"],\n                "consensus_source_count": meta["source_count"],\n                "consensus_rule": meta["rule"],\n                "consensus_number_median_scores": {\n                    str(number): round(meta["median_scores"][number], 6) for number in combo\n                },\n                "consensus_number_score_spread": {\n                    str(number): round(meta["score_spreads"][number], 6) for number in combo\n                },\n                "consensus_number_support_votes": {\n                    str(number): int(meta.get("vote_counts", {}).get(number, 0)) for number in combo\n                },\n            }\n        )\n    if method.method_id == METHOD_MYUNGRI_HETU:\n        details.update(combo_myungri_details(combo, context["myungri"]))\n    return reason, details\n''')
+          replace_once(path,
+              '    profile = saju_profile if METHOD_MYUNGRI_HETU in selected_method_ids else None\n    ranked, context = _feature_maps(history, profile)\n',
+              '''    profile = saju_profile if METHOD_MYUNGRI_HETU in selected_method_ids else None\n    ranked, context = _feature_maps(history, profile)\n    if METHOD_SELECTED_MEDIAN in selected_method_ids:\n        context["selected_median_consensus"] = _prepare_selected_median(\n            selected_method_ids, ranked\n        )\n''')
+          replace_once(path,
+              '    selected: list[tuple[int, ...]] = []\n    recommendations: list[Recommendation] = []\n    for index, method_id in enumerate(selected_method_ids, start=1):\n        method = METHODS_BY_ID[method_id]\n',
+              '''    selected: list[tuple[int, ...]] = []\n    recommendations: list[Recommendation] = []\n    execution_method_ids = tuple(\n        method_id for method_id in selected_method_ids\n        if method_id != METHOD_SELECTED_MEDIAN\n    ) + ((METHOD_SELECTED_MEDIAN,) if METHOD_SELECTED_MEDIAN in selected_method_ids else ())\n    for index, method_id in enumerate(execution_method_ids, start=1):\n        method = METHODS_BY_ID[method_id]\n        if method_id == METHOD_SELECTED_MEDIAN:\n            contributor_ids = set(context["selected_median_consensus"]["source_method_ids"])\n            votes = Counter(\n                number\n                for recommendation in recommendations\n                if recommendation.method_id in contributor_ids\n                for number in recommendation.numbers\n            )\n            context["selected_median_consensus"]["vote_counts"] = {\n                number: votes[number] for number in NUMBERS\n            }\n''')
+          old_details = '''                "number_feature_weights": {key: round(value / sum(method.weights.values()), 6)\n                                           for key, value in method.weights.items()},\n                "number_feature_scores": {str(n): {key: round(ranked[key][n], 6)\n                                                   for key in method.weights} for n in combo},\n'''
+          new_details = '''                "number_feature_weights": (\n                    {"selected_method_median": 1.0}\n                    if method.method_id == METHOD_SELECTED_MEDIAN\n                    else {key: round(value / sum(method.weights.values()), 6)\n                          for key, value in method.weights.items()}\n                ),\n                "number_feature_scores": (\n                    {str(n): {\n                        "selected_method_median": round(\n                            context["selected_median_consensus"]["median_scores"][n], 6\n                        ),\n                        "source_score_spread": round(\n                            context["selected_median_consensus"]["score_spreads"][n], 6\n                        ),\n                        "support_votes": int(\n                            context["selected_median_consensus"].get("vote_counts", {}).get(n, 0)\n                        ),\n                    } for n in combo}\n                    if method.method_id == METHOD_SELECTED_MEDIAN\n                    else {str(n): {key: round(ranked[key][n], 6)\n                                   for key in method.weights} for n in combo}\n                ),\n'''
+          replace_once(path, old_details, new_details)
+          replace_once(path,
+              '        "algorithm": "selectable_multi_formula_v6_audited_saju",\n',
+              '        "algorithm": "selectable_multi_formula_v7_selected_median_consensus",\n')
+          replace_once(path,
+              '        "selected_method_ids": list(selected_method_ids),\n',
+              '        "selected_method_ids": list(selected_method_ids),\n        "execution_method_ids": list(execution_method_ids),\n')
+
+          # Config Flow: a median needs at least two other selected methods.
+          path = 'custom_components/lotto_645/config_flow.py'
+          replace_once(path,
+              '    METHOD_MYUNGRI_HETU,\n    METHODS_BY_ID,\n',
+              '    METHOD_MYUNGRI_HETU,\n    METHOD_SELECTED_MEDIAN,\n    METHODS_BY_ID,\n')
+          replace_once(path,
+              '                if not normalized:\n                    errors[CONF_SELECTED_METHODS] = "select_at_least_one"\n                else:\n                    pending = dict(self._options)\n',
+              '''                if not normalized:\n                    errors[CONF_SELECTED_METHODS] = "select_at_least_one"\n                elif (\n                    METHOD_SELECTED_MEDIAN in normalized\n                    and sum(method_id != METHOD_SELECTED_MEDIAN for method_id in normalized) < 2\n                ):\n                    errors["base"] = "consensus_sources_required"\n                else:\n                    pending = dict(self._options)\n''')
+
+          # Translation/help text.
+          for path in ('custom_components/lotto_645/strings.json', 'custom_components/lotto_645/translations/en.json'):
+              data = json.loads(Path(path).read_text(encoding='utf-8'))
+              desc = data['options']['step']['recommendations']['data_description']['selected_methods']
+              if 'median' not in desc.lower():
+                  data['options']['step']['recommendations']['data_description']['selected_methods'] = desc + ' The selected-method median consensus requires at least two other local methods and excludes AI.'
+              data['options']['error']['consensus_sources_required'] = 'The selected-method median consensus requires at least two other recommendation methods.'
+              Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          path = 'custom_components/lotto_645/translations/ko.json'
+          data = json.loads(Path(path).read_text(encoding='utf-8'))
+          desc = data['options']['step']['recommendations']['data_description']['selected_methods']
+          if '중앙값' not in desc:
+              data['options']['step']['recommendations']['data_description']['selected_methods'] = desc + " '합의 추천 · 선택 방식 중앙값'은 AI를 제외한 다른 로컬 방식 2개 이상을 함께 선택해야 합니다."
+          data['options']['error']['consensus_sources_required'] = "'합의 추천 · 선택 방식 중앙값'을 사용하려면 다른 추천 방식을 2개 이상 함께 선택하세요."
+          Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          # Regression tests.
+          path = 'tests/test_analysis_engine.py'
+          replace_once(path, '    assert len(methods.METHODS) == 16\n', '    assert len(methods.METHODS) == 17\n')
+          replace_once(path,
+              '        if method.method_id == methods.METHOD_MYUNGRI_HETU:\n            continue\n',
+              '        if method.method_id in {methods.METHOD_MYUNGRI_HETU, methods.METHOD_SELECTED_MEDIAN}:\n            continue\n')
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          addition = r'''
+
+
+def test_selected_median_requires_two_other_methods():
+    history = _history(120)
+    with pytest.raises(ValueError, match="2개 이상"):
+        analysis.build_analysis(
+            history,
+            (methods.METHOD_WEIGHTED_FREQUENCY, methods.METHOD_SELECTED_MEDIAN),
+        )
+
+
+def test_selected_median_uses_only_selected_local_methods_and_runs_last():
+    history = _history(120)
+    selected = (
+        methods.METHOD_PHASE_RESIDUAL,
+        methods.METHOD_WEIGHTED_FREQUENCY,
+        methods.METHOD_PAIR_COOCCURRENCE,
+        methods.METHOD_SELECTED_MEDIAN,
+    )
+    result = analysis.build_analysis(history, selected, 0)
+    assert len(result.recommendations) == 4
+    consensus = result.recommendations[-1]
+    assert consensus.method_id == methods.METHOD_SELECTED_MEDIAN
+    assert consensus.details["consensus_source_count"] == 3
+    assert consensus.details["consensus_source_method_ids"] == list(selected[:-1])
+    assert consensus.details["consensus_rule"].startswith("선택한 다른 로컬 방식")
+    assert set(consensus.details["consensus_number_median_scores"]) == {
+        str(number) for number in consensus.numbers
+    }
+    assert all(
+        0 <= value <= 3
+        for value in consensus.details["consensus_number_support_votes"].values()
+    )
+    assert consensus.numbers not in {draw.numbers for draw in history}
+    assert result.summary["execution_method_ids"][-1] == methods.METHOD_SELECTED_MEDIAN
+'''
+          if 'test_selected_median_requires_two_other_methods' not in text:
+              p.write_text(text + addition, encoding='utf-8')
+
+          # Documentation and versioning.
+          path = 'README.md'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          section = '''\n## v1.7.0 · 선택 방식 중앙값 합의 추천\n\n`합의 추천 · 선택 방식 중앙값`을 추가했습니다. 사용자가 함께 선택한 **다른 로컬 추천 방식 2개 이상**의 1~45 번호별 0~1 적합도를 모아 각 번호의 **중앙값(median)** 을 계산하고 중앙값이 높은 번호들로 6개 조합을 만듭니다. 한 방식의 극단값이 전체를 끌고 가지 않게 하는 강건 집계 방식입니다. AI 추천은 집계하지 않으며, 명리 방식은 사용자가 함께 선택했을 때만 포함합니다.\n\n단순히 각 추천게임의 1번째·2번째 번호를 위치별로 평균/중앙값 내지 않습니다. 그런 계산은 존재하지 않는 인공 번호를 만들 수 있으므로, **각 방식이 1~45 각각에 부여한 내부 적합도의 중앙값**을 사용합니다. 센서 속성에서 참여 방식, 번호별 중앙값, 방식 간 점수 범위, 최종 추천에서 받은 지지표 수를 확인할 수 있습니다. 이 합의 점수 역시 당첨 확률이 아닙니다.\n\n'''
+          if '## v1.7.0 · 선택 방식 중앙값 합의 추천' not in text:
+              marker = '# HA-Lotto-645\n'
+              text = text.replace(marker, marker + section, 1)
+          text = text.replace('## 추천 방식 16종', '## 추천 방식 17종')
+          text = text.replace('16. 명리 권장 · 개인 사주 원국·대운·추첨일', '16. 명리 권장 · 개인 사주 원국·대운·추첨일\n17. 합의 추천 · 선택 방식 중앙값')
+          p.write_text(text, encoding='utf-8')
+
+          path = 'docs/FORMULAS.md'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          formula_section = '''\n\n## 합의 추천 · 선택 방식 중앙값\n\n사용자가 동시에 선택한 다른 로컬 추천 방식들의 **번호별 0~1 적합도**를 번호 1~45 각각에 대해 수집하고 중앙값을 계산합니다. 예를 들어 한 번호의 세 방식 점수가 `0.31, 0.72, 0.95`라면 중앙합의 점수는 `0.72`입니다. 특정 방식 하나의 극단치에 덜 민감한 강건 집계입니다.\n\n- 최소 다른 방식 2개 필요\n- AI 추천은 집계 제외\n- 명리는 사용자가 함께 선택한 경우 포함\n- 선택된 다른 방식의 추천게임에서 해당 번호가 실제 선택된 횟수도 `support_votes`로 별도 표시\n- 최종 조합은 과거 1등 완전일치·현재 추천 중복을 계속 제외\n- 번호별 중앙값과 방식 간 최대-최소 점수 범위를 센서 속성으로 공개\n\n이 방식은 여러 휴리스틱의 **중앙 경향을 요약**하는 것이며 독립 추첨의 수학적 당첨확률을 높인다는 뜻이 아닙니다.\n'''
+          if '## 합의 추천 · 선택 방식 중앙값' not in text:
+              text += formula_section
+          p.write_text(text, encoding='utf-8')
+
+          path = 'CHANGELOG.md'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          changelog = '''## 1.7.0\n\n- `합의 추천 · 선택 방식 중앙값` 추가.\n- 선택한 다른 로컬 방식 2개 이상의 번호별 0~1 적합도를 중앙값으로 강건 집계.\n- AI는 집계 제외, 명리는 선택된 경우만 집계.\n- 중앙값 참여 방식·번호별 중앙값·방식 간 점수 범위·최종 지지표 수를 센서 속성으로 공개.\n- 중앙합의는 항상 기초 방식들을 먼저 생성한 뒤 마지막 게임으로 계산.\n- 과거 1등 완전일치·추천 중복·재생성 제외 규칙 유지.\n\n'''
+          if '## 1.7.0' not in text:
+              text = text.replace('# Changelog\n\n', '# Changelog\n\n' + changelog, 1)
+          p.write_text(text, encoding='utf-8')
+
+          replace_once('custom_components/lotto_645/const.py', 'VERSION = "1.6.1"', 'VERSION = "1.7.0"')
+          path = 'custom_components/lotto_645/manifest.json'
+          data = json.loads(Path(path).read_text(encoding='utf-8'))
+          data['version'] = '1.7.0'
+          Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          print('Applied selected-method median consensus changes')
+          PY
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check pytest "lunar_python==1.4.8" "korean-lunar-calendar==0.4.0"
+      - name: Compile and test
+        run: |
+          python -m compileall -q custom_components/lotto_645 tests scripts
+          python -m pytest -q
+      - name: Commit validated changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components tests README.md CHANGELOG.md docs/FORMULAS.md
+          git diff --cached --check
+          git commit -m "feat: add selected-method median consensus recommendation"
+          git push origin HEAD:feat/v1.7.0-selected-median-consensus
