@@ -39,6 +39,8 @@ async def main():
     assert schedule == ((5,11,55),(5,12,20),(5,12,50),(5,13,30),(5,14,0),(6,0,40))
     with tempfile.TemporaryDirectory() as folder:
         hass=HomeAssistant(folder)
+        from homeassistant.helpers import entity_registry as er
+        await er.async_get(hass).async_load()
         flow=flow_module.Lotto645OptionsFlow(types.SimpleNamespace(options={}))
         flow.hass=hass;flow.handler='synthetic-config-entry';flow.flow_id='synthetic-flow'
         menu=await flow.async_step_init()
