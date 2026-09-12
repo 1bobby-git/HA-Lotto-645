@@ -27,10 +27,27 @@ class SajuProfileError(ValueError):
     """Invalid, unsupported or ambiguous personal birth input."""
 
 
+def normalize_birth_date(value: object) -> str:
+    """Normalize compact YYYYMMDD input to the canonical YYYY-MM-DD form."""
+    text = str(value or "").strip()
+    if re.fullmatch(r"\d{8}", text):
+        return f"{text[:4]}-{text[4:6]}-{text[6:8]}"
+    return text
+
+
+def normalize_birth_time(value: object) -> str:
+    """Normalize compact HHMM input to the canonical HH:MM form."""
+    text = str(value or "").strip()
+    if re.fullmatch(r"\d{4}", text):
+        return f"{text[:2]}:{text[2:4]}"
+    return text
+
+
 def date_parts(value: str) -> tuple[int, int, int]:
-    match = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", str(value).strip())
+    text = normalize_birth_date(value)
+    match = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", text)
     if match is None:
-        raise SajuProfileError("생년월일은 YYYY-MM-DD 형식으로 입력하세요")
+        raise SajuProfileError("생년월일은 YYYY-MM-DD 또는 YYYYMMDD 형식으로 입력하세요")
     year, month, day = map(int, match.groups())
     if not 1900 <= year <= 2050 or not 1 <= month <= 12 or not 1 <= day <= 31:
         raise SajuProfileError("지원 출생연도는 1900~2050년이며 유효한 월·일이 필요합니다")
@@ -38,11 +55,11 @@ def date_parts(value: str) -> tuple[int, int, int]:
 
 
 def birth_clock(value: str) -> tuple[int, int] | None:
-    text = str(value).strip()
+    text = normalize_birth_time(value)
     if text.casefold() in UNKNOWN_TIME:
         return None
     if not re.fullmatch(r"\d{2}:\d{2}", text):
-        raise SajuProfileError("출생시간은 HH:MM 또는 '미상'으로 입력하세요")
+        raise SajuProfileError("출생시간은 HH:MM, HHMM 또는 '미상'으로 입력하세요")
     hour, minute = map(int, text.split(":"))
     if not 0 <= hour <= 23 or not 0 <= minute <= 59:
         raise SajuProfileError("출생시간 범위는 00:00~23:59입니다")
