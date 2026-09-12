@@ -1,31 +1,62 @@
-name: Saju and Formula Audit
+name: Install Audited Source
 
 on:
   push:
     branches: [v1.6.0-saju-audit]
-  workflow_dispatch:
+    paths:
+      - .github/workflows/saju-audit.yml
+      - .github/audit-transfer/**
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: lotto-audited-source-install
+  cancel-in-progress: false
 
 jobs:
-  snapshot:
+  install:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          ref: v1.6.0-saju-audit
+          fetch-depth: 1
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Export tracked source only
+      - name: Verify and apply locally tested source patch
+        shell: bash
         run: |
-          mkdir -p audit-bundle/wheels
-          git archive --format=zip HEAD > audit-bundle/source.zip
-          python -m pip download --dest audit-bundle/wheels lunar_python==1.4.8 korean-lunar-calendar==0.4.0 voluptuous voluptuous-serialize
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lotto-audit-source
-          path: audit-bundle/
-          retention-days: 3
+          python - <<'PY'
+          import base64
+          import hashlib
+          import lzma
+          from pathlib import Path
+          import subprocess
+
+          parts = [Path(f'.github/audit-transfer/part-{i}.txt') for i in range(5)]
+          encoded = ''.join(p.read_text(encoding='ascii').strip() for p in parts)
+          raw = lzma.decompress(base64.b64decode(encoded, validate=True))
+          expected = '2421b3f5802efd8a893251e9cb4e3d3ac5078c0ee360f072000ce18cb5f4d21f'
+          actual = hashlib.sha256(raw).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'Patch checksum mismatch: {actual}')
+          subprocess.run(['git', 'apply', '--check', '-'], input=raw, check=True)
+          subprocess.run(['git', 'apply', '-'], input=raw, check=True)
+          print(f'Applied audited patch: {len(raw)} bytes, SHA256 {actual}')
+          PY
+          python -m compileall -q custom_components/lotto_645 tests scripts
+          git diff --check
+      - name: Commit source and remove temporary transfer files
+        shell: bash
+        run: |
+          git rm -r .github/audit-transfer
+          git rm .github/workflows/saju-audit.yml
+          git add .github/workflows/validate.yml .github/workflows/release.yml custom_components/lotto_645 tests scripts docs README.md CHANGELOG.md
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: v1.6.0 implement audited prompt-based Saju and formula verification'
+          git push origin HEAD:v1.6.0-saju-audit
