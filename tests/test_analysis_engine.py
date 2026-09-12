@@ -72,7 +72,7 @@ def _profile():
 
 
 def test_catalog_and_default_gating():
-    assert len(methods.METHODS) == 16
+    assert len(methods.METHODS) == 17
     assert len(methods.PUBLIC_METHOD_IDS) == 12
     assert methods.METHOD_MYUNGRI_HETU not in methods.DEFAULT_METHOD_IDS
     myungri_method = methods.METHODS_BY_ID[methods.METHOD_MYUNGRI_HETU]
@@ -116,7 +116,7 @@ def test_every_non_saju_method_runs_individually_without_birth_profile():
     history = _history(120)
     past = {draw.numbers for draw in history}
     for method in methods.METHODS:
-        if method.method_id == methods.METHOD_MYUNGRI_HETU:
+        if method.method_id in {methods.METHOD_MYUNGRI_HETU, methods.METHOD_SELECTED_MEDIAN}:
             continue
         result = analysis.build_analysis(history, (method.method_id,), 0)
         assert len(result.recommendations) == 1, method.method_id
@@ -150,3 +150,39 @@ def test_manual_generation_nonce_rotates_local_candidates():
     assert [item.numbers for item in baseline.recommendations] != [
         item.numbers for item in regenerated.recommendations
     ]
+
+
+
+def test_selected_median_requires_two_other_methods():
+    history = _history(120)
+    with pytest.raises(ValueError, match="2개 이상"):
+        analysis.build_analysis(
+            history,
+            (methods.METHOD_WEIGHTED_FREQUENCY, methods.METHOD_SELECTED_MEDIAN),
+        )
+
+
+def test_selected_median_uses_only_selected_local_methods_and_runs_last():
+    history = _history(120)
+    selected = (
+        methods.METHOD_PHASE_RESIDUAL,
+        methods.METHOD_WEIGHTED_FREQUENCY,
+        methods.METHOD_PAIR_COOCCURRENCE,
+        methods.METHOD_SELECTED_MEDIAN,
+    )
+    result = analysis.build_analysis(history, selected, 0)
+    assert len(result.recommendations) == 4
+    consensus = result.recommendations[-1]
+    assert consensus.method_id == methods.METHOD_SELECTED_MEDIAN
+    assert consensus.details["consensus_source_count"] == 3
+    assert consensus.details["consensus_source_method_ids"] == list(selected[:-1])
+    assert consensus.details["consensus_rule"].startswith("선택한 다른 로컬 방식")
+    assert set(consensus.details["consensus_number_median_scores"]) == {
+        str(number) for number in consensus.numbers
+    }
+    assert all(
+        0 <= value <= 3
+        for value in consensus.details["consensus_number_support_votes"].values()
+    )
+    assert consensus.numbers not in {draw.numbers for draw in history}
+    assert result.summary["execution_method_ids"][-1] == methods.METHOD_SELECTED_MEDIAN

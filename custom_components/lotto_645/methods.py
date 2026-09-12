@@ -45,6 +45,7 @@ METHOD_BALANCE: Final = "balance_formula"
 METHOD_DELTA: Final = "delta_system"
 METHOD_CARRYOVER: Final = "carryover_formula"
 METHOD_PUBLIC_ENSEMBLE: Final = "public_ensemble"
+METHOD_SELECTED_MEDIAN: Final = "selected_median_consensus"
 # Keep the legacy ID for existing config-entry compatibility.
 METHOD_MYUNGRI_HETU: Final = "myungri_hetu_day_pillar"
 
@@ -223,6 +224,18 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         myungri_weight=0.52,
         pool_size=22,
     ),
+    MethodDefinition(
+        METHOD_SELECTED_MEDIAN,
+        "합의 추천 · 선택 방식 중앙값",
+        "선택 방식 집계",
+        (
+            "현재 함께 선택한 다른 로컬 추천 방식들의 1~45 번호별 0~1 적합도를 모아 각 번호의 중앙값을 계산합니다. "
+            "한 방식의 극단값이 전체를 끌고 가지 않도록 중앙값을 사용하며, 그 중앙값이 높은 번호들로 최종 6개 조합을 만듭니다. "
+            "AI 추천은 집계에서 제외하고, 명리 방식은 사용자가 함께 선택한 경우에만 포함합니다. 의미 있는 중앙값을 위해 다른 추천 방식 2개 이상이 필요합니다."
+        ),
+        {},
+        pool_size=26,
+    ),
 )
 
 METHODS_BY_ID: Final = {method.method_id: method for method in METHODS}
@@ -281,6 +294,8 @@ def method_catalog() -> list[dict[str, str]]:
             "requirements": (
                 "생년월일, 출생시간, 양력/음력, 성별, 출생지, 시간대"
                 if method.method_id == METHOD_MYUNGRI_HETU
+                else "다른 추천 방식 2개 이상"
+                if method.method_id == METHOD_SELECTED_MEDIAN
                 else "없음"
             ),
         }

@@ -39,6 +39,7 @@ from .const import (
 from .methods import (
     DEFAULT_METHOD_IDS,
     METHOD_MYUNGRI_HETU,
+    METHOD_SELECTED_MEDIAN,
     METHODS_BY_ID,
     method_selector_options,
     normalize_method_ids,
@@ -249,6 +250,11 @@ class Lotto645OptionsFlow(OptionsFlow):
                 )
                 if not normalized:
                     errors[CONF_SELECTED_METHODS] = "select_at_least_one"
+                elif (
+                    METHOD_SELECTED_MEDIAN in normalized
+                    and sum(method_id != METHOD_SELECTED_MEDIAN for method_id in normalized) < 2
+                ):
+                    errors["base"] = "consensus_sources_required"
                 else:
                     pending = dict(self._options)
                     pending.update(user_input)
