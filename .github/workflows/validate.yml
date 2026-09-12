@@ -44,7 +44,6 @@ jobs:
           import sys
 
           root = Path(next(iter(importlib.util.find_spec('homeassistant').submodule_search_locations))) / 'components'
-          # Install the real HA domains imported by AI Task and the ticket panel.
           pending = ['ai_task', 'camera', 'stream', 'image', 'panel_custom', 'websocket_api']
           visited = set()
           requirements = set()
@@ -82,4 +81,4 @@ jobs:
       - name: Install headless browser
         run: python -m playwright install --with-deps chromium
       - name: Validate local QR preview and explicit save in browser
-        run: python scripts/test_ticket_panel.py
+        run: python scripts/smoke_ticket_panel.py
