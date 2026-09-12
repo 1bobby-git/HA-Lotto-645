@@ -82,6 +82,7 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         self._regeneration_exclusions: tuple[tuple[int, ...], ...] = ()
         self._prediction_snapshot: dict[str, Any] | None = None
         self._draw_evaluation: dict[str, Any] | None = None
+        self._manual_result_refresh_requested = False
         self._manual_lock = asyncio.Lock()
 
     @property
@@ -344,8 +345,13 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         )
 
     async def _async_update_data(self) -> Lotto645Data:
-        """Prefer the shared mirror; never crawl official history from HA clients."""
-        if self.data is not None:
+        """Refresh data; newer draw adoption is explicitly user-triggered."""
+        manual_result_refresh = self._manual_result_refresh_requested
+        self._manual_result_refresh_requested = False
+        # async_refresh_and_regenerate() captures the exact pre-refresh ticket
+        # snapshot before advancing the generation nonce.  Do not overwrite that
+        # snapshot at the start of the user-triggered result check.
+        if self.data is not None and not manual_result_refresh:
             self._set_prediction_snapshot(
                 self.data.analysis,
                 self.data.ai_recommendation,
@@ -382,13 +388,33 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         self._suppress_ai_generation_once = False
 
         try:
-            mirror_history, mirror_meta = await self.client.async_fetch_shared_mirror()
+            mirror_history, mirror_meta = await self.client.async_fetch_shared_mirror(
+                force=manual_result_refresh
+            )
             mirror_ok = True
             if mirror_history is None:
                 source_status = "shared_mirror_not_modified"
             else:
                 mirror_latest = mirror_history[-1].round
-                if not self.history or mirror_latest >= self.history[-1].round:
+                cached_latest = self.history[-1].round if self.history else 0
+                if (
+                    self.history
+                    and mirror_latest > cached_latest
+                    and not manual_result_refresh
+                ):
+                    # A newer weekly result may exist remotely, but the user asked
+                    # that draw/result sensors remain unchanged until the refresh
+                    # button is explicitly pressed.  Keep the current coordinator
+                    # payload completely stable.
+                    source_status = (
+                        self.data.source_status if self.data is not None else self._startup_source
+                    )
+                    _LOGGER.debug(
+                        "새 회차 %s는 수동 새로고침 전까지 보류합니다 (현재 %s회)",
+                        mirror_latest,
+                        cached_latest,
+                    )
+                elif not self.history or mirror_latest >= cached_latest:
                     changed = self._history_changed(self.history, mirror_history)
                     self.history = mirror_history
                     source_status = "shared_mirror"
@@ -408,7 +434,12 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             )
             _LOGGER.debug("공유 로또 미러 사용 불가, 로컬 이력 유지: %s", err)
 
-        if not mirror_ok and self.allow_official_fallback and self.history:
+        if (
+            manual_result_refresh
+            and not mirror_ok
+            and self.allow_official_fallback
+            and self.history
+        ):
             self.client.begin_update_cycle()
             try:
                 official_latest = await self.client.async_latest_round_official()
@@ -440,7 +471,8 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
             )
 
         if self.history[-1].round != old_latest_round:
-            self._evaluate_prediction_snapshot()
+            if manual_result_refresh:
+                self._evaluate_prediction_snapshot()
             self._cached_ai_recommendation = None
             self._cached_ai_generated_at = None
             self._local_generation_nonce = 0
@@ -529,8 +561,18 @@ class Lotto645Coordinator(DataUpdateCoordinator[Lotto645Data]):
         )
 
     async def async_refresh_and_regenerate(self) -> None:
-        """Refresh history and rotate all local recommendations, leaving AI untouched."""
+        """User-triggered refresh, optional new-draw evaluation, and local regeneration."""
         async with self._manual_lock:
+            if self.data is not None:
+                # Freeze exactly what the user saw before this refresh.  If a new
+                # draw is obtained by this request, this snapshot is what gets
+                # evaluated before next-round recommendations replace it.
+                self._set_prediction_snapshot(
+                    self.data.analysis,
+                    self.data.ai_recommendation,
+                    self.data.ai_generated_at,
+                )
+            self._manual_result_refresh_requested = True
             previous = tuple(item.numbers for item in self.data.analysis.recommendations) if self.data else ()
             if self.data and self.data.ai_recommendation:
                 previous += (self.data.ai_recommendation.numbers,)

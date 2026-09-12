@@ -66,3 +66,13 @@ def test_evaluate_all_saved_recommendations():
     assert evaluated["highest_prize_sensor"] == "센서 A"
     assert evaluated["results"][0]["status"] == "당첨"
     assert evaluated["results"][1]["status"] == "미당첨"
+
+
+def test_manual_refresh_contract_is_explicit_in_source():
+    root = __import__("pathlib").Path(__file__).resolve().parents[1]
+    coordinator = (root / "custom_components/lotto_645/coordinator.py").read_text(encoding="utf-8")
+    api = (root / "custom_components/lotto_645/api.py").read_text(encoding="utf-8")
+    assert "self._manual_result_refresh_requested = True" in coordinator
+    assert "and not manual_result_refresh" in coordinator
+    assert "force=manual_result_refresh" in coordinator
+    assert "force: bool = False" in api
