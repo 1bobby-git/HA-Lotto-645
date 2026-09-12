@@ -44,8 +44,8 @@ from .history import LottoHistoryError, load_bundled_history
 from .methods import DEFAULT_METHOD_IDS, METHOD_MYUNGRI_HETU, normalize_method_ids
 from .models import AnalysisResult, Lotto645Data, LottoDraw, Recommendation
 from .myungri import extract_saju_profile, has_complete_saju_profile
-from .result_evaluator import evaluate_recommendations
-from .fast_result_state import FastResultState
+from .fast_result_state import FastResultState, evaluate_saved
+from .published_results import draw_cutoff
 from .purchased_tickets import PurchaseBook, combined_result
 
 _LOGGER = logging.getLogger(__name__)
@@ -337,6 +337,10 @@ class Lotto645Coordinator(FastResultState, DataUpdateCoordinator[Lotto645Data]):
         snapshot = self._build_prediction_snapshot(
             analysis, ai_recommendation, ai_generated_at
         )
+        if (self._prediction_snapshot
+                and self._prediction_snapshot.get("target_round") == analysis.target_round
+                and datetime.now(UTC) >= draw_cutoff(analysis.target_round)):
+            return
         if snapshot != self._prediction_snapshot:
             self._prediction_snapshot = snapshot
             self._needs_storage_save = True
@@ -356,23 +360,12 @@ class Lotto645Coordinator(FastResultState, DataUpdateCoordinator[Lotto645Data]):
             return
         if (self._draw_evaluation and self._draw_evaluation.get("round") == target_round
                 and self._draw_evaluation.get("winning_numbers") == list(draw.numbers)
-                and self._draw_evaluation.get("bonus_number") == draw.bonus):
+                and self._draw_evaluation.get("bonus_number") == draw.bonus
+                and self._draw_evaluation.get("snapshot_policy") == "pre_draw_v1"):
             return
-        try:
-            recommendations = tuple(
-                Recommendation.from_storage(item)
-                for item in snapshot.get("recommendations", [])
-                if isinstance(item, dict)
-            )
-        except (KeyError, TypeError, ValueError) as err:
-            _LOGGER.warning("저장된 추천 스냅샷을 당첨 판정에 사용할 수 없습니다: %s", err)
-            return
-        self._draw_evaluation = evaluate_recommendations(
-            draw,
-            recommendations,
-            prediction_snapshot=snapshot,
-            evaluated_at=datetime.now(UTC),
-        )
+        # Apply the same timestamp policy to official-first and fast-overlay
+        # results. Older cached evaluations are recomputed once with this policy.
+        self._draw_evaluation = evaluate_saved(snapshot, draw)
         self._needs_storage_save = True
         _LOGGER.info(
             "%s회 추천 결과 판정 완료: %s게임 중 %s게임 당첨, 최고 %s",

@@ -96,7 +96,7 @@ async def main():
         obj.history=[obj.data.latest_draw]
         obj._prediction_snapshot={
             "target_round":30,"based_on_round":29,"local_generation_sequence":0,
-            "local_generated_at":None,"recommendations":[
+            "local_generated_at":"2003-06-27T10:00:00+00:00","recommendations":[
                 models.Recommendation(1,"old","old sensor","test",(30,31,32,1,2,3),"r",.5,{}).to_storage()
             ]
         }

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 import time
@@ -56,7 +57,7 @@ class FastResultClient:
                             delay = max(delay, (parsedate_to_datetime(raw) - datetime.now(UTC)).total_seconds())
                         except (ValueError, TypeError, OverflowError):
                             pass
-                    self._blocked[host] = now + min(max(delay, 1800), 86400)
+                    self._blocked[host] = now + (max(delay, 1800) if math.isfinite(delay) else 86400)
                     raise ValueError(f"HTTP {response.status}; source paused")
                 if robots and response.status == 404:
                     return b"User-agent: *\nAllow: /\n"

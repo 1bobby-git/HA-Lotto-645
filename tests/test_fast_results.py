@@ -137,3 +137,47 @@ def test_current_real_rss_result_minimal_fixture():
     when=datetime.fromisoformat('2026-09-12T20:52:05+09:00')
     r=candidate(title=title,url=url,when=when,target=1241,now=when+timedelta(minutes=1))
     assert r.draw.numbers==(7,13,16,23,24,43) and r.draw.bonus==9
+
+
+def coordinator_method(name):
+    """Exercise the production body without replacing the real HA smoke test."""
+    import ast
+    import logging
+    from pathlib import Path
+    path=Path(__file__).resolve().parents[1]/'custom_components/lotto_645/coordinator.py'
+    cls=next(n for n in ast.parse(path.read_text()).body if isinstance(n,ast.ClassDef) and n.name=='Lotto645Coordinator')
+    body=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name==name)
+    module=ast.Module(body=[ast.ImportFrom(module='__future__',names=[ast.alias(name='annotations')],level=0),body],type_ignores=[])
+    ns={'datetime':datetime,'UTC':UTC,'evaluate_saved':state_mod.evaluate_saved,
+        'draw_cutoff':pub.draw_cutoff,'_LOGGER':logging.getLogger('test')}
+    exec(compile(ast.fix_missing_locations(module),str(path),'exec'),ns)
+    return ns[name]
+
+
+def test_official_first_also_excludes_late_or_unknown_predictions():
+    evaluate=coordinator_method('_evaluate_prediction_snapshot')
+    for when,count in [('2026-09-05T10:00:00+00:00',1), (None,0), (NOW.isoformat(),0)]:
+        obj=SimpleNamespace(_prediction_snapshot=snapshot(when),history=[candidate().draw],_draw_evaluation=None)
+        evaluate(obj)
+        assert obj._draw_evaluation['checked_game_count']==count
+        assert obj._draw_evaluation['snapshot_policy']=='pre_draw_v1'
+    # Migrate a cached v1.9 evaluation instead of preserving an invalid old win.
+    obj._draw_evaluation.pop('snapshot_policy')
+    obj._draw_evaluation['checked_game_count']=999
+    evaluate(obj)
+    assert obj._draw_evaluation['checked_game_count']==0
+
+
+def test_post_cutoff_regeneration_keeps_last_pre_draw_snapshot():
+    old=snapshot();new=snapshot(NOW.isoformat())
+    obj=SimpleNamespace(_prediction_snapshot=old,_fast_result=None,
+                        _build_prediction_snapshot=lambda *args:new,_needs_storage_save=False)
+    coordinator_method('_set_prediction_snapshot')(obj,SimpleNamespace(target_round=1240),None,None)
+    assert obj._prediction_snapshot is old
+
+
+def test_corrupt_saved_snapshot_does_not_break_result_display():
+    obj=snapshot();obj['based_on_round']='bad'
+    assert state_mod.evaluate_saved(obj,candidate().draw)['checked_game_count']==0
+    obj=snapshot();obj['recommendations']=None
+    assert state_mod.evaluate_saved(obj,candidate().draw)['checked_game_count']==0

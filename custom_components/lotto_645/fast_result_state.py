@@ -15,9 +15,12 @@ from .result_evaluator import evaluate_recommendations
 def evaluate_saved(snapshot: dict | None, draw: LottoDraw) -> dict:
     """Only timestamped, pre-draw recommendations count as predictive results."""
     valid, excluded = [], []
-    snapshot = snapshot or {}
-    if snapshot.get('target_round') == draw.round and snapshot.get('based_on_round', draw.round) < draw.round:
-        for raw in snapshot.get('recommendations', []):
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    based_on = snapshot.get('based_on_round')
+    if (snapshot.get('target_round') == draw.round
+            and type(based_on) is int and 0 < based_on < draw.round):
+        rows = snapshot.get('recommendations', [])
+        for raw in rows if isinstance(rows, list) else []:
             if not isinstance(raw, dict):
                 continue
             kind = 'ai_generated_at' if raw.get('source') in ('ai', 'ai_task') else 'local_generated_at'
@@ -33,6 +36,7 @@ def evaluate_saved(snapshot: dict | None, draw: LottoDraw) -> dict:
                 valid.append(recommendation)
     result = evaluate_recommendations(draw, valid, prediction_snapshot=snapshot)
     result['excluded_predictions'] = excluded
+    result['snapshot_policy'] = 'pre_draw_v1'
     return result
 
 
