@@ -18,7 +18,8 @@
         "description": "Choose which settings to edit. Recommendation settings and personal Four Pillars data are separated so the Configure dialog remains compatible and reliable.",
         "menu_options": {
           "recommendations": "Recommendation methods, AI, and data source",
-          "saju": "Personal Four Pillars profile"
+          "saju": "Personal Four Pillars profile",
+          "purchases": "Purchased tickets: enter / edit"
         }
       },
       "recommendations": {
@@ -63,6 +64,25 @@
           "saju_longitude": "Only needed when true solar time correction is enabled.",
           "saju_lunar_standard": "Korean and Chinese lunar dates can differ. Existing lunar profiles retain Chinese conversion until you select a different standard."
         }
+      },
+      "purchases": {
+        "title": "Choose the draw on your ticket",
+        "description": "Enter the draw number printed on your ticket, then enter up to five games A–E. Saved draws: {saved_rounds}. Other rounds are retained.",
+        "data": {
+          "purchase_round": "Draw number"
+        }
+      },
+      "purchase_games": {
+        "title": "Purchased tickets A–E",
+        "description": "Selected draw: {round}. Enter six distinct numbers 1–45 per line, separated by commas/spaces, or twelve zero-padded digits (010203040506). Leave unused games blank. Saving replaces A–E for this round only. This does not verify ownership or payment.",
+        "data": {
+          "game_a": "Game A (six numbers)",
+          "game_b": "Game B (six numbers)",
+          "game_c": "Game C (six numbers)",
+          "game_d": "Game D (six numbers)",
+          "game_e": "Game E (six numbers)",
+          "clear_round": "Delete this round (ignore input lines)"
+        }
       }
     },
     "error": {
@@ -70,7 +90,16 @@
       "saju_profile_required": "Save the Personal Four Pillars profile from the previous menu before enabling this recommendation method.",
       "invalid_saju_profile": "Check birth date, time, lunar standard/leap month, timezone and longitude. Solar-term or DST boundary ambiguity requires a known time.",
       "options_error": "An error occurred while processing the options. Check the entered values and try again.",
-      "consensus_sources_required": "The selected-method median consensus requires at least two other recommendation methods."
+      "consensus_sources_required": "The selected-method median consensus requires at least two other recommendation methods.",
+      "invalid_purchase_round": "Enter a positive draw number.",
+      "invalid_purchase_numbers": "Enter six distinct integers 1–45 separated by commas/spaces, or twelve zero-padded digits.",
+      "purchase_games_required": "Enter at least one game, or select delete explicitly.",
+      "purchase_storage_unavailable": "Could not save. Existing tickets are preserved.",
+      "purchase_game_limit": "Enter at most five games (A–E) per draw."
+    },
+    "abort": {
+      "purchase_integration_not_ready": "Wait for the integration to finish setup.",
+      "purchase_storage_unavailable": "Check local ticket storage. Existing records have not been overwritten."
     }
   }
 }

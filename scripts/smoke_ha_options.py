@@ -39,7 +39,7 @@ async def main():
         flow.hass=hass;flow.handler='synthetic-config-entry';flow.flow_id='synthetic-flow'
         menu=await flow.async_step_init()
         assert menu['type']==FlowResultType.MENU
-        assert menu['menu_options']==['recommendations','saju']
+        assert menu['menu_options']==['recommendations','saju','purchases']
         serialize_form(await flow.async_step_recommendations())
         serialize_form(await flow.async_step_saju())
         result=await flow.async_step_recommendations({const.CONF_SELECTED_METHODS:['weighted_frequency']})
@@ -102,7 +102,95 @@ async def main():
             try:obj._parse_ai_result(payload,obj.data.analysis)
             except coordinator_module.AiRecommendationError:pass
             else:raise AssertionError(f'invalid AI number accepted: {bad}')
+        # Purchased tickets use a separate durable store; normal options/AI are untouched.
+        purchase_module=importlib.import_module('custom_components.lotto_645.purchased_tickets')
+        sensor_module=importlib.import_module('custom_components.lotto_645.sensor')
+        from homeassistant.helpers.storage import Store
+        obj.hass=hass
+        obj.entry=types.SimpleNamespace(entry_id='purchase-smoke', options={
+            const.CONF_SELECTED_METHODS:['weighted_frequency'], 'saju_birth_date':'2000-01-01',
+        }, runtime_data=obj)
+        obj.purchase_book=purchase_module.PurchaseBook()
+        obj.purchase_storage_error=False
+        obj._purchase_lock=asyncio.Lock()
+        obj._purchase_store=Store(hass,1,'lotto_purchase_smoke')
+        from unittest.mock import Mock
+        obj.async_update_listeners=Mock()
+        before_ai=obj.data.ai_recommendation
+        before_nonce=obj._local_generation_nonce
+        refresh_calls=obj.async_request_refresh.await_count
+        def purchase_flow():
+            f=flow_module.Lotto645OptionsFlow(obj.entry)
+            f.hass=hass;f.handler='purchase-smoke';f.flow_id='purchase-flow'
+            return f
+        f=purchase_flow()
+        serialize_form(await f.async_step_purchases())
+        bad_round=await f.async_step_purchases({'purchase_round':'wrong'})
+        assert bad_round['errors']['purchase_round']=='invalid_purchase_round'
+        form=await f.async_step_purchases({'purchase_round':'30'})
+        assert form['step_id']=='purchase_games'
+        serialize_form(form)
+        invalid=await f.async_step_purchase_games({'game_b':'1 1 2 3 4 5'})
+        assert invalid['errors']['game_b']=='invalid_purchase_numbers'
+        assert not obj.purchase_book.records
+        saved=await f.async_step_purchase_games({
+            'game_a':'303132333435', 'game_e':'1, 2, 3, 4, 5, 6',
+        })
+        assert saved['type']==FlowResultType.CREATE_ENTRY
+        assert saved['data']==obj.entry.options
+        assert obj._local_generation_nonce==before_nonce
+        assert obj.data.ai_recommendation is before_ai
+        assert obj.async_request_refresh.await_count==refresh_calls
+        disk=await obj._purchase_store.async_load()
+        restored=purchase_module.PurchaseBook.from_storage(disk)
+        assert restored.records==obj.purchase_book.records
+        assert restored.report(obj.history)['winning_game_count']==1
+        form=await purchase_flow().async_step_purchases({'purchase_round':'30'})
+        serialize_form(form)
+        fields=to_field_list(form['data_schema'],custom_serializer=cv.custom_serializer)
+        defaults={field['name']:field.get('default') for field in fields}
+        assert defaults['game_a']=='30, 31, 32, 33, 34, 35'
+        # Dynamically named draw sensor keeps unique_id unchanged across rounds.
+        numbers_sensor=sensor_module.LottoDrawNumbersSensor(obj)
+        unique=numbers_sensor.unique_id
+        assert numbers_sensor.name=='30회 추첨번호'
+        assert numbers_sensor.native_value=='30, 31, 32, 33, 34, 35'
+        old_data=obj.data
+        obj.data=replace(obj.data, latest_draw=models.LottoDraw(31,'2026-09-12',(1,2,3,4,5,6),7))
+        assert numbers_sensor.name=='31회 추첨번호' and numbers_sensor.unique_id==unique
+        obj.data=old_data
+        summary_sensor=sensor_module.LottoRecommendationsSensor(obj)
+        assert summary_sensor.native_value==31
+        assert '추천 대상 회차' in summary_sensor.extra_state_attributes['purpose']
+        purchased_sensor=sensor_module.LottoPurchasedTicketsSensor(obj)
+        assert purchased_sensor.native_value=='30회 · 1개 당첨 · 최고 1등'
+        win_sensor=sensor_module.LottoWinningStatusSensor(obj)
+        assert win_sensor.native_value=='2개 당첨 · 최고 1등'  # old recommendation 5th + A 1st
+        assert obj.winning_summary['recommendation_game_count']==1
+        assert obj.winning_summary['purchased_game_count']==2
+        # Next round remains pending until matching result is actually adopted.
+        await obj.async_save_purchase_record(31, {'game_c':'010203040506'})
+        assert purchased_sensor.native_value=='31회 · 1게임 · 추첨 대기'
+        assert obj.winning_summary['round']==30
+        assert obj.winning_summary['purchased_game_count']==2
+        assert obj.winning_summary['pending_purchased_rounds']==[31]
+        # Roll back neither memory nor old rows on failed durable save.
+        before=obj.purchase_book.to_storage()
+        actual_store=obj._purchase_store
+        obj._purchase_store=types.SimpleNamespace(async_save=AsyncMock(side_effect=OSError('synthetic disk failure')))
+        f=purchase_flow();await f.async_step_purchases({'purchase_round':'31'})
+        failed=await f.async_step_purchase_games({'game_a':'10 11 12 13 14 15'})
+        assert failed['errors']['base']=='purchase_storage_unavailable'
+        assert obj.purchase_book.to_storage()==before
+        obj._purchase_store=actual_store
+        obj.purchase_storage_error=True
+        blocked=await purchase_flow().async_step_purchases()
+        assert blocked['type']==FlowResultType.ABORT
+        assert blocked['reason']=='purchase_storage_unavailable'
+        obj.purchase_storage_error=False
+        await obj.async_save_purchase_record(31, {}, clear=True)
+        assert '30' in obj.purchase_book.records and '31' not in obj.purchase_book.records
         await hass.async_stop(force=True)
-    print('PASS: real HA options menu/forms/JSON serialization/profile save/compact normalization/gating; coordinator manual/AI contracts')
+    print('PASS: real HA options menu/forms/JSON serialization/profile save/compact normalization/gating; coordinator manual/AI contracts; purchased five-line round storage, restore, atomic save and draw-name checks')
 
 if __name__=='__main__':asyncio.run(main())

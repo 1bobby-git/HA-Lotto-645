@@ -13,6 +13,9 @@ def evaluate_ticket(
     draw: LottoDraw,
 ) -> dict[str, Any]:
     """Return the official Lotto 6/45 prize classification for one ticket."""
+    if (len(numbers) != 6 or len(set(numbers)) != 6
+            or any(type(n) is not int or not 1 <= n <= 45 for n in numbers)):
+        raise ValueError("Ticket needs six distinct integers between 1 and 45")
     values = set(numbers)
     winning = set(draw.numbers)
     matched = tuple(sorted(values & winning))

@@ -9,6 +9,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 
 from .const import (
@@ -51,6 +52,7 @@ from .myungri import (
     validate_saju_profile,
 )
 from .saju_calendar import normalize_birth_date, normalize_birth_time
+from .purchased_tickets import SLOTS, PurchaseInputError, parse_round
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -225,6 +227,8 @@ class Lotto645OptionsFlow(OptionsFlow):
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         self._options = dict(config_entry.options)
+        self._entry = config_entry
+        self._purchase_round: int | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -233,7 +237,7 @@ class Lotto645OptionsFlow(OptionsFlow):
         del user_input
         return self.async_show_menu(
             step_id="init",
-            menu_options=["recommendations", "saju"],
+            menu_options=["recommendations", "saju", "purchases"],
         )
 
     async def async_step_recommendations(
@@ -333,4 +337,69 @@ class Lotto645OptionsFlow(OptionsFlow):
             step_id="saju",
             data_schema=_saju_schema(form_values),
             errors=errors,
+        )
+
+
+    async def async_step_purchases(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose the draw printed on the user's ticket before entering A–E."""
+        coordinator = getattr(self._entry, "runtime_data", None)
+        if coordinator is None or coordinator.data is None:
+            return self.async_abort(reason="purchase_integration_not_ready")
+        if coordinator.purchase_storage_error:
+            return self.async_abort(reason="purchase_storage_unavailable")
+        errors = {}
+        default_round = str(coordinator.data.analysis.target_round)
+        if user_input is not None:
+            default_round = str(user_input.get("purchase_round", ""))
+            try:
+                self._purchase_round = parse_round(default_round)
+            except PurchaseInputError as err:
+                errors[err.field] = err.code
+            else:
+                return await self.async_step_purchase_games()
+        return self.async_show_form(
+            step_id="purchases",
+            data_schema=vol.Schema({
+                vol.Required("purchase_round", default=default_round): selector.TextSelector(),
+            }),
+            errors=errors,
+            description_placeholders={
+                "saved_rounds": ", ".join(map(str, sorted(map(int, coordinator.purchase_book.records)))) or "-"
+            },
+        )
+
+    async def async_step_purchase_games(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Enter up to five six-number games; blank slots are optional."""
+        coordinator = getattr(self._entry, "runtime_data", None)
+        if coordinator is None or coordinator.data is None:
+            return self.async_abort(reason="purchase_integration_not_ready")
+        if self._purchase_round is None:
+            return await self.async_step_purchases()
+        errors = {}
+        form_values = coordinator.purchase_book.form_values(self._purchase_round)
+        if user_input is not None:
+            form_values = dict(user_input)
+            try:
+                await coordinator.async_save_purchase_record(
+                    self._purchase_round, user_input, clear=bool(user_input.get("clear_round", False))
+                )
+            except PurchaseInputError as err:
+                errors[err.field] = err.code
+            except (HomeAssistantError, OSError):
+                errors["base"] = "purchase_storage_unavailable"
+            else:
+                # Tickets live in their own local Store, not recommendation options.
+                return self.async_create_entry(title="", data=dict(self._entry.options))
+        schema = {
+            vol.Optional(f"game_{slot.lower()}", default=str(form_values.get(f"game_{slot.lower()}", "") or "")): selector.TextSelector()
+            for slot in SLOTS
+        }
+        schema[vol.Optional("clear_round", default=False)] = selector.BooleanSelector()
+        return self.async_show_form(
+            step_id="purchase_games", data_schema=vol.Schema(schema), errors=errors,
+            description_placeholders={"round": str(self._purchase_round)},
         )
