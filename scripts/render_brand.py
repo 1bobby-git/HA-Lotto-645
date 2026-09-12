@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Validate and derive Home Assistant brand assets from the supplied PNG.
+"""Validate the user's Lotto artwork and derive only the square icon.
 
-The canonical horizontal artwork is the user's exact PNG. It is never redrawn,
-recolored, quantized, cropped or rewritten. Only the square icon is cropped
-from the left lucky-bag/6/45 component. Home Assistant's local brand files are
-pure size-compatible derivatives of those two canonical assets.
+The horizontal logo is the user's supplied artwork with resolution normalization
+only. It is never redrawn, recolored, quantized or cropped. The square icon is
+the only crop: the left lucky-bag + 6/45 symbol centered on transparent square.
 """
 
 from __future__ import annotations
@@ -19,9 +18,9 @@ IMAGES = ROOT / "images"
 BRAND = ROOT / "custom_components" / "lotto_645" / "brand"
 SOURCE_LOGO = IMAGES / "logo-horizontal.png"
 SQUARE_ICON = IMAGES / "icon-square.png"
-EXPECTED_SOURCE_SHA256 = "0fe12c375a418c2bb51d5729526c4c65da70f82f5afecb4ae9ab8f60fe1b2a37"
-EXPECTED_SIZE = (2048, 682)
-EXPECTED_ICON_SIZE = (550, 550)
+EXPECTED_SOURCE_SHA256 = "fc220ddd9a82111dc3a620562090e884f1ee9e697421a3257db734bf206b688a"
+EXPECTED_SIZE = (768, 256)
+EXPECTED_RAW_ICON_SIZE = (207, 175)
 
 
 def _occupied_column_runs(alpha: Image.Image) -> list[tuple[int, int]]:
@@ -42,8 +41,7 @@ def _occupied_column_runs(alpha: Image.Image) -> list[tuple[int, int]]:
     return runs
 
 
-def crop_exact_left_icon(source: Image.Image) -> Image.Image:
-    """Crop only the exact left component, then center it on a square canvas."""
+def crop_left_icon(source: Image.Image) -> Image.Image:
     rgba = source.convert("RGBA")
     alpha = rgba.getchannel("A")
     runs = _occupied_column_runs(alpha)
@@ -55,10 +53,12 @@ def crop_exact_left_icon(source: Image.Image) -> Image.Image:
         raise RuntimeError("left icon is empty")
     top, bottom = bbox[1], bbox[3]
     raw = rgba.crop((left, top, right, bottom))
+    if raw.size != EXPECTED_RAW_ICON_SIZE:
+        raise RuntimeError(f"unexpected left crop dimensions: {raw.size}")
     side = max(raw.size)
     square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
     square.alpha_composite(raw, ((side - raw.width) // 2, (side - raw.height) // 2))
-    return square
+    return square.resize((256, 256), Image.Resampling.LANCZOS)
 
 
 def save_png(image: Image.Image, target: Path) -> None:
@@ -71,29 +71,25 @@ def main() -> None:
     digest = sha256(data).hexdigest()
     if digest != EXPECTED_SOURCE_SHA256:
         raise RuntimeError(f"unexpected horizontal logo bytes: {digest}")
-
     with Image.open(SOURCE_LOGO) as opened:
         source = opened.convert("RGBA")
     if source.size != EXPECTED_SIZE:
         raise RuntimeError(f"unexpected horizontal logo dimensions: {source.size}")
 
-    icon = crop_exact_left_icon(source)
-    if icon.size != EXPECTED_ICON_SIZE:
-        raise RuntimeError(f"unexpected square icon dimensions: {icon.size}")
+    icon = crop_left_icon(source)
     save_png(icon, SQUARE_ICON)
 
-    # Home Assistant local brand assets: no artistic changes, only resizing.
+    # HA uses the same horizontal PNG bytes and same square icon bytes.
     BRAND.mkdir(parents=True, exist_ok=True)
-    logo_height = 256
-    logo_width = round(source.width * logo_height / source.height)
-    save_png(source.resize((logo_width, logo_height), Image.Resampling.LANCZOS), BRAND / "logo.png")
-    save_png(icon.resize((256, 256), Image.Resampling.LANCZOS), BRAND / "icon.png")
+    (BRAND / "logo.png").write_bytes(data)
+    (BRAND / "icon.png").write_bytes(SQUARE_ICON.read_bytes())
 
-    # Verify the canonical horizontal artwork was never changed by this script.
-    if sha256(SOURCE_LOGO.read_bytes()).hexdigest() != EXPECTED_SOURCE_SHA256:
-        raise RuntimeError("canonical horizontal logo changed unexpectedly")
-    print(f"canonical logo preserved: {source.size}, sha256={digest}")
-    print(f"canonical square icon: {icon.size}; HA logo={logo_width}x256; HA icon=256x256")
+    if SOURCE_LOGO.read_bytes() != (BRAND / "logo.png").read_bytes():
+        raise RuntimeError("HA horizontal logo differs from canonical logo")
+    if SQUARE_ICON.read_bytes() != (BRAND / "icon.png").read_bytes():
+        raise RuntimeError("HA square icon differs from canonical crop")
+    print(f"horizontal artwork preserved: {source.size}, sha256={digest}")
+    print("square icon: exact left component crop -> 256x256")
 
 
 if __name__ == "__main__":
