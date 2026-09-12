@@ -16,36 +16,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Restore supplied horizontal artwork
+      - name: Restore exact user-supplied horizontal PNG
         shell: bash
         run: |
-          base64 --decode .brand-upload/logo384.b64 > images/logo-horizontal.png
-          echo 'd970376a271555cc6654f4daff640c1d9522a8809c077991df5c4ff476585f49  images/logo-horizontal.png' | sha256sum --check --strict
-      - name: Crop only the left icon and apply both assets to Home Assistant
+          cat .brand-upload/logo.b64.* | base64 --decode > images/logo-horizontal.png
+          echo '0fe12c375a418c2bb51d5729526c4c65da70f82f5afecb4ae9ab8f60fe1b2a37  images/logo-horizontal.png' | sha256sum --check --strict
+      - name: Crop only the left icon and apply HA brand variants
         run: |
           python -m pip install --disable-pip-version-check 'Pillow>=10,<12'
-          python - <<'PY'
-          from pathlib import Path
-          from PIL import Image
-          logo = Path('images/logo-horizontal.png')
-          icon_path = Path('images/icon-square.png')
-          brand = Path('custom_components/lotto_645/brand')
-          with Image.open(logo) as opened:
-              source = opened.convert('RGBA')
-          if source.size != (384, 128):
-              raise SystemExit(f'unexpected logo size: {source.size}')
-          # Proportional crop of the left lucky-bag + 6/45 component from the
-          # exact artwork. The horizontal image itself is not cropped or redrawn.
-          raw = source.crop((5, 20, 108, 109))
-          side = max(raw.size)
-          square = Image.new('RGBA', (side, side), (0, 0, 0, 0))
-          square.alpha_composite(raw, ((side - raw.width)//2, (side - raw.height)//2))
-          icon = square.resize((256, 256), Image.Resampling.LANCZOS)
-          icon.save(icon_path, format='PNG', optimize=True, compress_level=9)
-          brand.mkdir(parents=True, exist_ok=True)
-          (brand/'logo.png').write_bytes(logo.read_bytes())
-          (brand/'icon.png').write_bytes(icon_path.read_bytes())
-          PY
           python scripts/render_brand.py
       - name: Bump v1.9.1 and remove temporary transfer files
         shell: bash
@@ -61,7 +39,7 @@ jobs:
           const.write_text(const.read_text().replace('VERSION = "1.9.0"', 'VERSION = "1.9.1"'))
           changelog = Path('CHANGELOG.md')
           text = changelog.read_text()
-          entry = '''\n## 1.9.1\n\n- 사용자가 첨부한 가로 로고를 재그리기·색상변환 없이 비율 유지 규격화하여 가로 로고로 적용.\n- 정사각 아이콘은 동일 로고의 좌측 복주머니+6/45 영역만 크롭하여 적용.\n- `images/`와 Home Assistant 실제 `brand/` 자산을 같은 두 이미지로 통일.\n- 브랜드 검증 스크립트가 다른 이미지로 되돌아가는 것을 방지하도록 SHA-256과 크기를 검증.\n\n'''
+          entry = '''\n## 1.9.1\n\n- 사용자가 첨부한 2048×682 가로 PNG를 재그리기·색상변환 없이 그대로 `images/logo-horizontal.png`로 적용.\n- 정사각 아이콘은 동일 원본의 좌측 복주머니+6/45 영역만 정확히 크롭하고 투명 정사각 캔버스에 중앙 정렬.\n- Home Assistant 실제 `brand/logo.png`와 `brand/icon.png`는 해당 두 자산의 규격 맞춤 리사이즈만 사용.\n- 브랜드 검증에서 원본 SHA-256과 2048×682 크기, 정사각 크롭 550×550을 확인.\n\n'''
           if '## 1.9.1' not in text:
               changelog.write_text(text.replace('# Changelog\n', '# Changelog\n' + entry, 1))
           PY
@@ -72,5 +50,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add images/logo-horizontal.png images/icon-square.png custom_components/lotto_645/brand/logo.png custom_components/lotto_645/brand/icon.png scripts/render_brand.py custom_components/lotto_645/manifest.json custom_components/lotto_645/const.py CHANGELOG.md
-          git commit -m 'fix: apply supplied Lotto branding exactly (v1.9.1)'
+          git commit -m 'fix: apply exact user-supplied Lotto branding (v1.9.1)'
           git push origin HEAD:fix/v1.9.1-exact-branding-final
