@@ -1,13 +1,16 @@
 """Admin-authenticated purchase panel. QR image decoding stays in the browser."""
 from __future__ import annotations
 
+import asyncio
+import hashlib
 from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.components import frontend, panel_custom, websocket_api
+from homeassistant.components import frontend, websocket_api
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN, VERSION
@@ -17,12 +20,29 @@ from .ticket_qr import parse_ticket_qr
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
 WWW = Path(__file__).parent / 'www'
+# The user-supplied PNG and locally verified pixel-identical lossless encodings.
+# Never display the old quantized replacement as the supplied original.
+SOURCE_LOGO_HASHES = {
+    '88f442d0d73cb9c4b378059297dfa1b8d3f334fb5e2dc9599404e5eee042ed3d',
+    'e97a01c60eddd57689a2073d0d9ff0f8c2f8b7a98a8d3aabf5e7d974317ebe5e',
+    '48c9f12ab0b98cb721269844f505e0d703b2f8cfb1e4b889abe3abb92238fb80',
+    '743d91bc687b5af2b4d3b9652a6b3cb1d2ee808abc4599cbc87abbe5c609b73f',
+}
+
+
+def _source_logo_available() -> bool:
+    try:
+        return hashlib.sha256((WWW.parent / 'brand' / 'logo.png').read_bytes()).hexdigest() in SOURCE_LOGO_HASHES
+    except OSError:
+        return False
 
 
 def _coordinator(hass: HomeAssistant, message: dict) -> Any:
     entry = hass.config_entries.async_get_entry(message['entry_id'])
     if entry is None or entry.domain != DOMAIN or not getattr(entry, 'runtime_data', None):
         raise HomeAssistantError('통합을 사용할 수 없습니다')
+    if getattr(entry, 'state', ConfigEntryState.LOADED) is not ConfigEntryState.LOADED:
+        raise HomeAssistantError('로또 통합을 다시 불러오는 중입니다. 잠시 후 다시 확인하세요')
     return entry.runtime_data
 
 
@@ -130,26 +150,71 @@ async def result_check(hass, connection, msg):
         connection.send_result(msg['id'], result)
 
 
-async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
-    shared = hass.data.setdefault(KEY, {'entries': {}, 'registered': False})
-    shared['entries'][entry.entry_id] = entry.title
-    if not shared['registered']:
-        await hass.http.async_register_static_paths([StaticPathConfig('/lotto_645_static', str(WWW), False)])
-        for handler in (purchases_get, qr_preview, purchases_save, result_check):
-            websocket_api.async_register_command(hass, handler)
-        shared['registered'] = True
-    frontend.async_remove_panel(hass, PATH)
-    await panel_custom.async_register_panel(
-        hass, webcomponent_name='lotto-ticket-panel', frontend_url_path=PATH,
+def _publish_panel(hass: HomeAssistant, shared: dict) -> None:
+    """Replace our panel atomically; never remove the route during a reload."""
+    existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
+    if existing is not None:
+        config = getattr(existing, 'config', None) or {}
+        if config.get('_panel_custom', {}).get('name') != 'lotto-ticket-panel':
+            raise HomeAssistantError('로또 페이지 경로를 다른 패널이 사용 중입니다')
+    frontend.async_register_built_in_panel(
+        hass, component_name='custom', frontend_url_path=PATH,
         sidebar_title='로또 복권', sidebar_icon='mdi:ticket-confirmation',
-        module_url=f'/lotto_645_static/lotto-panel.js?v={VERSION}',
-        require_admin=True, config={'entries': shared['entries'], 'version': VERSION},
+        require_admin=True, update=existing is not None,
+        config={'entries': dict(shared['entries']), 'version': VERSION,
+                'brand_logo_url': f'/lotto_645_brand/logo.png?v={VERSION}' if shared.get('source_logo_verified') else None,
+                '_panel_custom': {'name': 'lotto-ticket-panel', 'embed_iframe': False,
+                                  'trust_external': False, 'handle_safe_area': True,
+                                  'module_url': f'/lotto_645_static/lotto-panel.js?v={VERSION}'}},
     )
 
 
-def async_remove_ticket_panel(hass: HomeAssistant, entry_id: str) -> None:
+async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
+    shared = hass.data.setdefault(KEY, {'entries': {}, 'registered': False})
+    lock = shared.setdefault('lock', asyncio.Lock())
+    async with lock:
+        if getattr(entry, 'disabled_by', None) is not None:
+            return
+        # Register static resources once per HA process, even after all entries
+        # are temporarily unloaded. Do not duplicate HTTP routes on reload.
+        if not shared.get('static_registered', shared.get('registered', False)):
+            await hass.http.async_register_static_paths([
+                StaticPathConfig('/lotto_645_static', str(WWW), False)])
+            shared['static_registered'] = True
+        if not shared.get('brand_registered', False):
+            await hass.http.async_register_static_paths([
+                StaticPathConfig('/lotto_645_brand', str(Path(__file__).parent / 'brand'), False)])
+            shared['brand_registered'] = True
+        if not shared.get('commands_registered', shared.get('registered', False)):
+            for handler in (purchases_get, qr_preview, purchases_save, result_check):
+                websocket_api.async_register_command(hass, handler)
+            shared['commands_registered'] = True
+        shared['source_logo_verified'] = await hass.async_add_executor_job(_source_logo_available)
+        shared['registered'] = True
+        shared['entries'][entry.entry_id] = entry.title
+        _publish_panel(hass, shared)
+
+
+def async_ensure_ticket_panel(hass: HomeAssistant) -> None:
+    """Restore a missing registered route without polling any remote service."""
     shared = hass.data.get(KEY)
-    if shared:
-        shared['entries'].pop(entry_id, None)
-        if not shared['entries']:
+    if shared and shared.get('registered') and shared['entries'] and not frontend.async_panel_exists(hass, PATH):
+        _publish_panel(hass, shared)
+
+
+def async_remove_ticket_panel(hass: HomeAssistant, entry_id: str, *, permanent: bool = False) -> None:
+    shared = hass.data.get(KEY)
+    if not shared:
+        return
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if not permanent and entry is not None and getattr(entry, 'disabled_by', None) is None:
+        # Options reload / setup retry: keep the link and let the page show
+        # 'integration unavailable' instead of disappearing from the sidebar.
+        return
+    shared['entries'].pop(entry_id, None)
+    if shared['entries']:
+        _publish_panel(hass, shared)
+    else:
+        existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
+        if existing and (getattr(existing, 'config', None) or {}).get('_panel_custom', {}).get('name') == 'lotto-ticket-panel':
             frontend.async_remove_panel(hass, PATH)
