@@ -1,8 +1,10 @@
 """Lock the screenshot-matched style to the recent draw area, not ticket chips."""
 from pathlib import Path
+import json
 import re
 
-WWW = Path(__file__).resolve().parents[1] / 'custom_components/lotto_645/www'
+ROOT = Path(__file__).resolve().parents[1]
+WWW = ROOT / 'custom_components/lotto_645/www'
 VIEW = (WWW / 'lotto-panel-view.js').read_text(encoding='utf-8')
 
 
@@ -28,7 +30,8 @@ def test_all_five_number_bands_have_solid_colors():
     expected = {1: '#cd9234', 2: '#3e63c5', 3: '#bd4152', 4: '#8c8c8c', 5: '#5a9b50'}
     for band, color in expected.items():
         assert rule(f'.draw-numbers .ball[data-band="{band}"]') == f'background:{color}'
-    assert 'color:#aeb0b9' in rule('.plus')
+    # The plus sign now uses readable gray on the requested white background.
+    assert 'color:var(--draw-muted)' in rule('.plus')
 
 
 def test_wallet_chips_and_responsive_sizing_are_preserved():
@@ -42,4 +45,5 @@ def test_wallet_chips_and_responsive_sizing_are_preserved():
 
 def test_view_import_has_the_new_cache_key():
     controller = (WWW / 'lotto-panel.js').read_text(encoding='utf-8')
-    assert "from './lotto-panel-view.js?v=1.11.1';" in controller
+    version = json.loads((WWW.parent / 'manifest.json').read_text(encoding='utf-8'))['version']
+    assert f"from './lotto-panel-view.js?v={version}';" in controller

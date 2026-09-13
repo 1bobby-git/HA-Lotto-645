@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import struct
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -18,7 +19,12 @@ QR = 'https://qr.dhlottery.co.kr/?v=1241q010715243345n000000000000n000000000000n
 async def run():
     logo = ROOT / 'custom_components/lotto_645/brand/logo.png'
     content = logo.read_bytes()
-    assert hashlib.sha1(b'blob ' + str(len(content)).encode() + b'\0' + content).hexdigest() == '55ac9df7ae1d37e7def3a9189a51556caa2d6376'
+    # Main's approved canonical logo was replaced independently of the draw UI.
+    # Pin that exact file; never revert the artwork to satisfy the old fixture.
+    assert hashlib.sha1(b'blob ' + str(len(content)).encode() + b'\0' + content).hexdigest() == '63e5458355b4308068db08a0d02a1d5f06c7bb3b'
+    assert content[:8] == b'\x89PNG\r\n\x1a\n' and content[12:16] == b'IHDR'
+    logo_size = struct.unpack('>II', content[16:24])
+    assert logo_size[0] > logo_size[1] > 0
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
             **({'executable_path': '/usr/bin/chromium'} if Path('/usr/bin/chromium').exists() else {}),
@@ -46,6 +52,7 @@ async def run():
         await page.route('**/*', serve)
         await page.goto('http://lotto.test/')
         await page.wait_for_function("Boolean(customElements.get('lotto-ticket-panel'))")
+        await page.evaluate('(size)=>window.expectedLogoSize=size', list(logo_size))
         await page.evaluate("""() => {
             window.requests=[];window.saved={};window.revision='';
             window.el=document.createElement('lotto-ticket-panel');document.body.replaceChildren(el);
@@ -62,10 +69,11 @@ async def run():
         }""")
         await page.evaluate('(qr)=>window.expectedQR=qr', QR)
         await page.wait_for_function('el._walletData && !el._busy')
-        await page.wait_for_function("el.node('brand').complete && el.node('brand').naturalWidth===512")
+        await page.wait_for_function("el.node('brand').complete && el.node('brand').naturalWidth===expectedLogoSize[0] && el.node('brand').naturalHeight===expectedLogoSize[1]")
         assert await page.locator('#drawtitle').text_content() == '제 1,240회'
         assert await page.locator('#numbers .ball').count() == 7
         assert resources.keys() <= assets
+        assert await page.locator('.draw-stage').evaluate("n=>getComputedStyle(n).backgroundColor==='rgb(255, 255, 255)' && getComputedStyle(n).backgroundImage==='none'")
 
         # Decode an actual generated PNG through the unmodified bundled decoder.
         await page.locator('[data-register]').first.click()
@@ -126,10 +134,11 @@ async def run():
                 await page.locator(f'#tab-{name}').click()
                 assert await page.evaluate('el.scrollWidth<=el.clientWidth+1'), (width, name)
         await page.evaluate("el.hass={...el._hass,themes:{darkMode:true}}")
-        assert await page.evaluate("el.getAttribute('data-theme')==='dark' && el.node('brand').naturalWidth===512")
+        assert await page.evaluate("el.getAttribute('data-theme')==='dark' && el.node('brand').naturalWidth===expectedLogoSize[0] && el.node('brand').naturalHeight===expectedLogoSize[1]")
+        assert await page.locator('.draw-stage').evaluate("n=>getComputedStyle(n).backgroundColor==='rgb(255, 255, 255)' && getComputedStyle(n).color==='rgb(25, 31, 40)'")
         assert not errors, errors
         await browser.close()
-        print('PASS: real ES modules, original logo, local PNG QR decode, explicit save, draft/revision preservation, legacy reviews, menu, responsive views and dark mode')
+        print('PASS: real ES modules, canonical logo, white result card, local PNG QR decode, explicit save, draft/revision preservation, legacy reviews, menu, responsive views and dark mode')
 
 
 if __name__ == '__main__':
