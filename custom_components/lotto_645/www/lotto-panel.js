@@ -1,6 +1,6 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows } from './lotto-panel-view.js?v=1.11.2';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows } from './lotto-panel-view.js?v=1.11.3';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';

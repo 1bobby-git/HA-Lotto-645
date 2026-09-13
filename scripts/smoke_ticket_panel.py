@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 import qrcode
 from playwright.async_api import async_playwright
+from smoke_panel_safe_area import verify_safe_area
 
 ROOT = Path(__file__).resolve().parents[1]
 WWW = ROOT / 'custom_components/lotto_645/www'
@@ -136,6 +137,7 @@ async def run():
         await page.evaluate("el.hass={...el._hass,themes:{darkMode:true}}")
         assert await page.evaluate("el.getAttribute('data-theme')==='dark' && el.node('brand').naturalWidth===expectedLogoSize[0] && el.node('brand').naturalHeight===expectedLogoSize[1]")
         assert await page.locator('.draw-stage').evaluate("n=>getComputedStyle(n).backgroundColor==='rgb(255, 255, 255)' && getComputedStyle(n).color==='rgb(25, 31, 40)'")
+        await verify_safe_area(page)
         assert not errors, errors
         await browser.close()
         print('PASS: real ES modules, canonical logo, white result card, local PNG QR decode, explicit save, draft/revision preservation, legacy reviews, menu, responsive views and dark mode')
