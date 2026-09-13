@@ -20,8 +20,6 @@ QR = 'https://qr.dhlottery.co.kr/?v=1241q010715243345n000000000000n000000000000n
 async def run():
     logo = ROOT / 'custom_components/lotto_645/brand/logo.png'
     content = logo.read_bytes()
-    # Main's approved canonical logo was replaced independently of the draw UI.
-    # Pin that exact file; never revert the artwork to satisfy the old fixture.
     assert hashlib.sha1(b'blob ' + str(len(content)).encode() + b'\0' + content).hexdigest() == '63e5458355b4308068db08a0d02a1d5f06c7bb3b'
     assert content[:8] == b'\x89PNG\r\n\x1a\n' and content[12:16] == b'IHDR'
     logo_size = struct.unpack('>II', content[16:24])
@@ -36,7 +34,7 @@ async def run():
         assets = set()
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.on('dialog', lambda dialog: dialog.accept())
-        resources = {f'/lotto_645_static/{name}': WWW / name for name in ('jsQR.js', 'lotto-panel.js', 'lotto-panel-view.js')}
+        resources = {f'/lotto_645_static/{name}': WWW / name for name in ('jsQR.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js')}
         resources['/lotto_645_brand/logo.png'] = logo
 
         async def serve(route):
@@ -71,12 +69,12 @@ async def run():
         await page.evaluate('(qr)=>window.expectedQR=qr', QR)
         await page.wait_for_function('el._walletData && !el._busy')
         await page.wait_for_function("el.node('brand').complete && el.node('brand').naturalWidth===expectedLogoSize[0] && el.node('brand').naturalHeight===expectedLogoSize[1]")
+        assert await page.locator('.ha-component-title').text_content() == 'Lotto 6/45 Analysis'
         assert await page.locator('#drawtitle').text_content() == '제 1,240회'
         assert await page.locator('#numbers .ball').count() == 7
         assert resources.keys() <= assets
         assert await page.locator('.draw-stage').evaluate("n=>getComputedStyle(n).backgroundColor==='rgb(255, 255, 255)' && getComputedStyle(n).backgroundImage==='none'")
 
-        # Decode an actual generated PNG through the unmodified bundled decoder.
         await page.locator('[data-register]').first.click()
         assert await page.locator('#editor').evaluate('n=>n.open')
         with tempfile.TemporaryDirectory() as tmp:
@@ -96,7 +94,6 @@ async def run():
         assert await page.locator('#wallet-games .ticket-row').count() == 1
         assert await page.locator('#wallet-games .ball').count() == 6
 
-        # Polling updates results and saved data, not the editor or its revision.
         await page.locator('#edit-wallet').click()
         await page.locator('#game_a').fill('2, 3, 4, 5, 6, 7')
         await page.evaluate("""async()=>{
@@ -140,7 +137,7 @@ async def run():
         await verify_safe_area(page)
         assert not errors, errors
         await browser.close()
-        print('PASS: real ES modules, canonical logo, white result card, local PNG QR decode, explicit save, draft/revision preservation, legacy reviews, menu, responsive views and dark mode')
+        print('PASS: two-tier header, real ES modules, canonical logo, white result card, local PNG QR decode, explicit save, draft/revision preservation, safe areas and responsive views')
 
 
 if __name__ == '__main__':
