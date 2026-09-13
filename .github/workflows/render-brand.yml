@@ -25,10 +25,10 @@ jobs:
           from pathlib import Path
           from PIL import Image
           paths = [
-              Path('images/logo-horizontal.png'),
-              Path('images/icon-square.png'),
               Path('custom_components/lotto_645/brand/logo.png'),
+              Path('custom_components/lotto_645/brand/logo@2x.png'),
               Path('custom_components/lotto_645/brand/icon.png'),
+              Path('custom_components/lotto_645/brand/icon@2x.png'),
           ]
           for path in paths:
               with Image.open(path) as image:

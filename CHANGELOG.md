@@ -90,10 +90,10 @@
 - Home Assistant 브랜드 로고/아이콘 크기 규격을 맞춰 모바일에서 찌그러지거나 깨져 보이던 문제 수정
 
 ### Changed
-- 가로형 원본 PNG는 `images/logo-horizontal.png`를 canonical source로 유지하며 새 그림을 만들지 않음
-- 정사각형 아이콘은 가로 PNG의 왼쪽 복주머니·6·45 공 영역만 실제 투명 픽셀 경계로 크롭해 256/512px로 생성
+- 가로형 원본 PNG는 `custom_components/lotto_645/brand/logo.png`를 canonical source로 유지하며 새 그림을 만들지 않음
+- 정사각형 아이콘은 `custom_components/lotto_645/brand/icon.png` 원본을 직접 사용
 - 이전에 별도로 다시 그렸던 SVG 로고/아이콘 자산 제거
-- Home Assistant용 가로 브랜드 이미지는 동일 PNG 픽셀을 비율 유지 리사이즈해 normal/@2x 규격으로 생성
+- 선택적인 `@2x` 파일만 각 원본에서 비율 유지 리사이즈해 생성
 
 ## 1.5.0 — 2026-09-11
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/logo-horizontal.png" alt="Lotto 6/45" width="720">
+  <img src="custom_components/lotto_645/brand/logo.png" alt="Lotto 6/45" width="720">
 </p>
 
 # HA-Lotto-645
@@ -106,8 +106,8 @@
 ## v1.5.1 · 설정 오류 및 로고/아이콘 수정
 
 - 추천 방식을 추가·제거해도 옵션 저장 단계에서 `Unknown error occurred`가 발생하지 않도록 입력 정규화와 오류 처리를 보강했습니다.
-- 가로 로고는 `images/logo-horizontal.png`를 canonical source로 그대로 유지합니다. Home Assistant에 필요한 `brand/logo*.png`는 같은 PNG를 비율 유지로 크기만 조정합니다.
-- 정사각형 아이콘은 별도로 다시 그리지 않고 가로 PNG의 **왼쪽 복주머니 + 6/45 번호공 영역만 실제 픽셀로 크롭**해 만듭니다.
+- 가로 로고는 `custom_components/lotto_645/brand/logo.png` 원본을 직접 사용합니다.
+- 정사각형 아이콘은 `custom_components/lotto_645/brand/icon.png` 원본을 직접 사용합니다.
 
 ## v1.5.0 · 개인 사주 명리 고도화
 

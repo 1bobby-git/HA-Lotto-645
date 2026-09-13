@@ -4,19 +4,17 @@ v1.10.0의 빠른 추첨결과 수집/QR 패널과 다음 작업은 구분합니
 
 ## 원본 로고
 
-현재 저장소의 작은 PNG가 첨부 원본과 동일하다고 확인되지 않았습니다. 이번 빠른 결과 기능에서 기존 파일을 다른 재제작 이미지로 덮어쓰지 않습니다. 가로 원본은 재압축/리사이즈/팔레트 축소 없이 그대로 적용하고, 정사각만 좌측 심볼 영역을 크롭해야 합니다.
+첨부된 가로 로고와 정사각형 아이콘을 재압축·리사이즈·팔레트 축소 없이 각각의 기준 원본으로 사용합니다.
 
 대상 경로:
-- `images/logo-horizontal.png`
-- `images/icon-square.png`
 - `custom_components/lotto_645/brand/logo.png`
 - `custom_components/lotto_645/brand/icon.png`
 
 원본 파일 확인 기준:
-- 2048 × 682 RGBA
-- SHA-256: `88f442d0d73cb9c4b378059297dfa1b8d3f334fb5e2dc9599404e5eee042ed3d`
+- `logo.png`: 2172 × 724 RGBA, SHA-256 `246737fadf5e336144ade59f012c66f4f4cfc85642c0d4331dc3e0c04a5c0881`
+- `icon.png`: 580 × 580 RGBA, SHA-256 `0e527f721cd3372bfddc6b30a230951a7af8188e851fc0d236e3bf5eb076172d`
 
-이 원본이 실제로 업로드되기 전에는 로고 수정 완료로 표시하지 않습니다. 원본 교체 후에는 `scripts/render_brand.py`가 가로 원본까지 축소하지 않도록 별도 점검해야 합니다.
+`scripts/render_brand.py`는 두 원본을 변경하지 않고 선택적인 `@2x` 파일만 생성합니다.
 
 ## main 보호
 
