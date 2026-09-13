@@ -1,129 +1,323 @@
-/* Local-only QR camera/photo decoding. Purchases use authenticated HA websocket. */
+/* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows } from './lotto-panel-view.js?v=wallet-20260913';
 
-const label = {
-  waiting: '새 회차 결과 발표 대기', provisional: '속보 기준 · 공식 미대조',
-  cross_checked: '복수 언론 일치 · 공식 미대조', conflict: '출처 불일치 · 판정 대기',
+// The exact repository logo selected by the user. Served by the existing HA route.
+const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
+const labels = {
+  waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
+  cross_checked: '복수 출처 일치 · 공식 확인 전', conflict: '출처 불일치 · 판정 보류',
   official_history: '공식 이력 기준', official_confirmed: '공식 이력 대조 완료',
-  official_corrected: '공식 이력으로 정정됨'
+  official_corrected: '공식 이력으로 정정',
 };
+const slots = [...'abcde'];
+const formatRound = n => Number.isInteger(Number(n)) && Number(n)>0 ? `제 ${Number(n).toLocaleString('ko-KR')}회` : '보관한 복권';
 
 class LottoTicketPanel extends HTMLElement {
-  constructor() { super(); this.attachShadow({mode:'open'}); this._revision=''; this._editing=false; }
-  set hass(value) { this._hass=value; this._start(); }
+  constructor() {
+    super(); this.attachShadow({mode:'open'});
+    this._revision=''; this._editing=false; this._touched=new Set(); this._screen='home';
+    this._visibleGames=1; this._walletData=null; this._cameraGeneration=0;
+  }
+  set hass(value) { this._hass=value; this.syncTheme(); this._start(); }
   set panel(value) { this._panel=value; this._start(); }
-  connectedCallback() { this._visibility=()=>{if(document.hidden)this.stopCamera();};document.addEventListener('visibilitychange',this._visibility);this._start(); }
-  disconnectedCallback() { document.removeEventListener('visibilitychange',this._visibility); this.stopCamera(); clearInterval(this._poll); this._poll=null; }
+  connectedCallback() {
+    this._visibility=()=>{if(document.hidden)this.stopCamera();};
+    this._beforeUnload=e=>{if(this._editing&&this.node('editor')?.open){e.preventDefault();e.returnValue='';}};
+    document.addEventListener('visibilitychange',this._visibility);
+    window.addEventListener('beforeunload',this._beforeUnload);
+    this._themeMedia=window.matchMedia('(prefers-color-scheme: dark)');
+    this._themeListener=()=>this.syncTheme(); this._themeMedia.addEventListener('change',this._themeListener);
+    this.syncTheme(); this._start();
+  }
+  disconnectedCallback() {
+    document.removeEventListener('visibilitychange',this._visibility);
+    window.removeEventListener('beforeunload',this._beforeUnload);
+    this._themeMedia?.removeEventListener('change',this._themeListener);
+    this.stopCamera(); clearInterval(this._poll); this._poll=null;
+    // Never retain an invisible top-layer dialog after HA navigates elsewhere.
+    if(this.node('editor')?.open)this.node('editor').close();
+    this.removeAttribute('data-editor-open');
+  }
+  syncTheme() {
+    const dark=this._hass?.themes?.darkMode ?? window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme=dark?'dark':'light'; if(this.getAttribute('data-theme')!==theme)this.setAttribute('data-theme',theme);
+  }
   _start() {
-    if (!this._hass || !this._panel || !this.isConnected) return;
-    if (!this.shadowRoot.firstChild) this.render();
-    if (!this._poll) this._poll=setInterval(() => { if (!this._busy && !document.hidden) this.operation(()=>this.refreshStatus()); },30000);
+    if(!this._hass||!this._panel||!this.isConnected)return;
+    if(!this.shadowRoot.firstChild)this.render();
+    if(!this._poll)this._poll=setInterval(()=>{
+      if(!this._busy&&!document.hidden&&this.node('entry')?.value)this.operation(()=>this.refreshStatus(),true);
+    },30000);
   }
   node(id) { return this.shadowRoot.getElementById(id); }
-  message(text, error=false) { const n=this.node('message'); n.textContent=text; n.setAttribute('role',error?'alert':'status'); }
-  async request(type,extra={}) { return this._hass.callWS({type:`lotto_645/${type}`,entry_id:this.node('entry').value,...extra}); }
-  async operation(action) {
-    if (this._busy) return;
+  message(text,error=false) {
+    const active=this.node('editor')?.open?'editor-message':'message';
+    const n=this.node(active); if(!n)return;
+    n.setAttribute('role',error?'alert':'status');n.setAttribute('aria-live',error?'assertive':'polite');
+    n.dataset.error=String(error);n.textContent=text;
+  }
+  async request(type,extra={}) {
+    const entry=this.node('entry').value;
+    if(!entry)throw new Error('사용할 로또 통합이 없어요. 통합 설정을 확인해 주세요.');
+    return this._hass.callWS({type:`lotto_645/${type}`,entry_id:entry,...extra});
+  }
+  async operation(action,background=false) {
+    if(this._busy)return;
     this._busy=true;
-    for (const n of this.shadowRoot.querySelectorAll('button')) n.disabled=true;
-    try { await action(); } catch(e) { this.message(e.message || '작업을 완료하지 못했습니다.',true); }
-    finally { this._busy=false; for (const n of this.shadowRoot.querySelectorAll('button')) n.disabled=false; }
+    const local='[data-screen],[data-go],#menu,#brand-home,#close-editor,#stop';
+    const controls=background?[]:[...this.shadowRoot.querySelectorAll('button,input,select,textarea')].filter(n=>!n.matches(local));
+    const disabled=controls.map(n=>n.disabled);controls.forEach(n=>n.disabled=true);
+    if(!background)this.node('editor')?.setAttribute('aria-busy','true');
+    try { await action(); }
+    catch(error) {
+      this.message(error?.message||'작업을 완료하지 못했어요. 다시 시도해 주세요.',true);
+      if(background){this.node('connection').dataset.online='false';this.node('connection').textContent='연결 확인 필요';this.node('sync-status').textContent='자동 확인 실패 · 다시 확인해 주세요';}
+    } finally {
+      this._busy=false;controls.forEach((n,i)=>n.disabled=disabled[i]);
+      this.node('editor')?.removeAttribute('aria-busy');this.syncAvailability();
+      if(this._focusAfter){const id=this._focusAfter;this._focusAfter=null;this.node(id)?.focus();}
+      if(this._returnFocusPending){this._returnFocusPending=false;this._opener?.focus();}
+    }
   }
   render() {
-    this.shadowRoot.innerHTML=`<style>
-      :host{display:block;color:var(--primary-text-color);background:var(--primary-background-color);min-height:100%;font-family:var(--paper-font-body1_-_font-family,system-ui)}
-      main{max-width:780px;margin:0 auto;padding:max(24px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(60px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
-      .topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.brand[hidden]{display:none}.brand{display:block;width:min(100%,420px);height:auto;object-fit:contain}.topbar h1{margin:8px 0}.links{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}.links a{color:var(--primary-color)}
-      #reviews-table{min-width:670px}td:last-child{white-space:nowrap}h1{font-size:24px}h2{font-size:19px;margin-top:0}.box{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:14px;padding:20px;margin:16px 0}
-      label{display:block;margin:14px 0 6px;font-weight:600}input,textarea,select{box-sizing:border-box;width:100%;padding:13px;border-radius:8px;border:1px solid var(--divider-color);background:var(--primary-background-color);color:inherit;font:inherit}input{font-variant-numeric:tabular-nums}textarea{min-height:76px}
-      .row{display:flex;flex-wrap:wrap;gap:10px}button{font:inherit;padding:11px 15px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer}button.primary{background:var(--primary-color);color:var(--text-primary-color,#fff)}button:disabled{opacity:.6;cursor:wait}
-      :focus-visible{outline:3px solid var(--primary-color);outline-offset:3px}small,.note{line-height:1.65;opacity:.85}.numbers{font-size:22px;line-height:1.8;font-weight:700;overflow-wrap:anywhere}#message{padding:12px 0;min-height:22px;white-space:pre-line}video{width:100%;max-height:380px;object-fit:contain}table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:9px 5px;border-bottom:1px solid var(--divider-color)}.scroll{overflow-x:auto}#camera[hidden]{display:none}
-    </style><main><header><div class="topbar"><button id="menu" type="button" aria-label="Home Assistant 메뉴 열기">☰ 메뉴</button><h1>로또 복권</h1></div><img id="brand" class="brand" hidden alt="Lotto 6/45" width="2048" height="682"><nav class="links" aria-label="통합 바로가기"><a href="/config/integrations/integration/lotto_645">통합·센서 보기</a></nav><p class="note">기존 추천 센서와 대시보드는 그대로 사용할 수 있습니다. 이 페이지는 구매번호·QR·결과를 모아 보는 추가 관리 화면입니다.</p></header><p class="note">구매번호 5게임과 추천 결과를 회차별로 대조합니다. QR 사진은 브라우저 안에서만 읽습니다. 실제 구매·지급을 인증하는 기능은 아닙니다.</p>
-      <label for="entry">로또 통합</label><select id="entry"></select><div id="message" role="status" aria-live="polite"></div>
-      <section class="box"><h2 id="drawtitle">추첨번호</h2><div class="numbers" id="numbers">확인 중</div><p id="verification"></p><p id="result"></p><div id="sources"></div><button id="check">추첨 결과 지금 확인</button><p class="note">공개 결과를 찾으면 자동 반영합니다. 속보 판정은 공식 이력 수신 후 다시 대조됩니다. 사이트 게시 지연·접근 제한에 따라 수신이 늦어질 수 있습니다.</p></section>
-      <section class="box"><h2>복권 QR로 입력</h2><div class="row"><button id="scan">카메라로 QR 스캔</button><button id="photo">QR 사진 선택</button><input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
-      <div id="camera" hidden><video id="video" autoplay muted playsinline></video><button id="stop">카메라 종료</button></div>
-      <label for="qr">또는 휴대폰 카메라로 읽은 QR 주소 붙여넣기</label><textarea id="qr" maxlength="2048" placeholder="https://qr.dhlottery.co.kr/?v=..."></textarea><button id="preview">QR 번호 미리보기</button><p class="note">QR은 주소를 방문하지 않고 회차·번호만 읽습니다. 아래 A~E를 확인한 뒤 저장하세요.</p></section>
-      <section class="box"><h2>직접 구매번호 A~E</h2><label for="round">복권에 적힌 회차</label><input id="round" inputmode="numeric" type="text" maxlength="6"><button id="load">해당 회차 불러오기</button><p id="savedrounds" class="note"></p><div id="games"></div>
-      <p class="note">예: 1, 7, 15, 24, 33, 45 / 1 7 15 24 33 45 / 010715243345. 게임당 중복 없는 6개 번호, 최대 5게임입니다. 빈 줄은 저장하지 않습니다. 같은 회차의 A~E는 저장할 때 교체됩니다.</p>
-      <div class="row"><button id="save" class="primary">확인한 번호 저장</button><button id="clear">이 회차 구매번호 삭제</button></div><div class="scroll"><table><caption>저장한 구매번호의 회차별 판정</caption><thead><tr><th>게임</th><th>번호</th><th>결과</th></tr></thead><tbody id="outcomes"></tbody></table></div></section>
-      <section class="box"><h2>추천 센서별 판정</h2><div class="scroll"><table><thead><tr><th>추천 방식</th><th>번호</th><th>결과</th></tr></thead><tbody id="predictions"></tbody></table></div></section><section class="box"><h2>방식별 누적 리뷰</h2><p class="note">추첨 전 저장한 실제 추천만 평가합니다. 공식 확인 회차의 평균점수 ÷ 20이 별점입니다. ±1은 유사도일 뿐 당첨이 아닙니다. 속보 점수는 잠정이며 누적평균과 분리합니다. 표본이 적은 별점은 미래 예측력을 뜻하지 않습니다.</p><p id="reviewstatus"></p><div class="scroll"><table id="reviews-table"><thead><tr><th>추천 방식 / 누적 별점</th><th>평가 회차</th><th>이번 회차</th><th>정확 / ±1</th><th>순위</th></tr></thead><tbody id="reviews"></tbody></table></div></section></main>`;
-    const config=this._panel.config || {};
-    for (const [id,name] of Object.entries(config.entries || {})) {const n=document.createElement('option');n.value=id;n.textContent=name;this.node('entry').append(n);}
-    for (const s of 'abcde') {
-      const l=document.createElement('label'); l.htmlFor=`game_${s}`; l.textContent=`${s.toUpperCase()} · 번호 6개`;
-      const n=document.createElement('input'); n.id=`game_${s}`; n.inputMode='numeric'; n.maxLength=100;
-      n.addEventListener('input',()=>this._editing=true);this.node('games').append(l,n);
-    }
-    this.node('round').addEventListener('input',()=>{this._editing=true;this._loadedRound=null;});
-    this.node('load').onclick=()=>this.operation(()=>this.load(true));
-    const brandUrl=this._panel.config.brand_logo_url;
-    if(typeof brandUrl==='string' && brandUrl.startsWith('/lotto_645_brand/logo.png')){this.node('brand').src=brandUrl;this.node('brand').hidden=false;}
+    this.shadowRoot.innerHTML=panelTemplate;
+    const config=this._panel.config||{};
+    for(const [id,name] of Object.entries(config.entries||{})){const option=document.createElement('option');option.value=id;option.textContent=name;this.node('entry').append(option);}
+    this.node('entry-field').hidden=this.node('entry').options.length<=1;this._activeEntry=this.node('entry').value;
+    const logo=config.brand_logo_url;
+    this.node('brand').src=typeof logo==='string'&&/^\/lotto_645_brand\/logo\.png(?:\?|$)/.test(logo)?logo:FALLBACK_LOGO;
+    this.node('brand').onerror=()=>{this.node('brand').hidden=true;this.node('brand-fallback').hidden=false;};
     this.node('menu').onclick=()=>this.dispatchEvent(new Event('hass-toggle-menu',{bubbles:true,composed:true}));
-    this.node('entry').onchange=()=>this.operation(async()=>{this._editing=false;this._loadedRound=null;this.node('round').value='';await this.load(true);});
-    this.node('save').onclick=()=>this.operation(()=>this.save(false));
-    this.node('clear').onclick=()=>this.operation(()=>this.save(true));
-    this.node('check').onclick=()=>this.operation(async()=>{this.message('공개된 추첨 결과를 확인하고 있습니다.');this.updateResults(await this.request('result_check'));this.message('확인 완료. 새 결과가 아직 없으면 자동 확인을 계속합니다.');});
-    this.node('preview').onclick=()=>this.operation(()=>this.preview(this.node('qr').value));
-    this.node('scan').onclick=()=>this.operation(()=>this.startCamera());
+    this.node('brand-home').onclick=()=>this.showScreen('home',true);
+    for(const button of this.shadowRoot.querySelectorAll('[data-screen]')) {
+      button.onclick=()=>this.showScreen(button.dataset.screen);
+      button.onkeydown=e=>this.onTabKey(e);
+    }
+    for(const button of this.shadowRoot.querySelectorAll('[data-go]'))button.onclick=()=>this.showScreen(button.dataset.go,true);
+    for(const button of this.shadowRoot.querySelectorAll('[data-register]'))button.onclick=()=>this.openEditor('import');
+    this.node('entry').onchange=()=>{
+      if(this._editing&&!window.confirm('저장하지 않은 번호를 버리고 로또 통합을 변경할까요?')){this.node('entry').value=this._activeEntry;return;}
+      this._activeEntry=this.node('entry').value;this.stopCamera();
+      this.operation(async()=>{this._editing=false;this._walletData=null;this._walletRound=null;this._loadedRound=null;await this.load();});
+    };
+    this.node('check').onclick=()=>this.operation(async()=>{
+      this.message('새 추첨 결과를 확인하고 있어요.');this.updateResults(await this.request('result_check'));
+      // result_check may return the server's selected round, not the visible wallet round.
+      await this.refreshStatus();this.message('확인했어요. 새 결과가 없으면 자동 확인을 계속합니다.');
+    });
+    this.node('wallet-round').onchange=()=>this.operation(async()=>{
+      try{await this.load(Number(this.node('wallet-round').value));}
+      catch(error){this.node('wallet-round').value=String(this._walletRound||'');throw error;}
+    });
+    this.node('edit-wallet').onclick=()=>this.openEditor('edit');
+    this.node('delete-wallet').onclick=()=>this.operation(()=>this.deleteWallet());
+    this.node('close-editor').onclick=()=>this.closeEditor();
+    this.node('editor').addEventListener('cancel',e=>{e.preventDefault();this.closeEditor();});
+    this.node('editor').addEventListener('keydown',e=>this.onEditorKey(e));
+    this.node('editor').addEventListener('click',e=>{
+      if(e.target!==this.node('editor'))return;
+      const r=this.node('editor').getBoundingClientRect();
+      if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)this.closeEditor();
+    });
+    this.node('manual').onclick=()=>this.operation(async()=>{
+      // Returning from number editing must preserve the draft and its revision.
+      const target=this._editorMode==='edit'?this._walletRound:(this._targetRound||this._walletRound);
+      if(!this._editing&&target&&target!==this._loadedRound)await this.load(target);
+      this.showEditorStep('edit');this._focusAfter='game_a';
+      if(this._revision)this.message('이 회차에 이미 저장된 번호가 있어요. 다시 저장하면 A~E를 교체합니다.');
+    });
+    this.node('back-editor').onclick=()=>{this.stopCamera();this.showEditorStep('import');this.node('manual').focus();};
+    this.node('save').onclick=()=>this.operation(()=>this.save());
+    this.node('scan').onclick=()=>this.operation(async()=>{this._cameraStarting=true;try{await this.startCamera();}finally{this._cameraStarting=false;}});
     this.node('stop').onclick=()=>this.stopCamera();
     this.node('photo').onclick=()=>this.node('file').click();
     this.node('file').onchange=()=>this.operation(()=>this.readPhoto());
-    this.operation(()=>this.load(true));
-  }
-  selectedRound() {const raw=this.node('round').value.trim();if(!/^[0-9]{1,6}$/.test(raw)||+raw<1)throw new Error('회차를 숫자로 입력하세요.');return +raw;}
-  async load(explicit=false) {
-    const raw=this.node('round').value.trim();
-    const data=await this.request('purchases_get',raw?{round:this.selectedRound()}:{});
-    this.updateResults(data);
-    if (!this._editing || explicit) {
-      this.node('round').value=data.round || data.recommendation_target || '';
-      this._loadedRound=Number(this.node('round').value);this._revision=data.revision;
-      for (const s of 'abcde') this.node(`game_${s}`).value=data.values[`game_${s}`] || '';
-      this._editing=false;
+    this.node('preview').onclick=()=>this.operation(()=>this.preview(this.node('qr').value));
+    this.node('round').oninput=()=>{this._editing=true;this._loadedRound=null;this.updateFormStatus();};
+    this.node('load').onclick=()=>{
+      if(this._editing&&!window.confirm('저장하지 않은 입력을 버리고 해당 회차를 불러올까요?'))return;
+      this.operation(async()=>{await this.load(this.selectedRound());this.message('해당 회차를 불러왔어요. 번호를 확인해 주세요.');this._focusAfter='game_a';});
+    };
+    for(const s of slots){
+      const row=document.createElement('div');row.id=`field_${s}`;row.className='game-field';
+      const label=document.createElement('label');label.htmlFor=`game_${s}`;
+      const tag=document.createElement('span');tag.className='slot-tag';tag.textContent=s.toUpperCase();label.append(tag,document.createTextNode('게임 · 번호 6개'));
+      const input=document.createElement('input');input.id=`game_${s}`;input.inputMode='numeric';input.maxLength=100;input.autocomplete='off';input.spellcheck=false;
+      input.placeholder='예: 1, 7, 15, 24, 33, 45';input.setAttribute('aria-describedby',`hint_${s}`);
+      input.oninput=()=>{this._editing=true;this.updateFormStatus();};input.onblur=()=>{this._touched.add(s);this.updateFormStatus();};
+      const hint=document.createElement('p');hint.id=`hint_${s}`;hint.className='game-feedback';row.append(label,input,hint);this.node('games').append(row);
     }
-    this.node('savedrounds').textContent='저장된 회차: '+(data.stored_rounds.join(', ')||'없음');
-    this.rows('outcomes',(data.purchased.games||[]).map(g=>[g.slot,(g.numbers||g.recommended_numbers||[]).join(', '),g.prize||'추첨 대기']));
-    if(data.storage_error)this.message('구매번호 저장소를 확인해야 합니다. 기존 파일은 덮어쓰지 않습니다.',true);
+    this.node('add-game').onclick=()=>{if(this._visibleGames>=5)return;this.showGameSlots(this._visibleGames+1);this.node(`game_${slots[this._visibleGames-1]}`).focus();};
+    this.showGameSlots(1);this.syncAvailability();
+    if(this._activeEntry)this.operation(()=>this.load());
+    else{this.message('사용할 로또 통합이 없어요. 상단 설정에서 통합을 추가해 주세요.',true);this.node('drawtitle').textContent='통합 설정 필요';this.node('numbers').textContent='연결된 로또 통합이 없어요.';this.node('connection').textContent='통합 설정 필요';ticketRows(this.node('mini-games'),[]);ticketRows(this.node('wallet-games'),[]);}
+  }
+  syncAvailability() {
+    if(!this.node('entry'))return;
+    const available=!!this.node('entry').value;
+    for(const n of this.shadowRoot.querySelectorAll('[data-register],#check'))n.disabled=!available||this._busy;
+    this.node('edit-wallet').disabled=!this._walletData||this._busy;
+    this.node('delete-wallet').disabled=!this._walletData?.revision||this._busy;
+    this.node('wallet-round').disabled=!this._walletData||this._busy;
+  }
+  showScreen(name,focus=false) {
+    if(!['home','wallet','review'].includes(name))return;
+    for(const key of ['home','wallet','review']){const selected=key===name;const tab=this.node(`tab-${key}`);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;this.node(`screen-${key}`).hidden=!selected;}
+    this._screen=name;this.scrollTop=0;if(focus)this.node(`tab-${name}`).focus();
+  }
+  onTabKey(e) {
+    const keys=['home','wallet','review'],index=keys.indexOf(e.currentTarget.dataset.screen);
+    let next;if(e.key==='ArrowRight')next=(index+1)%3;else if(e.key==='ArrowLeft')next=(index+2)%3;else if(e.key==='Home')next=0;else if(e.key==='End')next=2;else return;
+    e.preventDefault();this.showScreen(keys[next],true);
+  }
+  openEditor(mode='import') {
+    if(this.node('editor').open||!this._activeEntry||this._busy)return;
+    this._opener=this.shadowRoot.activeElement;this._editorMode=mode;
+    if(this._walletData)this.restoreForm(this._walletData);
+    this.node('editor-title').textContent=mode==='edit'?'구매번호 수정':'복권 등록';
+    this.node('editor-message').textContent='';this.node('message').textContent='';this.node('qr').value='';
+    this.node('address-import').open=false;this.showEditorStep(mode==='edit'?'edit':'import');
+    this.setAttribute('data-editor-open','');this.node('editor').showModal();
+    this.node(mode==='edit'?'game_a':'scan').focus();
+  }
+  onEditorKey(event) {
+    if(event.key!=='Tab')return;
+    // Keep keyboard traversal in the sheet instead of handing it to browser chrome.
+    // The native modal additionally makes the rest of the document inert.
+    const nodes=[...this.node('editor').querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex]:not([tabindex="-1"])')]
+      .filter(n=>n.getClientRects().length&&!n.closest('[hidden]')&&(!n.closest('details:not([open])')||n.tagName==='SUMMARY'));
+    const first=nodes[0],last=nodes.at(-1),active=this.shadowRoot.activeElement;
+    if(!first)return;
+    if(event.shiftKey&&(active===first||!nodes.includes(active))){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&(active===last||!nodes.includes(active))){event.preventDefault();first.focus();}
+  }
+  showEditorStep(step) {
+    const editing=step==='edit';
+    this.node('import-step').hidden=editing;this.node('edit-step').hidden=!editing;
+    this.node('save-footer').hidden=!editing;this.node('privacy-footer').hidden=editing;
+    for(const [id,active] of [['step-1',!editing],['step-2',editing]]){this.node(id).dataset.current=String(active);if(active)this.node(id).setAttribute('aria-current','step');else this.node(id).removeAttribute('aria-current');}
+    this.node('sheet-scroll').scrollTop=0;
+  }
+  closeEditor() {
+    if(this._busy&&!this._cameraStarting){this.message('진행 중인 작업이 끝난 뒤 닫아 주세요.');return;}
+    if(this._editing&&!window.confirm('저장하지 않은 번호를 버리고 닫을까요?'))return;
+    this._editing=false;if(this._walletData)this.restoreForm(this._walletData);this.finishClose();
+  }
+  finishClose(restoreFocus=true) {
+    this.stopCamera();this.node('editor').close();this.removeAttribute('data-editor-open');
+    this._returnFocusPending=restoreFocus&&this._busy;
+    if(restoreFocus&&!this._busy)this._opener?.focus();
+  }
+  showGameSlots(count) {
+    this._visibleGames=Math.max(1,Math.min(5,count));
+    slots.forEach((s,i)=>this.node(`field_${s}`).hidden=i>=this._visibleGames);
+    this.node('add-game').hidden=this._visibleGames>=5;
+  }
+  restoreForm(data) {
+    this.node('round').value=data.round||data.recommendation_target||'';
+    this._loadedRound=Number(this.node('round').value)||null;this._revision=data.revision||'';
+    slots.forEach(s=>this.node(`game_${s}`).value=data.values?.[`game_${s}`]||'');
+    this._editing=false;this._touched.clear();
+    const last=slots.map(s=>!!this.node(`game_${s}`).value.trim()).lastIndexOf(true);this.showGameSlots(last+1);
+    const rounds=data.stored_rounds||[];this.node('savedrounds').textContent=rounds.length?`저장된 회차: ${rounds.slice(0,12).join(', ')}${rounds.length>12?` 외 ${rounds.length-12}개`:''}`:'아직 저장한 회차가 없어요.';
+    this.updateFormStatus();
+  }
+  updateFormStatus() {
+    let filled=0,valid=0;
+    for(const s of slots){const input=this.node(`game_${s}`),hint=this.node(`hint_${s}`),value=parseGame(input.value);if(!value.empty)filled++;if(!value.empty&&!value.error)valid++;
+      const invalid=!!value.error&&this._touched.has(s);if(invalid)input.setAttribute('aria-invalid','true');else input.removeAttribute('aria-invalid');
+      hint.dataset.valid=invalid?'false':!value.empty&&!value.error?'true':'';hint.textContent=value.empty?'빈 게임은 저장하지 않아요.':invalid?value.error:value.error?'번호 6개를 입력해 주세요.':'✓ 중복 없는 번호 6개 확인';
+    }
+    this.node('ticket-count').textContent=`${filled} / 5게임`;
+    const status=this._editing?(this._loadedRound?'아직 저장하지 않았어요. 번호를 확인해 주세요.':'회차를 바꿨어요. 먼저 회차 불러오기를 눌러 주세요.'):(filled?'저장된 번호입니다. 수정 후 다시 저장할 수 있어요.':'입력한 번호를 확인한 뒤 저장해 주세요.');
+    if(this.node('draft-status').textContent!==status)this.node('draft-status').textContent=status;
+    this.node('save').textContent=filled&&filled===valid?`${valid}게임 내 복권에 저장`:'내 복권에 저장';return {filled,valid};
+  }
+  selectedRound() {
+    const raw=this.node('round').value.trim();if(!/^[0-9]{1,6}$/.test(raw)||Number(raw)<1){this._focusAfter='round';throw new Error('회차를 1~999999 사이의 숫자로 입력해 주세요.');}return Number(raw);
+  }
+  async load(round=null) {
+    const data=await this.request('purchases_get',round?{round}:{});
+    this.updateResults(data);this.applyWallet(data);this.restoreForm(data);
+    if(data.storage_error)this.message('구매번호 저장소를 확인해야 해요. 기존 파일은 덮어쓰지 않습니다.',true);
   }
   async refreshStatus() {
-    // Result/review updates never replace an unfinished purchase form or revision.
-    const data=await this.request('purchases_get',this._loadedRound?{round:this._loadedRound}:{});
+    const data=await this.request('purchases_get',this._walletRound?{round:this._walletRound}:{});
     this.updateResults(data);
+    // Update saved records, never the editor's draft or optimistic concurrency revision.
+    if(Number(data.round)===this._walletRound||!this._walletRound)this.applyWallet(data);
+    if(data.storage_error)this.message('구매번호 저장소 오류가 있어요. 기존 파일은 보존됩니다.',true);
   }
-  rows(id,rows) {const root=this.node(id);root.replaceChildren();for(const row of rows){const tr=document.createElement('tr');for(const v of row){const td=document.createElement('td');td.textContent=String(v??'');tr.append(td);}root.append(tr);}}
+  applyWallet(data) {
+    this._walletData=data;this._walletRound=Number(data.round)||null;
+    const games=data.purchased?.games||[];
+    this.node('mini-round').textContent=formatRound(data.round);this.node('ticket-round').textContent=formatRound(data.round);
+    this.node('mini-count').textContent=games.length>3?`${games.length}게임 중 3게임 표시`:`${games.length}게임 보관`;this.node('wallet-count').textContent=`${games.length}게임 · 최대 5게임`;
+    ticketRows(this.node('mini-games'),games,3);ticketRows(this.node('wallet-games'),games);
+    const select=this.node('wallet-round');const rounds=[...new Set([data.round,data.recommendation_target,...(data.stored_rounds||[])].map(Number).filter(n=>Number.isInteger(n)&&n>0))].sort((a,b)=>b-a);
+    const signature=rounds.join(',');
+    if(this._roundSignature!==signature){select.replaceChildren();for(const n of rounds){const option=document.createElement('option');option.value=String(n);option.textContent=formatRound(n);select.append(option);}this._roundSignature=signature;}
+    select.value=String(data.round||'');this.syncAvailability();
+  }
   updateResults(data) {
-    const d=data.draw, meta=data.result_verification||{};
-    this.node('drawtitle').textContent=(data.result_round ? data.result_round+'회 ' : '')+'추첨번호';
-    this.node('numbers').textContent=meta.status==='conflict'?'출처 불일치 · 확인 대기':d ? d.numbers.join(', ')+' + 보너스 '+d.bonus:'결과 대기';
-    this.node('verification').textContent=label[meta.status]||'발표 대기';
-    const w=data.winning;this.node('result').textContent=w?.status==='evaluated'?`${w.round}회 당첨 여부: ${w.winning_game_count}개 당첨 · 최고 ${w.highest_prize}`:w?.status==='conflict'?'당첨 판정 보류':'대조할 추첨 전 추천 또는 구매번호가 아직 없습니다.';
-    this.rows('predictions',(w?.results||[]).filter(g=>g.source!=='purchased').map(g=>[g.sensor_name,g.recommended_numbers.join(', '),g.prize]));
-    const roundReview=data.review_round||{};
-    const current=new Map((roundReview.methods||[]).map(r=>[r.method_id,r]));
-    this.rows('reviews',(data.reviews||[]).map(r=>{
-      const now=current.get(r.method_id);
-      return [r.display_name,r.reviewed_rounds||0,now?`${roundReview.status==='provisional'?'잠정 ':''}${now.review_score.toFixed(1)}점`:r.unrated_result?`${r.unrated_result.round}회 ${r.unrated_result.comparison.prize} · 누적평가 제외`:'평가 대기',now?`${now.exact_match_count}개 / ${now.near_match_count}개`:'—',now?`${now.rank_this_round}/${roundReview.peer_count}`:'—'];
-    }));
-    this.node('reviewstatus').textContent=data.review_storage_error?'리뷰 저장소 오류: 기존 파일을 보존하며 새 점수를 누적하지 않습니다.':data.review_save_pending?'리뷰 저장 재시도 대기 중입니다. 현재 점수는 아직 저장되지 않았을 수 있습니다.':(roundReview.round?`${roundReview.round}회 결과 대조. 누적 별점에는 공식 확인된 회차만 포함합니다.`:'리뷰할 추첨 전 추천이 아직 없습니다.');
-    if((data.reviews||[]).some(r=>r.unrated_result)) this.node('reviewstatus').textContent+=' 저장된 당첨 판정은 있지만 추첨 전 생성시각·기준회차가 확인되지 않은 기록은 누적평가에서 제외합니다. 새로고침으로 과거 점수를 만들지 않습니다.';
-    const sourceRoot=this.node('sources');sourceRoot.replaceChildren();for(const s of meta.sources||[]){const a=document.createElement('a');a.textContent=s.publisher+' 발표 ';a.href=s.url;a.target='_blank';a.rel='noopener noreferrer';sourceRoot.append(a);}
+    const draw=data.draw,meta=data.result_verification||{};
+    this._targetRound=Number(data.recommendation_target)||this._targetRound;
+    this.node('drawtitle').textContent=data.result_round?formatRound(data.result_round):'결과 발표 대기';
+    const numbers=this.node('numbers');numbers.removeAttribute('role');numbers.removeAttribute('aria-label');
+    if(meta.status!=='conflict'&&draw)numberBalls(numbers,draw.numbers,draw.bonus);
+    else numbers.textContent=meta.status==='conflict'?'출처를 확인 중이에요. 판정을 잠시 보류합니다.':'아직 당첨번호가 발표되지 않았어요.';
+    this.node('verification').textContent=labels[meta.status]||'발표 대기';
+    this.node('verification').dataset.state=meta.status==='conflict'?'conflict':meta.status?.startsWith('official')?'verified':'pending';
+    const w=data.winning;
+    this.node('result').textContent=w?.status==='evaluated'?`${w.round}회 · 당첨 ${w.winning_game_count}게임${Number(w.winning_game_count)>0?` · 최고 ${w.highest_prize}`:' · 당첨 없음'}`:w?.status==='conflict'?'출처 확인 후 다시 대조해요.':'대조할 추첨 전 추천 또는 구매번호가 아직 없어요.';
+    this.rows('predictions',(w?.results||[]).filter(g=>g.source!=='purchased').map(g=>[g.sensor_name,(g.recommended_numbers||[]).join(', '),g.prize]));
+    const rr=data.review_round||{},current=new Map((rr.methods||[]).map(r=>[r.method_id,r]));
+    this.rows('reviews',(data.reviews||[]).map(r=>{const now=current.get(r.method_id);return [r.display_name||r.label,r.reviewed_rounds||0,now&&Number.isFinite(now.review_score)?`${rr.status==='provisional'?'잠정 ':''}${now.review_score.toFixed(1)}점`:r.unrated_result?`${r.unrated_result.round}회 ${r.unrated_result.comparison?.prize||'판정 대기'} · 누적 제외`:'평가 대기',now?`${now.exact_match_count}개 / ${now.near_match_count}개`:'—',now?`${now.rank_this_round} / ${rr.peer_count}`:'—'];}));
+    this.node('method-count').textContent=`${(data.reviews||[]).length}개 방식`;
+    let status=data.review_storage_error?'리뷰 저장소 오류: 기존 파일을 보존하며 새 점수를 누적하지 않습니다.':data.review_save_pending?'리뷰 저장 재시도를 기다리고 있어요. 현재 점수가 아직 저장되지 않았을 수 있습니다.':rr.round?`${rr.round}회 결과 기준 · 누적 별점에는 공식 확인된 회차만 포함해요.`:'추첨 전에 저장된 추천 결과를 기다리고 있어요.';
+    if((data.reviews||[]).some(r=>r.unrated_result))status+=' 생성시각·기준회차가 확인되지 않은 과거 기록은 누적평가에서 제외합니다.';
+    this.node('reviewstatus').textContent=status;
+    const sources=this.node('sources');sources.replaceChildren();
+    for(const source of meta.sources||[]){let url;try{url=new URL(source.url);}catch{continue;}if(!['https:','http:'].includes(url.protocol))continue;const a=document.createElement('a');a.textContent=`${source.publisher||'출처'} 발표 ↗`;a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';sources.append(a);}
+    this.node('connection').dataset.online='true';this.node('connection').textContent='HA 연결됨';
+    const now=new Intl.DateTimeFormat('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
+    this.node('sync-status').textContent=`최근 확인 ${now} · 30초마다 자동 확인`;
+  }
+  rows(id,rows) {
+    const headers=id==='reviews'?['추천 방식 / 별점','평가 회차','이번 점수','정확 / ±1','순위']:['추천 방식','번호','결과'];
+    const empty=id==='reviews'?['아직 누적된 리뷰가 없어요.','공식 확인된 회차부터 실제 추천 결과를 평가합니다.']:['대조할 추천번호를 기다리고 있어요.','추첨 전에 저장한 추천이 있으면 결과 발표 후 표시됩니다.'];
+    renderRows(this.node(id),rows,headers,empty);
   }
   async preview(qr) {
+    if(!String(qr||'').trim()){this._focusAfter='qr';throw new Error('복권 QR 주소를 붙여 넣어 주세요.');}
     const result=await this.request('qr_preview',{qr});
-    this.node('round').value=result.round;this._loadedRound=result.round;this._revision=result.revision;
-    for(const s of 'abcde')this.node(`game_${s}`).value=result.values[`game_${s}`]||'';
-    this.node('qr').value='';this._editing=true;
-    this.message(`${result.round}회 ${result.game_count}게임을 읽었습니다. 아직 저장하지 않았습니다. 번호를 확인하고 저장하세요.`+(result.will_replace?' 이 회차에 저장된 번호가 있어 교체됩니다.':''));
-    this.node('game_a').focus();
+    if(this._editing&&!window.confirm('저장하지 않은 입력을 QR 번호로 바꿀까요?'))return;
+    this.node('round').value=result.round;this._loadedRound=Number(result.round);this._revision=result.revision||'';
+    slots.forEach(s=>this.node(`game_${s}`).value=result.values?.[`game_${s}`]||'');
+    this.node('qr').value='';this._editing=true;this._touched.clear();
+    this.showGameSlots(slots.map(s=>!!this.node(`game_${s}`).value.trim()).lastIndexOf(true)+1);this.updateFormStatus();this.showEditorStep('edit');
+    this.message(`${result.round}회 ${result.game_count}게임을 읽었어요. 아직 저장하지 않았어요.`+(result.will_replace?' 이 회차에 저장된 번호가 있어 교체됩니다.':''));this._focusAfter='game_a';
+    if(!this._busy){this._focusAfter=null;this.node('game_a').focus();}
   }
-  async save(clear) {
+  async save() {
     const round=this.selectedRound();
-    if(this._loadedRound!==round)throw new Error('먼저 해당 회차 불러오기를 누르세요. 다른 회차의 번호가 의도치 않게 덮어써지는 것을 막습니다.');
-    if(!window.confirm(clear?`${round}회 구매번호만 삭제할까요?`:`${round}회 A~E 구매번호를 확인한 내용으로 저장할까요?`))return;
-    const values={};for(const s of 'abcde')values[`game_${s}`]=this.node(`game_${s}`).value;
-    await this.request('purchases_save',{round,values,revision:this._revision,clear});
-    this._editing=false;await this.load(true);this.message(clear?'해당 회차만 삭제했습니다.':'구매번호를 HA에 저장했습니다. 추첨 결과가 확인되면 자동 대조합니다.');
+    if(this._loadedRound!==round){this._focusAfter='load';throw new Error('먼저 회차 불러오기를 눌러 주세요. 다른 회차의 번호를 덮어쓰지 않도록 확인이 필요해요.');}
+    this._touched=new Set(slots);const {filled,valid}=this.updateFormStatus();
+    if(!filled){this._focusAfter='game_a';throw new Error('최소 한 게임의 번호 6개를 입력해 주세요.');}
+    if(valid!==filled){const first=slots.find(s=>parseGame(this.node(`game_${s}`).value).error);this.showGameSlots(Math.max(this._visibleGames,slots.indexOf(first)+1));this._focusAfter=`game_${first}`;throw new Error(`${first.toUpperCase()} 게임의 번호를 확인해 주세요.`);}
+    // An explicit save is enough for a new record. Replacements require a second confirmation.
+    if(this._revision&&!window.confirm(`${round}회에 저장된 A~E를 지금 확인한 번호로 교체할까요?`))return;
+    const values={};slots.forEach(s=>values[`game_${s}`]=this.node(`game_${s}`).value);
+    const data=await this.request('purchases_save',{round,values,revision:this._revision,clear:false});
+    this._editing=false;this.updateResults(data);this.applyWallet(data);this.restoreForm(data);this.finishClose(false);
+    this.showScreen('wallet',true);this.message(`${round}회 ${filled}게임을 저장했어요. 추첨 결과가 확인되면 자동으로 대조합니다.`);
+  }
+  async deleteWallet() {
+    const data=this._walletData;if(!data?.revision)return;
+    const round=Number(data.round);if(!window.confirm(`${round}회 구매번호만 삭제할까요? 다른 회차와 추천 기록은 유지됩니다.`))return;
+    const result=await this.request('purchases_save',{round,values:data.values||{},revision:data.revision,clear:true});
+    this.updateResults(result);this.applyWallet(result);this.restoreForm(result);this.message(`${round}회 구매번호를 삭제했어요.`);
   }
   decode(image,width,height) {
     if(!globalThis.jsQR)throw new Error('QR 판독기를 불러오지 못했습니다. QR 주소 붙여넣기를 이용하세요.');
@@ -141,20 +335,25 @@ class LottoTicketPanel extends HTMLElement {
     finally{URL.revokeObjectURL(url);}
   }
   async startCamera() {
-    this.stopCamera();
+    this.stopCamera();const generation=this._cameraGeneration;
     if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)throw new Error('이 환경에서 카메라를 열 수 없습니다. HTTPS로 접속하거나 QR 사진/주소 입력을 이용하세요.');
-    this._stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
-    if(!this.isConnected){this.stopCamera();return;}
-    this.node('camera').hidden=false;const video=this.node('video');video.srcObject=this._stream;await video.play();
+    let stream;
+    try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});}
+    catch(error){throw new Error(error.name==='NotAllowedError'?'카메라 권한이 필요해요. 브라우저에서 허용하거나 사진·직접 입력을 이용해 주세요.':error.name==='NotFoundError'?'사용할 카메라가 없어요. 사진이나 직접 입력을 이용해 주세요.':'카메라를 열지 못했어요. 다른 앱에서 사용 중인지 확인해 주세요.');}
+    if(!this.isConnected||document.hidden||generation!==this._cameraGeneration){stream.getTracks().forEach(t=>t.stop());return;}
+    this._stream=stream;
+    this.node('camera').hidden=false;const video=this.node('video');video.srcObject=this._stream;
+    try{await video.play();}catch(e){this.stopCamera();throw e;}
     this.message('복권 오른쪽 위 QR을 카메라에 비춰주세요.');
+    this.node('camera').scrollIntoView({block:'nearest'});
     const tick=async()=>{
       if(!this._stream)return;
-      try {if(video.readyState>=2){const value=this.decode(video,video.videoWidth,video.videoHeight);if(value){this.stopCamera();await this.operation(()=>this.preview(value));return;}}}
+      try {if(!this._busy&&video.readyState>=2){const value=this.decode(video,video.videoWidth,video.videoHeight);if(value){this.stopCamera();await this.operation(()=>this.preview(value));return;}}}
       catch(e){this.stopCamera();this.message(e.message,true);return;}
       this._scanTimer=setTimeout(tick,500);
     };
     this._scanTimer=setTimeout(tick,500);
   }
-  stopCamera(){clearTimeout(this._scanTimer);if(this._stream){this._stream.getTracks().forEach(t=>t.stop());this._stream=null;}if(this.node('camera'))this.node('camera').hidden=true;}
+  stopCamera(){this._cameraGeneration=(this._cameraGeneration||0)+1;clearTimeout(this._scanTimer);if(this._stream){this._stream.getTracks().forEach(t=>t.stop());this._stream=null;}if(this.node('video'))this.node('video').srcObject=null;if(this.node('camera'))this.node('camera').hidden=true;}
 }
 if(!customElements.get('lotto-ticket-panel')) customElements.define('lotto-ticket-panel',LottoTicketPanel);
