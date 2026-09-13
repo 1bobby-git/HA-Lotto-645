@@ -1,0 +1,19 @@
+{
+  "custom_components/lotto_645/__init__.py": "e1817c57c2489b33e3bb4d7df9ec0e2845e95f3cd126e1e361d860956805aac3",
+  "custom_components/lotto_645/button.py": "7bf46b695d7137cc2e95a2cc943b092d95add36070d5ed1c3ecb6db22d2851b8",
+  "custom_components/lotto_645/const.py": "e3ed65ba808c48edeef6b39f81691d978e694cc32fbedae5178838b655019aee",
+  "custom_components/lotto_645/entity.py": "7f3510dc0357e652c400ffef29c63ce7b78cd59a840bedb0d3bd09ca065df12a",
+  "custom_components/lotto_645/fast_result_state.py": "0506b502b25013ae4951ca953b9138e6d0ffd3ff5f12e1044b7f171a232e78f7",
+  "custom_components/lotto_645/manifest.json": "ab89861012ab969b9860c5b9ea4156ddd1a495f89073073eefb0b2b676abe489",
+  "custom_components/lotto_645/result_evaluator.py": "507834b6b23155ff5d7cbdf619e924567248bb28069338343a6e549920ab5f50",
+  "custom_components/lotto_645/review.py": "1f991d895d8bd4cd719659bd4bd47f9d1cd7b7709dd898572c2ed58405fd95cd",
+  "custom_components/lotto_645/review_state.py": "e960567f47ed74c270fe1735a7779a769431917168c708cc42ab5a15779259d9",
+  "custom_components/lotto_645/services.yaml": "d6390f9159de41bea0e2b10ec87bf8815cc520b3be3362a7c041c7917058ffe6",
+  "custom_components/lotto_645/strings.json": "b06a095af4664c5f53c7a3f8b1dd02f73505176bf257137c29e1e9c70a2b140f",
+  "custom_components/lotto_645/ticket_panel.py": "7863dad6cf394c629698de559f915cbc44110d865a112113a186c30ae78d9854",
+  "custom_components/lotto_645/translations/en.json": "b06a095af4664c5f53c7a3f8b1dd02f73505176bf257137c29e1e9c70a2b140f",
+  "custom_components/lotto_645/translations/ko.json": "d8989202601346bc9bd71179373156c1526af240f20a8ea93e41b372e541753b",
+  "custom_components/lotto_645/www/lotto-panel.js": "ac97cf5fd0bbd92ccfadfd7187675a5f6bb15d43e740cdd940b95ced357bbde7",
+  "scripts/smoke_ha_options.py": "71bcd0a01c4b86df1708aad8e3db16f5918959a929077ecd3ea37bd75127df12",
+  "tests/test_review_recovery.py": "65925a9f75db14dd24102e74fd4a6015004310df9582ab2c00c23958379f304c"
+}
