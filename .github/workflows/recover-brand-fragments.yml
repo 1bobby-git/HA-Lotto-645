@@ -1,0 +1,38 @@
+name: Recover Brand Fragments
+on:
+  push:
+    branches: [fix/v1.10.1-exact-user-branding]
+    paths: [.github/workflows/recover-brand-fragments.yml]
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Retrieve only known artwork blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import base64, hashlib, json, os, pathlib, urllib.request
+          out=pathlib.Path('/tmp/brand-fragments');out.mkdir()
+          shas=['a8d3c9723daad10f068f68854f938209c026dc26','fa705b6a47f4c4d350fdc7e35f270439d234bb25','38887cdb0e23eaa8be109fd2bac1453f9dc0443a','8dc8d152ddcc1f9380f12183b9a40734039a39eb','4d7f3c2a3274397c496a09823a4264f7c8c7bff2','ab8154a585b98aaf316ef2781eeaea9e43db6591','d204003684ed5092b156edb1a67e4569f84d550e']
+          report=[]
+          for sha in shas:
+              req=urllib.request.Request(f'https://api.github.com/repos/{os.environ["GITHUB_REPOSITORY"]}/git/blobs/{sha}',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:data=json.load(r)
+                  raw=base64.b64decode(data['content'])
+                  assert hashlib.sha1(f'blob {len(raw)}\0'.encode()+raw).hexdigest()==sha
+                  (out/sha).write_bytes(raw)
+                  report.append({'sha':sha,'size':len(raw),'prefix_hex':raw[:20].hex(),'sha256':hashlib.sha256(raw).hexdigest()})
+              except Exception as e:report.append({'sha':sha,'error':type(e).__name__})
+          (out/'report.json').write_text(json.dumps(report,indent=2))
+          print(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-brand-fragments
+          path: /tmp/brand-fragments/
+          retention-days: 1
