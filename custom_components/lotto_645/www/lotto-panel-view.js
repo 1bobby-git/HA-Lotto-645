@@ -73,15 +73,18 @@ main{padding-top:40px!important} .screen{outline:0}.page-heading{display:flex;al
 .verification{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#bce7d8;margin-top:11px;font-weight:500}
 .verification::before{content:'✓';font-weight:800}.verification[data-state="pending"]{color:#f8d992}.verification[data-state="pending"]::before{content:'◷'}
 .verification[data-state="conflict"]{color:#ffb6c4}.verification[data-state="conflict"]::before{content:'!'}
-.draw-numbers{--ball-size:62px;display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:110px;font-size:15px;color:#dce4f2}
+.draw-numbers{--ball-size:60px;display:flex;align-items:center;justify-content:flex-end;gap:18px;min-height:110px;font-size:15px;color:#dce4f2}
 .ball{display:inline-flex;align-items:center;justify-content:center;flex:none;position:relative;width:var(--ball-size,34px);height:var(--ball-size,34px);border-radius:50%;font-weight:750;font-variant-numeric:tabular-nums;line-height:1;background:var(--soft);color:var(--ink)}
-.draw-numbers .ball{font-size:26px;color:#24314a;background:radial-gradient(circle at 37% 25%,#fff 0,#f9fbff 37%,#c8d3e7 100%);box-shadow:inset 0 -3px 4px #7e90b040,0 8px 16px #080e2138;border:1px solid #ffffff90}
-.draw-numbers .ball[data-band="1"]{background:radial-gradient(circle at 35% 24%,#fff8df 0,#ffe7a8 48%,#e6af4c 100%);color:#69430f}
-.draw-numbers .ball[data-band="2"]{background:radial-gradient(circle at 35% 24%,#f3f8ff 0,#d4e5ff 48%,#86afea 100%);color:#244874}
-.draw-numbers .ball[data-band="3"]{background:radial-gradient(circle at 35% 24%,#fff5f5 0,#ffd9dd 48%,#ea939f 100%);color:#833743}
-.draw-numbers .ball[data-band="5"]{background:radial-gradient(circle at 35% 24%,#f4fff4 0,#cceacf 48%,#8dc298 100%);color:#315f3e}
-.bonus-group{display:inline-flex;align-items:center;gap:12px;margin-left:4px}.bonus-label{position:relative;display:flex;flex:none;align-items:center;justify-content:center}
-.bonus-caption{position:absolute;top:calc(100% + 10px);color:#bfccdf;font-size:10px;white-space:nowrap;font-weight:400}.plus{font-size:20px;font-weight:300;color:#9baccc}
+/* Flat number balls: colors sampled from the user-provided result screenshot.
+   Scope to recent draw results; wallet/review number chips keep their own style. */
+.draw-numbers .ball{font-size:24px;font-weight:700;color:#fff;background:#8c8c8c;box-shadow:none;border:0}
+.draw-numbers .ball[data-band="1"]{background:#cd9234}
+.draw-numbers .ball[data-band="2"]{background:#3e63c5}
+.draw-numbers .ball[data-band="3"]{background:#bd4152}
+.draw-numbers .ball[data-band="4"]{background:#8c8c8c}
+.draw-numbers .ball[data-band="5"]{background:#5a9b50}
+.bonus-group{display:inline-flex;align-items:center;gap:18px;margin-left:0}.bonus-label{position:relative;display:flex;flex:none;align-items:center;justify-content:center}
+.bonus-caption{position:absolute;top:calc(100% + 10px);color:#bfccdf;font-size:10px;white-space:nowrap;font-weight:400}.plus{font-size:24px;font-weight:700;color:#aeb0b9}
 .draw-foot{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:21px;padding:19px 0;border-top:1px solid #ffffff17;min-height:76px}
 .result-copy{display:flex;align-items:center;gap:13px;flex-wrap:wrap}.result-copy .caption{font-size:11px;color:#b9c5d9}.result-copy strong{font-size:13px;font-weight:550;color:#edf2ff}
 .draw-foot button{background:#ffffff0d;color:#dae4f8;font-size:12px;min-height:40px;padding:8px 12px;border:1px solid #ffffff15;white-space:nowrap}.draw-foot button svg{width:15px;height:15px}
