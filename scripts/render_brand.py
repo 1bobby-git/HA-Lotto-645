@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Build Home Assistant brand assets from the supplied horizontal PNG.
+"""Build high-density variants from the canonical Home Assistant brand PNGs.
 
-No artwork is redrawn. ``images/logo-horizontal.png`` remains the canonical
-horizontal artwork. Home Assistant brand logo variants are only resized from
-that PNG to the dimensions required by HA, while icon variants are cropped
-from its left lucky-bag component and placed on a transparent square canvas.
+``brand/logo.png`` and ``brand/icon.png`` are the supplied originals. This
+script validates and preserves them, then creates only the optional @2x files.
 """
 
 from __future__ import annotations
@@ -14,59 +12,9 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-IMAGES = ROOT / "images"
 BRAND = ROOT / "custom_components" / "lotto_645" / "brand"
-SOURCE_LOGO = IMAGES / "logo-horizontal.png"
-
-
-def _occupied_column_runs(alpha: Image.Image) -> list[tuple[int, int]]:
-    """Return contiguous x ranges containing visible pixels."""
-    width, height = alpha.size
-    occupied = [
-        alpha.crop((x, 0, x + 1, height)).getbbox() is not None
-        for x in range(width)
-    ]
-    runs: list[tuple[int, int]] = []
-    start: int | None = None
-    for x, present in enumerate(occupied):
-        if present and start is None:
-            start = x
-        elif not present and start is not None:
-            runs.append((start, x))
-            start = None
-    if start is not None:
-        runs.append((start, width))
-    return runs
-
-
-def crop_lucky_bag(source: Image.Image) -> Image.Image:
-    """Crop the lucky-bag/6/45-ball artwork from the exact horizontal pixels."""
-    rgba = source.convert("RGBA")
-    alpha = rgba.getchannel("A")
-    runs = _occupied_column_runs(alpha)
-    if len(runs) < 2:
-        raise RuntimeError("cannot separate lucky-bag icon from horizontal text")
-
-    # The supplied artwork has a transparent gap between the left symbol and
-    # the Lotto wordmark. The first occupied run is therefore the exact icon.
-    left, right = runs[0]
-    component_bbox = alpha.crop((left, 0, right, rgba.height)).getbbox()
-    if component_bbox is None:
-        raise RuntimeError("lucky-bag component is empty")
-    top, bottom = component_bbox[1], component_bbox[3]
-    icon = rgba.crop((left, top, right, bottom))
-
-    # Add a small transparent safe area so Home Assistant does not visually
-    # clip the balls/bag at rounded-avatar edges. Pixels themselves are not
-    # redrawn or altered other than normal high-quality resizing.
-    padding = max(1, round(max(icon.size) * 0.06))
-    side = max(icon.size) + padding * 2
-    square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-    square.alpha_composite(
-        icon,
-        ((side - icon.width) // 2, (side - icon.height) // 2),
-    )
-    return square
+SOURCE_LOGO = BRAND / "logo.png"
+SOURCE_ICON = BRAND / "icon.png"
 
 
 def resize_logo(source: Image.Image, target_height: int) -> Image.Image:
@@ -82,37 +30,34 @@ def save_png(image: Image.Image, target: Path) -> None:
 
 
 def main() -> None:
-    if not SOURCE_LOGO.exists():
-        raise RuntimeError(f"missing canonical logo: {SOURCE_LOGO}")
+    for source_path in (SOURCE_LOGO, SOURCE_ICON):
+        if not source_path.exists():
+            raise RuntimeError(f"missing canonical brand asset: {source_path}")
 
     source = Image.open(SOURCE_LOGO).convert("RGBA")
+    icon = Image.open(SOURCE_ICON).convert("RGBA")
     if source.width <= source.height:
         raise RuntimeError("canonical horizontal logo must be landscape")
+    if icon.width != icon.height:
+        raise RuntimeError("canonical icon must be square")
 
-    icon = crop_lucky_bag(source)
-    BRAND.mkdir(parents=True, exist_ok=True)
-
-    # Home Assistant brand requirements: logo shortest side <=256 for normal
-    # and <=512 for @2x. The full source remains untouched in images/.
-    save_png(resize_logo(source, 256), BRAND / "logo.png")
+    # Preserve the supplied originals and create only optional dense variants.
     save_png(resize_logo(source, 512), BRAND / "logo@2x.png")
-    save_png(icon.resize((256, 256), Image.Resampling.LANCZOS), BRAND / "icon.png")
     save_png(icon.resize((512, 512), Image.Resampling.LANCZOS), BRAND / "icon@2x.png")
-    save_png(icon.resize((512, 512), Image.Resampling.LANCZOS), IMAGES / "icon-square.png")
 
     normal_logo = Image.open(BRAND / "logo.png")
     hidpi_logo = Image.open(BRAND / "logo@2x.png")
     normal_icon = Image.open(BRAND / "icon.png")
     hidpi_icon = Image.open(BRAND / "icon@2x.png")
-    assert normal_logo.height == 256
+    assert normal_logo.size == source.size
     assert hidpi_logo.height == 512
-    assert normal_icon.size == (256, 256)
+    assert normal_icon.size == icon.size
     assert hidpi_icon.size == (512, 512)
 
-    print(f"canonical horizontal source preserved: {source.width}x{source.height}")
-    print(f"HA logo: {normal_logo.width}x{normal_logo.height}")
+    print(f"canonical logo preserved: {source.width}x{source.height}")
+    print(f"canonical icon preserved: {icon.width}x{icon.height}")
     print(f"HA logo@2x: {hidpi_logo.width}x{hidpi_logo.height}")
-    print("HA icons: 256x256 / 512x512 (cropped from source)")
+    print("HA icon@2x: 512x512")
 
 
 if __name__ == "__main__":
