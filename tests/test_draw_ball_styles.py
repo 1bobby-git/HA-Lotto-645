@@ -43,7 +43,8 @@ def test_wallet_chips_and_responsive_sizing_are_preserved():
     assert '@media(forced-colors:active)' in VIEW
 
 
-def test_view_import_has_the_new_cache_key():
-    controller = (WWW / 'lotto-panel.js').read_text(encoding='utf-8')
+def test_panel_entry_cache_key_matches_integration_version():
+    entry = (WWW / 'lotto-panel.js').read_text(encoding='utf-8')
     version = json.loads((WWW.parent / 'manifest.json').read_text(encoding='utf-8'))['version']
-    assert f"from './lotto-panel-view.js?v={version}';" in controller
+    assert f"import './lotto-panel-core.js?v={version}';" in entry
+    assert (WWW / 'lotto-panel-core.js').exists()
