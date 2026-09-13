@@ -45,7 +45,7 @@ async def run():
 
         await page.route('**/*', serve)
         await page.goto('http://lotto.test/')
-        await page.wait_for_function("customElements.get('lotto-ticket-panel')")
+        await page.wait_for_function("Boolean(customElements.get('lotto-ticket-panel'))")
         await page.evaluate("""() => {
             window.requests=[];window.saved={};window.revision='';
             window.el=document.createElement('lotto-ticket-panel');document.body.replaceChildren(el);
