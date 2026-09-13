@@ -61,6 +61,25 @@ async def run():
             assert await page.locator('#game_a').input_value()=='2, 3, 4, 5, 6, 7'
             assert '★4.5' in await page.locator('#reviews').inner_text()
             assert '잠정' in await page.locator('#reviews').inner_text()
+            # Recovery page keeps existing entity navigation and does not display
+            # an unverified substitute as the user's exact logo.
+            assert await page.locator('#brand').is_hidden()
+            assert await page.get_by_role('link', name='통합·센서 보기').get_attribute('href')=='/config/integrations/integration/lotto_645'
+            await page.evaluate("window.menuCount=0;el.addEventListener('hass-toggle-menu',()=>menuCount++)")
+            await page.locator('#menu').click()
+            assert await page.evaluate('menuCount')==1
+            await page.evaluate("""async()=>{
+                const base=el._hass.callWS;
+                el._hass.callWS=async msg=>({...await base(msg),review_round:{},
+                    reviews:[{method_id:'old',display_name:'☆평가대기 | 종합 앙상블',reviewed_rounds:0,
+                        unrated_result:{round:1241,comparison:{prize:'5등'},counts_toward_rating:false}}]});
+                await el.refreshStatus();
+            }""")
+            assert '1241회 5등 · 누적평가 제외' in await page.locator('#reviews').inner_text()
+            assert '생성시각' in await page.locator('#reviewstatus').inner_text()
+            assert await page.locator('#game_a').input_value()=='2, 3, 4, 5, 6, 7'
+            await page.set_viewport_size({'width':390,'height':844})
+            assert await page.locator('#reviews-table').evaluate("n=>getComputedStyle(n).minWidth")=='670px'
             assert not errors, errors
             await browser.close()
             print('PASS: browser loads local jsQR, decodes photo locally, previews without save, confirms explicit A-E save')
