@@ -32,11 +32,13 @@ class LottoTicketPanel extends HTMLElement {
   render() {
     this.shadowRoot.innerHTML=`<style>
       :host{display:block;color:var(--primary-text-color);background:var(--primary-background-color);min-height:100%;font-family:var(--paper-font-body1_-_font-family,system-ui)}
-      main{max-width:780px;margin:0 auto;padding:24px 16px 60px}h1{font-size:24px}h2{font-size:19px;margin-top:0}.box{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:14px;padding:20px;margin:16px 0}
+      main{max-width:780px;margin:0 auto;padding:max(24px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(60px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+      .topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.brand[hidden]{display:none}.brand{display:block;width:min(100%,420px);height:auto;object-fit:contain}.topbar h1{margin:8px 0}.links{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0}.links a{color:var(--primary-color)}
+      #reviews-table{min-width:670px}td:last-child{white-space:nowrap}h1{font-size:24px}h2{font-size:19px;margin-top:0}.box{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:14px;padding:20px;margin:16px 0}
       label{display:block;margin:14px 0 6px;font-weight:600}input,textarea,select{box-sizing:border-box;width:100%;padding:13px;border-radius:8px;border:1px solid var(--divider-color);background:var(--primary-background-color);color:inherit;font:inherit}input{font-variant-numeric:tabular-nums}textarea{min-height:76px}
       .row{display:flex;flex-wrap:wrap;gap:10px}button{font:inherit;padding:11px 15px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer}button.primary{background:var(--primary-color);color:var(--text-primary-color,#fff)}button:disabled{opacity:.6;cursor:wait}
       :focus-visible{outline:3px solid var(--primary-color);outline-offset:3px}small,.note{line-height:1.65;opacity:.85}.numbers{font-size:22px;line-height:1.8;font-weight:700;overflow-wrap:anywhere}#message{padding:12px 0;min-height:22px;white-space:pre-line}video{width:100%;max-height:380px;object-fit:contain}table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:9px 5px;border-bottom:1px solid var(--divider-color)}.scroll{overflow-x:auto}#camera[hidden]{display:none}
-    </style><main><h1>로또 복권</h1><p class="note">구매번호 5게임과 추천 결과를 회차별로 대조합니다. QR 사진은 브라우저 안에서만 읽습니다. 실제 구매·지급을 인증하는 기능은 아닙니다.</p>
+    </style><main><header><div class="topbar"><button id="menu" type="button" aria-label="Home Assistant 메뉴 열기">☰ 메뉴</button><h1>로또 복권</h1></div><img id="brand" class="brand" hidden alt="Lotto 6/45" width="2048" height="682"><nav class="links" aria-label="통합 바로가기"><a href="/config/integrations/integration/lotto_645">통합·센서 보기</a></nav><p class="note">기존 추천 센서와 대시보드는 그대로 사용할 수 있습니다. 이 페이지는 구매번호·QR·결과를 모아 보는 추가 관리 화면입니다.</p></header><p class="note">구매번호 5게임과 추천 결과를 회차별로 대조합니다. QR 사진은 브라우저 안에서만 읽습니다. 실제 구매·지급을 인증하는 기능은 아닙니다.</p>
       <label for="entry">로또 통합</label><select id="entry"></select><div id="message" role="status" aria-live="polite"></div>
       <section class="box"><h2 id="drawtitle">추첨번호</h2><div class="numbers" id="numbers">확인 중</div><p id="verification"></p><p id="result"></p><div id="sources"></div><button id="check">추첨 결과 지금 확인</button><p class="note">공개 결과를 찾으면 자동 반영합니다. 속보 판정은 공식 이력 수신 후 다시 대조됩니다. 사이트 게시 지연·접근 제한에 따라 수신이 늦어질 수 있습니다.</p></section>
       <section class="box"><h2>복권 QR로 입력</h2><div class="row"><button id="scan">카메라로 QR 스캔</button><button id="photo">QR 사진 선택</button><input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
@@ -45,7 +47,7 @@ class LottoTicketPanel extends HTMLElement {
       <section class="box"><h2>직접 구매번호 A~E</h2><label for="round">복권에 적힌 회차</label><input id="round" inputmode="numeric" type="text" maxlength="6"><button id="load">해당 회차 불러오기</button><p id="savedrounds" class="note"></p><div id="games"></div>
       <p class="note">예: 1, 7, 15, 24, 33, 45 / 1 7 15 24 33 45 / 010715243345. 게임당 중복 없는 6개 번호, 최대 5게임입니다. 빈 줄은 저장하지 않습니다. 같은 회차의 A~E는 저장할 때 교체됩니다.</p>
       <div class="row"><button id="save" class="primary">확인한 번호 저장</button><button id="clear">이 회차 구매번호 삭제</button></div><div class="scroll"><table><caption>저장한 구매번호의 회차별 판정</caption><thead><tr><th>게임</th><th>번호</th><th>결과</th></tr></thead><tbody id="outcomes"></tbody></table></div></section>
-      <section class="box"><h2>추천 센서별 판정</h2><div class="scroll"><table><thead><tr><th>추천 방식</th><th>번호</th><th>결과</th></tr></thead><tbody id="predictions"></tbody></table></div></section><section class="box"><h2>방식별 누적 리뷰</h2><p class="note">추첨 전 저장한 실제 추천만 평가합니다. 공식 확인 회차의 평균점수 ÷ 20이 별점입니다. ±1은 유사도일 뿐 당첨이 아닙니다. 속보 점수는 잠정이며 누적평균과 분리합니다. 표본이 적은 별점은 미래 예측력을 뜻하지 않습니다.</p><p id="reviewstatus"></p><div class="scroll"><table><thead><tr><th>추천 방식 / 누적 별점</th><th>평가 회차</th><th>이번 회차</th><th>정확 / ±1</th><th>순위</th></tr></thead><tbody id="reviews"></tbody></table></div></section></main>`;
+      <section class="box"><h2>추천 센서별 판정</h2><div class="scroll"><table><thead><tr><th>추천 방식</th><th>번호</th><th>결과</th></tr></thead><tbody id="predictions"></tbody></table></div></section><section class="box"><h2>방식별 누적 리뷰</h2><p class="note">추첨 전 저장한 실제 추천만 평가합니다. 공식 확인 회차의 평균점수 ÷ 20이 별점입니다. ±1은 유사도일 뿐 당첨이 아닙니다. 속보 점수는 잠정이며 누적평균과 분리합니다. 표본이 적은 별점은 미래 예측력을 뜻하지 않습니다.</p><p id="reviewstatus"></p><div class="scroll"><table id="reviews-table"><thead><tr><th>추천 방식 / 누적 별점</th><th>평가 회차</th><th>이번 회차</th><th>정확 / ±1</th><th>순위</th></tr></thead><tbody id="reviews"></tbody></table></div></section></main>`;
     const config=this._panel.config || {};
     for (const [id,name] of Object.entries(config.entries || {})) {const n=document.createElement('option');n.value=id;n.textContent=name;this.node('entry').append(n);}
     for (const s of 'abcde') {
@@ -55,6 +57,9 @@ class LottoTicketPanel extends HTMLElement {
     }
     this.node('round').addEventListener('input',()=>{this._editing=true;this._loadedRound=null;});
     this.node('load').onclick=()=>this.operation(()=>this.load(true));
+    const brandUrl=this._panel.config.brand_logo_url;
+    if(typeof brandUrl==='string' && brandUrl.startsWith('/lotto_645_brand/logo.png')){this.node('brand').src=brandUrl;this.node('brand').hidden=false;}
+    this.node('menu').onclick=()=>this.dispatchEvent(new Event('hass-toggle-menu',{bubbles:true,composed:true}));
     this.node('entry').onchange=()=>this.operation(async()=>{this._editing=false;this._loadedRound=null;this.node('round').value='';await this.load(true);});
     this.node('save').onclick=()=>this.operation(()=>this.save(false));
     this.node('clear').onclick=()=>this.operation(()=>this.save(true));
@@ -98,9 +103,10 @@ class LottoTicketPanel extends HTMLElement {
     const current=new Map((roundReview.methods||[]).map(r=>[r.method_id,r]));
     this.rows('reviews',(data.reviews||[]).map(r=>{
       const now=current.get(r.method_id);
-      return [r.display_name,r.reviewed_rounds||0,now?`${roundReview.status==='provisional'?'잠정 ':''}${now.review_score.toFixed(1)}점`:'평가 대기',now?`${now.exact_match_count}개 / ${now.near_match_count}개`:'—',now?`${now.rank_this_round}/${roundReview.peer_count}`:'—'];
+      return [r.display_name,r.reviewed_rounds||0,now?`${roundReview.status==='provisional'?'잠정 ':''}${now.review_score.toFixed(1)}점`:r.unrated_result?`${r.unrated_result.round}회 ${r.unrated_result.comparison.prize} · 누적평가 제외`:'평가 대기',now?`${now.exact_match_count}개 / ${now.near_match_count}개`:'—',now?`${now.rank_this_round}/${roundReview.peer_count}`:'—'];
     }));
     this.node('reviewstatus').textContent=data.review_storage_error?'리뷰 저장소 오류: 기존 파일을 보존하며 새 점수를 누적하지 않습니다.':data.review_save_pending?'리뷰 저장 재시도 대기 중입니다. 현재 점수는 아직 저장되지 않았을 수 있습니다.':(roundReview.round?`${roundReview.round}회 결과 대조. 누적 별점에는 공식 확인된 회차만 포함합니다.`:'리뷰할 추첨 전 추천이 아직 없습니다.');
+    if((data.reviews||[]).some(r=>r.unrated_result)) this.node('reviewstatus').textContent+=' 저장된 당첨 판정은 있지만 추첨 전 생성시각·기준회차가 확인되지 않은 기록은 누적평가에서 제외합니다. 새로고침으로 과거 점수를 만들지 않습니다.';
     const sourceRoot=this.node('sources');sourceRoot.replaceChildren();for(const s of meta.sources||[]){const a=document.createElement('a');a.textContent=s.publisher+' 발표 ';a.href=s.url;a.target='_blank';a.rel='noopener noreferrer';sourceRoot.append(a);}
   }
   async preview(qr) {

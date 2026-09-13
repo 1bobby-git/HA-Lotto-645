@@ -60,7 +60,9 @@ jobs:
               subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', *sorted(requirements)], check=True)
           PY
       - name: Exercise real HA OptionsFlow and selector serialization
-        run: python scripts/smoke_ha_options.py
+        run: |
+          python scripts/smoke_ha_options.py
+          python scripts/smoke_panel_lifecycle.py
   hassfest:
     runs-on: ubuntu-latest
     steps:

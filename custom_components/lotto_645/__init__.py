@@ -9,7 +9,7 @@ from homeassistant.const import ATTR_ENTITY_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.event import async_track_utc_time_change
-from .ticket_panel import async_register_ticket_panel, async_remove_ticket_panel
+from .ticket_panel import async_register_ticket_panel, async_remove_ticket_panel, async_ensure_ticket_panel
 
 from .const import DOMAIN, SERVICE_GENERATE_AI, SERVICE_REFRESH
 from .coordinator import Lotto645Coordinator
@@ -31,6 +31,7 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Lotto 6/45 Analysis from a config entry."""
+    await async_register_ticket_panel(hass, entry)
     coordinator = Lotto645Coordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
@@ -38,9 +39,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    await async_register_ticket_panel(hass, entry)
-
     async def _publication_tick(now) -> None:
+        async_ensure_ticket_panel(hass)
         await coordinator.async_poll_published_results()
 
     entry.async_on_unload(async_track_utc_time_change(hass, _publication_tick, second=15))
@@ -91,3 +91,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if hass.services.has_service(DOMAIN, SERVICE_GENERATE_AI):
             hass.services.async_remove(DOMAIN, SERVICE_GENERATE_AI)
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove the panel only when the entry is really deleted, not reloaded."""
+    async_remove_ticket_panel(hass, entry.entry_id, permanent=True)
