@@ -21,6 +21,7 @@ class Lotto645Entity(CoordinatorEntity[Lotto645Coordinator]):
                 name="로또 추첨·당첨 결과", manufacturer="HA-Lotto-645",
                 model="추첨 결과 · 구매번호 · 당첨 상세", sw_version=VERSION,
                 via_device=(DOMAIN, coordinator.entry.entry_id),
+                configuration_url="homeassistant://lotto-645",
             )
             return
         self._attr_device_info = DeviceInfo(
@@ -29,4 +30,5 @@ class Lotto645Entity(CoordinatorEntity[Lotto645Coordinator]):
             manufacturer="HA-Lotto-645",
             model="Selectable Lotto 6/45 analysis + HA AI Task",
             sw_version=VERSION,
+            configuration_url="homeassistant://lotto-645",
         )
