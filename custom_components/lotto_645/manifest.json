@@ -22,5 +22,5 @@
     "korean-lunar-calendar==0.4.0",
     "lunar_python==1.4.8"
   ],
-  "version": "1.11.0"
+  "version": "1.11.1"
 }
