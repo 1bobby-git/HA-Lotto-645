@@ -3,6 +3,8 @@ import './lotto-panel.js?v=1.14.0';
 import { applyComponentDesign } from './lotto-panel-design.js?v=1.14.0';
 import { applyPanelTools, countdownState } from './lotto-panel-tools.js?v=1.14.0';
 
+import { applyHistoricalValidation } from './lotto-panel-validation.js?v=1.14.0';
+
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const Panel = customElements.get('lotto-ticket-panel');
 if (!Panel) throw new Error('lotto-ticket-panel controller did not register');
@@ -263,6 +265,7 @@ Panel.prototype.render = function (...args) {
   ensureHeroCountdown(this);
   applyComponentDesign(this);
   applyPanelTools(this);
+  applyHistoricalValidation(this);
   if (root) {
     let ballStyle = root.querySelector('style[data-lotto-official-ball-colors]');
     if (!ballStyle) {

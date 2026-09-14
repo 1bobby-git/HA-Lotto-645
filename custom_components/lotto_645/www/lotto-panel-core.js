@@ -162,13 +162,13 @@ class LottoTicketPanel extends HTMLElement {
     this.node('wallet-round').disabled=!this._walletData||this._busy;
   }
   showScreen(name,focus=false) {
-    if(!['home','wallet','review'].includes(name))return;
-    for(const key of ['home','wallet','review']){const selected=key===name;const tab=this.node(`tab-${key}`);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;this.node(`screen-${key}`).hidden=!selected;}
+    if(!['home','wallet','review','validation'].includes(name))return;
+    for(const key of ['home','wallet','review','validation']){const selected=key===name;const tab=this.node(`tab-${key}`);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;this.node(`screen-${key}`).hidden=!selected;}
     this._screen=name;this.scrollTop=0;if(focus)this.node(`tab-${name}`).focus();
   }
   onTabKey(e) {
-    const keys=['home','wallet','review'],index=keys.indexOf(e.currentTarget.dataset.screen);
-    let next;if(e.key==='ArrowRight')next=(index+1)%3;else if(e.key==='ArrowLeft')next=(index+2)%3;else if(e.key==='Home')next=0;else if(e.key==='End')next=2;else return;
+    const keys=['home','wallet','review','validation'],index=keys.indexOf(e.currentTarget.dataset.screen);
+    let next;if(e.key==='ArrowRight')next=(index+1)%keys.length;else if(e.key==='ArrowLeft')next=(index+keys.length-1)%keys.length;else if(e.key==='Home')next=0;else if(e.key==='End')next=keys.length-1;else return;
     e.preventDefault();this.showScreen(keys[next],true);
   }
   openEditor(mode='import') {

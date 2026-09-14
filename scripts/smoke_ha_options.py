@@ -328,6 +328,8 @@ async def main():
         obj._review_store=actual_review_store
         await obj._save_storage()
         assert not obj._review_dirty and not obj._review_save_error
+        from smoke_historical_validation import verify_historical_validation
+        await verify_historical_validation(hass, obj)
         await hass.async_stop(force=True)
     print('PASS: real HA options menu/forms/JSON serialization/profile save/compact normalization/gating; coordinator manual/AI contracts; purchased five-line round storage, restore, atomic save and draw-name checks')
 

@@ -13,6 +13,7 @@ from playwright.async_api import async_playwright
 from smoke_panel_safe_area import verify_safe_area
 from smoke_panel_design_system import verify_component_design
 from smoke_panel_tools import verify_panel_tools
+from smoke_panel_validation import verify_panel_validation
 
 ROOT = Path(__file__).resolve().parents[1]
 WWW = ROOT / 'custom_components/lotto_645/www'
@@ -37,13 +38,13 @@ async def run():
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.on('dialog', lambda dialog: dialog.accept())
         resources = {f'/lotto_645_static/{name}': WWW / name for name in (
-            'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js', 'lotto-panel-design.js', 'lotto-panel-tools.js'
+            'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js', 'lotto-panel-design.js', 'lotto-panel-tools.js', 'lotto-panel-validation.js'
         )}
         resources['/lotto_645_brand/logo.png'] = logo
 
         async def serve(route):
             url = urlparse(route.request.url)
-            assert url.hostname == 'lotto.test', f'Unexpected external request: {url.hostname}'
+            assert url.hostname == '127.0.0.1', f'Unexpected external request: {url.hostname}'
             if url.path == '/':
                 await route.fulfill(content_type='text/html', body='''<!doctype html><html lang="ko"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{height:100%;margin:0}</style><script type="module" src="/lotto_645_static/lotto-panel-shell.js"></script></head><body></body></html>''')
             elif url.path in resources:
@@ -53,7 +54,7 @@ async def run():
                 await route.fulfill(status=404, body='Not found')
 
         await page.route('**/*', serve)
-        await page.goto('http://lotto.test/')
+        await page.goto('http://127.0.0.1:8765/')
         await page.wait_for_function("Boolean(customElements.get('lotto-ticket-panel'))")
         await page.evaluate('(size)=>window.expectedLogoSize=size', list(logo_size))
         await page.evaluate("""() => {
@@ -191,6 +192,7 @@ async def run():
         await verify_safe_area(page)
         await verify_component_design(page)
         await verify_panel_tools(page)
+        await verify_panel_validation(page)
         assert not errors, errors
         await browser.close()
         print('PASS: smart sync, HA-driven narrow host header, real ES modules, canonical logo, PNG QR, explicit save, draft preservation, safe areas, responsive views and panel tools')

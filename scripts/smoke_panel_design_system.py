@@ -21,7 +21,7 @@ async def verify_component_design(page: Page) -> None:
     """Assert effective CSS, not just declarations in the legacy template."""
     await page.wait_for_function('!el._busy')
     await page.evaluate("""async () => {
-        const { applyComponentDesign } = await import('/lotto_645_static/lotto-panel-design.js?v=1.11.7');
+        const { applyComponentDesign } = await import('/lotto_645_static/lotto-panel-design.js?v=1.14.0');
         applyComponentDesign(el); applyComponentDesign(el);
         el._clearSmartSync();
         window.designRequestsBefore = requests.length;
@@ -32,7 +32,7 @@ async def verify_component_design(page: Page) -> None:
     assert await page.locator('.component-version').count() == 1
     assert await page.locator('.settings-copy').count() == 1
     assert await page.locator('.ha-component-title').count() == 0
-    assert await page.locator('.component-version').text_content() == 'v1.11.7'
+    assert await page.locator('.component-version').text_content() == 'v1.14.0'
     checked = 0
     for dark in (False, True):
         for viewport, width, narrow in CASES:
