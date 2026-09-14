@@ -1,5 +1,6 @@
 /* Production entry: preserve the panel UI and follow Home Assistant's own narrow-state header behavior. */
 import './lotto-panel.js?v=1.11.5';
+import { applyComponentDesign } from './lotto-panel-design.js?v=1.11.7';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const Panel = customElements.get('lotto-ticket-panel');
@@ -25,6 +26,7 @@ const HA_HOST_HEADER_STYLE = `
   background:var(--app-header-background-color,var(--surface));
   color:var(--app-header-text-color,var(--ink));
   border-bottom:var(--app-header-border-bottom,1px solid var(--line));
+  font-family:var(--primary-font-family,Roboto,sans-serif);
   font-size:var(--ha-font-size-l,14px);
   font-weight:var(--ha-font-weight-normal,400);
   line-height:var(--ha-line-height-condensed,1.2);
@@ -128,12 +130,13 @@ Panel.prototype.render = function (...args) {
 
     if (!root.querySelector('style[data-lotto-ha-host-header]')) {
       const style = document.createElement('style');
-      style.setAttribute('data-lotto-ha-host-header', '1.11.6');
+      style.setAttribute('data-lotto-ha-host-header', '1.11.7');
       style.textContent = HA_HOST_HEADER_STYLE;
       root.append(style);
     }
   }
 
+  applyComponentDesign(this);
   this._syncHaHostHeader?.();
   return value;
 };
