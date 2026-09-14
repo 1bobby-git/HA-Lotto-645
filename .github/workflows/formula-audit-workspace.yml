@@ -46,12 +46,14 @@ jobs:
                   value = value.replace(old,'번호는 백엔드 CCSS 공식으로 추첨하고 Home Assistant AI는 실행 근거만 설명합니다. AI가 번호를 만들거나 당첨을 예측하지 않습니다.')
               if path.startswith('tests/'):
                   value = value.replace('len(methods.METHODS) == 17','len(methods.METHODS) == 23').replace('len(catalog) == 18','len(catalog) == 24').replace("len({m['method_id'] for m in catalog}) == 18","len({m['method_id'] for m in catalog}) == 24")
+              if path == 'tests/test_draw_ball_styles.py':
+                  assert 'lotto-panel.js?v=1.11.5' in value
+                  value = value.replace('assert "import ', 'assert f"import ').replace('lotto-panel.js?v=1.11.5', 'lotto-panel.js?v={version}')
               if path == 'scripts/smoke_panel_tools.py':
                   value = value.replace('count() == 18','count() == 24').replace('18 guides','24 guides')
               if path.endswith('.md'):
                   value = value.replace('17개','23개').replace('17종','23종').replace('18개 설명','24개 설명')
               Path(path).write_text(value)
-          # Invalidate all first-party module import URLs, including older nested imports.
           www = Path('custom_components/lotto_645/www')
           for name in ('lotto-panel-shell.js','lotto-panel.js','lotto-panel-design.js','lotto-panel-tools.js'):
               path = www / name
