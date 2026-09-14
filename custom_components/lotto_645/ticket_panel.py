@@ -222,6 +222,8 @@ async def _validation_worker(
 @websocket_api.async_response
 async def historical_validate(hass, connection, msg):
     """Run a read-only simulation in an HA-owned task and retain its latest state."""
+    # `_validation_worker` owns async_validate_history(...) so page/WebSocket
+    # cancellation cannot abort the Home Assistant-owned calculation.
     coordinator = _coordinator(hass, msg)
     states = _validation_states(hass)
     state = states.get(msg['entry_id'])
