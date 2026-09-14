@@ -32,7 +32,10 @@ class LottoDraw:
     @classmethod
     def from_storage(cls, data: dict[str, Any]) -> "LottoDraw":
         """Create a draw from stored data."""
-        numbers = tuple(sorted(int(value) for value in data["numbers"]))
+        raw = data["numbers"]
+        if not isinstance(raw, (list, tuple)) or any(type(n) is not int for n in raw):
+            raise ValueError("Recommendation numbers must be integers")
+        numbers = tuple(sorted(raw))
         if len(numbers) != 6 or len(set(numbers)) != 6:
             raise ValueError("A Lotto draw must contain six distinct numbers")
         if any(number < 1 or number > 45 for number in numbers):
@@ -77,6 +80,9 @@ class Recommendation:
         attributes: dict[str, Any] = {
             "game": self.index,
             "method_id": self.method_id,
+            "formula_id": self.method_id,
+            "formula": self.method_id,
+            "formula_version": self.details.get("formula_version", 1),
             "label": self.label,
             "method": self.method,
             "source": self.source,
@@ -93,6 +99,9 @@ class Recommendation:
         return {
             "index": self.index,
             "method_id": self.method_id,
+            "formula_id": self.method_id,
+            "formula": self.method_id,
+            "formula_version": self.details.get("formula_version", 1),
             "label": self.label,
             "method": self.method,
             "numbers": list(self.numbers),
@@ -105,7 +114,10 @@ class Recommendation:
     @classmethod
     def from_storage(cls, data: dict[str, Any]) -> "Recommendation":
         """Restore a cached recommendation."""
-        numbers = tuple(sorted(int(value) for value in data["numbers"]))
+        raw = data["numbers"]
+        if not isinstance(raw, (list, tuple)) or any(type(n) is not int for n in raw):
+            raise ValueError("Recommendation numbers must be integers")
+        numbers = tuple(sorted(raw))
         if len(numbers) != 6 or len(set(numbers)) != 6:
             raise ValueError("Recommendation must contain six distinct numbers")
         if any(number < 1 or number > 45 for number in numbers):
@@ -113,7 +125,7 @@ class Recommendation:
         score = data.get("score")
         return cls(
             index=int(data.get("index", 1)),
-            method_id=str(data.get("method_id", "unknown")),
+            method_id=str(data.get("formula_id", data.get("formula", data.get("method_id", "unknown")))),
             label=str(data.get("label", "추천")),
             method=str(data.get("method", "")),
             numbers=numbers,  # type: ignore[arg-type]

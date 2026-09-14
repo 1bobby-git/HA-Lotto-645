@@ -141,7 +141,7 @@ class GenerationProgress:
             "estimated_remaining_seconds": round(remaining, 1) if remaining is not None else None,
             "estimate_basis": basis, "estimate_sample_count": len(samples),
             "estimate_exceeded": overdue, "error": self.error,
-            "notice": "예상시간은 이 HA의 실행 기록/현재 처리속도 기반 추정입니다. 기기 부하·방식별 연산량에 따라 달라집니다. AI는 재생성하지 않습니다.",
+            "notice": "예상시간은 이 HA의 실행 기록/현재 처리속도 기반 추정입니다. 기기 부하·공식별 연산량에 따라 달라집니다. AI는 재생성하지 않습니다.",
         }
 
 

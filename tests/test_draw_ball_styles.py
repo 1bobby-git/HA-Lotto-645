@@ -57,8 +57,9 @@ def test_every_number_ball_forces_user_reference_palette():
 def test_palette_style_is_refreshed_even_when_an_old_style_node_exists():
     # v1.11.10/11 inserted the palette once and accepted a stale style node.
     # The current shell must overwrite its text on every render/hot update.
+    version = json.loads((WWW.parent / 'manifest.json').read_text(encoding='utf-8'))['version']
     assert "let ballStyle = root.querySelector('style[data-lotto-official-ball-colors]')" in SHELL
-    assert "ballStyle.setAttribute('data-lotto-official-ball-colors', '1.11.12')" in SHELL
+    assert f"ballStyle.setAttribute('data-lotto-official-ball-colors', '{version}')" in SHELL
     assert 'ballStyle.textContent = LOTTO_BALL_AND_COUNTDOWN_STYLE;' in SHELL
     assert "if (root && !root.querySelector('style[data-lotto-official-ball-colors]'))" not in SHELL
 
@@ -78,7 +79,7 @@ def test_panel_shell_is_the_versioned_production_entry():
     assert f"module_url': f'/lotto_645_static/lotto-panel-shell.js?v={{VERSION}}'" in ticket_panel
     assert f"data-lotto-ha-host-header', '{version}'" in SHELL
     assert f"data-lotto-official-ball-colors', '{version}'" in SHELL
-    assert "import './lotto-panel.js?v=1.11.5';" in SHELL
+    assert f"import './lotto-panel.js?v={version}';" in SHELL
     assert (WWW / 'lotto-panel.js').exists()
     assert (WWW / 'lotto-panel-core.js').exists()
 

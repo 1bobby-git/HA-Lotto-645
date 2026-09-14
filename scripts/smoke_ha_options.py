@@ -112,6 +112,14 @@ async def main():
             try:obj._parse_ai_result(payload,obj.data.analysis)
             except coordinator_module.AiRecommendationError:pass
             else:raise AssertionError(f'invalid AI number accepted: {bad}')
+        backend=(1,2,20,21,40,45)
+        explained=obj._parse_ai_result({'formula_id':'calibrated_stratified','reason':'CCSS 실행 근거'},obj.data.analysis,backend)
+        assert explained.numbers==backend
+        assert explained.details['number_source']=='backend_formula_engine'
+        assert explained.details['history_used_for_weighting'] is False
+        fields={str(key) for key in obj._ai_structure().schema}
+        assert fields=={'formula_id','reason','basis'}
+        assert 'number_1' not in obj._ai_prompt(obj.data.analysis,1,backend)
         # Purchased tickets use a separate durable store; normal options/AI are untouched.
         purchase_module=importlib.import_module('custom_components.lotto_645.purchased_tickets')
         sensor_module=importlib.import_module('custom_components.lotto_645.sensor')

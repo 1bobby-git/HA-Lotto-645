@@ -4,7 +4,7 @@ from datetime import timedelta
 
 DOMAIN = "lotto_645"
 NAME = "Lotto 6/45 Analysis"
-VERSION = "1.11.12"
+VERSION = "1.12.0"
 
 PLATFORMS = ["sensor", "button", "binary_sensor"]
 UPDATE_INTERVAL = timedelta(hours=6)
@@ -82,7 +82,7 @@ PUBLIC_FORMULA_NOTICE = (
 )
 SAJU_NOTICE = (
     "명리 추천은 사용자가 직접 입력한 출생정보로 사주 원국·대운·추첨일 간의 전통 명리 관계를 "
-    "재현하는 문화적 휴리스틱입니다. 로또 당첨 확률 상승이 과학적으로 검증된 방식은 아닙니다."
+    "재현하는 문화적 휴리스틱입니다. 로또 당첨 확률 상승이 과학적으로 검증된 공식은 아닙니다."
 )
 SAJU_PRIVACY_NOTICE = (
     "사주 입력값은 Home Assistant 구성 항목에 로컬 저장되며 로또 이력 미러로 전송되지 않습니다. "

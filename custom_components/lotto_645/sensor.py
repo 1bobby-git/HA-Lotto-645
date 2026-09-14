@@ -78,8 +78,8 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
         if data.ai_recommendation is not None:
             games.append(data.ai_recommendation.as_attributes())
         return {
-            "purpose": "선택한 방식별 추천번호·근거·생성시각을 모은 요약입니다. 센서 값은 추천 대상 회차이며 점수나 당첨 개수가 아닙니다.",
-            "how_to_view": "games 속성은 방식별 6개 추천번호와 핵심 근거입니다. 실제 결과는 n회 추첨번호·당첨 여부, 직접 입력한 구매번호는 내 구매번호 센서에서 확인하세요.",
+            "purpose": "선택한 공식별 추천번호·근거·생성시각을 모은 요약입니다. 센서 값은 추천 대상 회차이며 점수나 당첨 개수가 아닙니다.",
+            "how_to_view": "games 속성은 공식별 6개 추천번호와 핵심 근거입니다. 실제 결과는 n회 추첨번호·당첨 여부, 직접 입력한 구매번호는 내 구매번호 센서에서 확인하세요.",
             "target_round": analysis.target_round,
             "based_on_round": analysis.based_on_round,
             "history_draws": data.history_count,
@@ -116,7 +116,7 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _unrecorded_attributes = frozenset({"methods"})
-    _attr_name = "추천 방식 안내"
+    _attr_name = "추첨 공식 안내"
     _attr_icon = "mdi:book-open-variant"
 
     def __init__(self, coordinator: Lotto645Coordinator) -> None:
@@ -131,7 +131,7 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
     @property
     def native_value(self) -> str:
         """Show a human-readable count instead of the ambiguous bare number 16."""
-        return f"{len(METHODS_BY_ID)}개 추천 방식"
+        return f"{len(METHODS_BY_ID)}개 추첨 공식"
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -146,10 +146,10 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
             "methods": catalog,
             "how_to_view": (
                 "이 엔티티의 상세 속성에서 methods 목록을 확인하거나, 각 추천번호 엔티티의 "
-                "method_description 속성에서 해당 방식의 설명을 확인하세요. Home Assistant에서 "
-                "속성이 접혀 보이면 개발자 도구 > 상태에서 '추천 방식 안내' 엔티티를 선택하면 전체 목록을 볼 수 있습니다."
+                "method_description 속성에서 해당 공식의 설명을 확인하세요. Home Assistant에서 "
+                "속성이 접혀 보이면 개발자 도구 > 상태에서 '추첨 공식 안내' 엔티티를 선택하면 전체 목록을 볼 수 있습니다."
             ),
-            "usage": "통합 구성에서 여러 방식을 동시에 선택할 수 있으며, 각 방식은 6개 번호 1게임과 핵심 근거를 생성합니다.",
+            "usage": "통합 구성에서 여러 공식을 동시에 선택할 수 있으며, 각 공식은 6개 번호 1게임과 핵심 근거를 생성합니다.",
             "refresh_behavior": "즉시 새로고침은 선택된 비AI 추천을 고득점 후보군 안에서 다시 선택합니다.",
             "public_formula_notice": PUBLIC_FORMULA_NOTICE,
             "disclaimer": DISCLAIMER,
