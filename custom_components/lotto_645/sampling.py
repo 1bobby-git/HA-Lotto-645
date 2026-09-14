@@ -11,6 +11,7 @@ from collections import Counter
 from collections.abc import Iterable, Sequence
 from fractions import Fraction
 from functools import lru_cache
+from itertools import combinations
 from math import comb
 from secrets import SystemRandom
 from typing import Protocol
@@ -21,6 +22,12 @@ UNIFORM_IDS = (
     "uniform_sequential", "calibrated_stratified", "uniform_combination_rank",
 )
 BAYESIAN_ID = "bayesian_shrinkage"
+AC_FILTER_ID = "ac_range_filter"
+AC_MINIMUM = 7
+# Exact full-space enumeration, not historical hit rate or winning probability.
+AC_ALLOWED_COMBINATIONS = 6_943_080
+AC_MAX_ATTEMPTS = 512
+AC_EXACT_SPACE_LIMIT = 20_000
 FORMULA_VERSION = 1
 
 
@@ -36,6 +43,26 @@ def validate_fixed(values: Iterable[int]) -> tuple[int, ...]:
             or len(set(numbers)) != len(numbers)):
         raise ValueError("고정번호는 1~45의 중복 없는 정수 최대 6개여야 합니다")
     return tuple(sorted(numbers))
+
+
+def ac_value(values: Iterable[int]) -> int:
+    """Distinct positive differences of ALL 15 pairs, minus 5; range 0..10."""
+    ticket = validate_fixed(values)
+    if len(ticket) != 6:
+        raise ValueError("AC값은 중복 없는 번호 6개로 계산합니다")
+    return len({right - left for left, right in combinations(ticket, 2)}) - 5
+
+
+def validate_sampled_ticket(formula_id: str, values: Iterable[int]) -> tuple[int, ...]:
+    """Validate generated AND restored tickets against the formula contract."""
+    if formula_id not in SAMPLERS and formula_id not in (BAYESIAN_ID, AC_FILTER_ID):
+        raise ValueError("Unknown sampling formula")
+    ticket = validate_fixed(values)
+    if len(ticket) != 6:
+        raise ValueError("추첨 공식의 결과는 번호 6개여야 합니다")
+    if formula_id == AC_FILTER_ID and ac_value(ticket) < AC_MINIMUM:
+        raise ValueError("저장 또는 생성된 번호가 AC 7 이상 조건을 만족하지 않습니다")
+    return ticket
 
 
 def fisher_yates(pool: Sequence[int], k: int, rng: RandomSource) -> tuple[int, ...]:
@@ -187,17 +214,42 @@ def weighted_sample(pool: Sequence[int], k: int, rng: RandomSource,
     return tuple(sorted(chosen))
 
 
+def _ac_filtered_ticket(pool: Sequence[int], k: int, fixed: tuple[int, ...],
+                        blocked: set[tuple[int, ...]], rng: RandomSource) -> tuple[int, ...]:
+    """Uniform on AC>=7 completions, conditional on success; never relax AC.
+
+    Small fixed-number spaces are enumerated exactly. Large spaces use bounded
+    iid rejection sampling. Exhausting retries is NOT proof of infeasibility.
+    No score ranking, history weighting, or deterministic fill is permitted.
+    """
+    if comb(len(pool), k) <= AC_EXACT_SPACE_LIMIT:
+        allowed = []
+        for extra in combinations(pool, k):
+            ticket = tuple(sorted((*fixed, *extra)))
+            if ticket not in blocked and ac_value(ticket) >= AC_MINIMUM:
+                allowed.append(ticket)
+        if not allowed:
+            raise ValueError("고정·제외번호와 AC 7 이상 조건을 만족하는 조합이 없습니다")
+        return allowed[rng.randrange(len(allowed))]
+    for _ in range(AC_MAX_ATTEMPTS):
+        ticket = tuple(sorted((*fixed, *fisher_yates(pool, k, rng))))
+        if ticket not in blocked and ac_value(ticket) >= AC_MINIMUM:
+            return ticket
+    raise ValueError("AC 공식의 재시도 상한에 도달했습니다. 조건을 완화하지 않았습니다")
+
+
 def generate_ticket(formula_id: str, fixed_numbers: Iterable[int] = (), *,
                     excluded_combinations: Iterable[Sequence[int]] = (),
                     history: Sequence[Sequence[int]] = (),
                     rng: RandomSource | None = None) -> tuple[int, ...]:
-    """Uniform on allowed completions, except explicitly experimental Bayesian.
+    """Uniform on formula-allowed completions, except experimental Bayesian.
 
     Exclusions include only valid full tickets containing every fixed number.
     Exhausted spaces fail explicitly. Uniform rank fallback stays exact even
     with many exclusions; there is no lexicographic/score-based fallback bias.
+    AC adds an explicit shape restriction and never uses unrestricted fallback.
     """
-    if formula_id not in SAMPLERS and formula_id != BAYESIAN_ID:
+    if formula_id not in SAMPLERS and formula_id not in (BAYESIAN_ID, AC_FILTER_ID):
         raise ValueError("Unknown sampling formula")
     fixed = validate_fixed(fixed_numbers)
     fixed_set = set(fixed)
@@ -214,6 +266,8 @@ def generate_ticket(formula_id: str, fixed_numbers: Iterable[int] = (), *,
     if len(blocked) >= total:
         raise ValueError("고정번호와 제외 조건을 만족하는 새 조합이 없습니다")
     rng = rng if rng is not None else SystemRandom()
+    if formula_id == AC_FILTER_ID:
+        return _ac_filtered_ticket(pool, k, fixed, blocked, rng)
     weights = frequency_weights(history) if formula_id == BAYESIAN_ID else None
     for _ in range(64):
         extra = (weighted_sample(pool, k, rng, weights) if weights is not None

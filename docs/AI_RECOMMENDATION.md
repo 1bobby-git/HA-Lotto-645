@@ -1,6 +1,6 @@
 # Home Assistant AI 추천
 
-`method_id: home_assistant_ai` · 분류: AI 설명 + 백엔드 CCSS 추첨 공식 · 로컬 23종과 별도
+`method_id: home_assistant_ai` · 분류: AI 설명 + 백엔드 CCSS 추첨 공식 · 로컬 24종과 별도
 
 ## 1. 번호와 설명의 분리
 
