@@ -1,0 +1,22 @@
+name: Formula audit workspace
+on:
+  push:
+    branches: [feat/research-formulas-1.12.0]
+    paths: [.github/workflows/formula-audit-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export tracked source for isolated local tests
+        run: git archive --format=tar HEAD > /tmp/lotto-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: formula-audit-source
+          path: /tmp/lotto-source.tar
+          retention-days: 1
