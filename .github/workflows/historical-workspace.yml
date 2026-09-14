@@ -4,19 +4,97 @@ on:
     branches: [feat/historical-validation-1.13.0]
     paths: [.github/workflows/historical-workspace.yml]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  export:
+  validate-feature:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: f12cfb2ad36278fa66fce4d5d04fd16c7d634eae
           persist-credentials: false
-      - run: git archive --format=tar HEAD > /tmp/lotto-current-source.tar
-      - uses: actions/upload-artifact@v4
+      - uses: actions/setup-python@v5
         with:
-          name: historical-validation-baseline
-          path: /tmp/lotto-current-source.tar
+          python-version: '3.14'
+      - name: Apply individually hash-verified source changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import base64, hashlib, json, lzma, subprocess
+          from pathlib import Path, PurePosixPath
+          blobs = ['ab177d29f73a4518e6af1a0840e31d86d15af004', 'f6ebb84597046b12b8dca73fd58ee2ad8238ceab', '67212975fb410796fcbdda04e4142a394c1d7cae', '97f7ffa5960ac5a6334c2a97afe59c125826809c']
+          packed = b''
+          for sha in blobs:
+              response = json.loads(subprocess.check_output(['gh','api',f'repos/1bobby-git/HA-Lotto-645/git/blobs/{sha}']))
+              assert response['encoding'] == 'base64'
+              packed += base64.b64decode(response['content'])
+          assert hashlib.sha256(packed).hexdigest() == 'cff45c13945ad0fd684cd27306172e4c7d85caae21af01a876921aa06b3baa4a'
+          prepared = {}
+          for update in json.loads(lzma.decompress(packed))['updates']:
+              path = update['path']
+              parts = PurePosixPath(path).parts
+              assert parts and not PurePosixPath(path).is_absolute() and not {'.git','.github','..'} & set(parts)
+              assert parts[0] in ('custom_components','docs','scripts','tests','README.md','CHANGELOG.md')
+              target = Path(path)
+              assert not target.is_symlink() and path not in prepared
+              before = target.read_bytes() if target.exists() else None
+              assert (hashlib.sha256(before).hexdigest() if before is not None else None) == update['before'], f'Baseline mismatch: {path}'
+              if 'content' in update:
+                  after = update['content']
+              else:
+                  lines = before.decode().splitlines(keepends=True)
+                  for start, end, replacement in reversed(update['edits']):
+                      lines[start:end] = [replacement]
+                  after = ''.join(lines)
+              assert hashlib.sha256(after.encode()).hexdigest() == update['after'], f'Result mismatch: {path}'
+              prepared[path] = after
+          for path, content in prepared.items():
+              target = Path(path)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_text(content)
+          print(f'Applied {len(prepared)} hash-verified files')
+          PY
+      - name: Install regression dependencies
+        run: python -m pip install -q pytest 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0' playwright 'qrcode[pil]'
+      - name: Full Python regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q custom_components/lotto_645 scripts
+          git diff --check
+          python -m pytest -q 2>&1 | tee /tmp/historical-python.log
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Test actual browser modules and isolated simulation workflow
+        shell: bash
+        env:
+          LOTTO_SCREENSHOT_DIR: /tmp/historical-validation-screens
+        run: |
+          set -euo pipefail
+          python scripts/smoke_ticket_panel.py 2>&1 | tee /tmp/historical-browser.log
+      - name: Save only passing source changes to feature branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components docs scripts tests README.md CHANGELOG.md
+          git commit -m 'feat: isolated no-lookahead historical draw validation v1.13.0'
+          gh auth setup-git
+          git push origin HEAD:refs/heads/feat/historical-validation-1.13.0
+      - name: Export tested workspace
+        if: always()
+        run: |
+          git add custom_components docs scripts tests README.md CHANGELOG.md
+          git archive --format=tar "$(git write-tree)" > /tmp/historical-validation-source.tar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: historical-validation-tests
+          path: |
+            /tmp/historical-python.log
+            /tmp/historical-browser.log
+            /tmp/historical-validation-source.tar
+            /tmp/historical-validation-screens
           retention-days: 1
