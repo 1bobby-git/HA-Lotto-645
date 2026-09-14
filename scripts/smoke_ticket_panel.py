@@ -12,6 +12,7 @@ import qrcode
 from playwright.async_api import async_playwright
 from smoke_panel_safe_area import verify_safe_area
 from smoke_panel_design_system import verify_component_design
+from smoke_panel_tools import verify_panel_tools
 
 ROOT = Path(__file__).resolve().parents[1]
 WWW = ROOT / 'custom_components/lotto_645/www'
@@ -36,7 +37,7 @@ async def run():
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.on('dialog', lambda dialog: dialog.accept())
         resources = {f'/lotto_645_static/{name}': WWW / name for name in (
-            'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js', 'lotto-panel-design.js'
+            'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js', 'lotto-panel-design.js', 'lotto-panel-tools.js'
         )}
         resources['/lotto_645_brand/logo.png'] = logo
 
@@ -84,7 +85,6 @@ async def run():
         assert resources.keys() <= assets
         assert await page.locator('.draw-stage').evaluate("n=>getComputedStyle(n).backgroundColor==='rgb(255, 255, 255)' && getComputedStyle(n).backgroundImage==='none'")
 
-        # The legacy core's fixed 30-second interval must be cancelled by the entry module.
         assert await page.evaluate('el._poll===null')
         assert '30초마다' not in await page.locator('#sync-status').text_content()
         assert '공식 결과 확인 완료' in await page.locator('#sync-status').text_content()
@@ -165,9 +165,10 @@ async def run():
         assert await page.locator('.draw-stage').evaluate("n=>getComputedStyle(n).backgroundColor==='rgb(255, 255, 255)' && getComputedStyle(n).color==='rgb(25, 31, 40)'")
         await verify_safe_area(page)
         await verify_component_design(page)
+        await verify_panel_tools(page)
         assert not errors, errors
         await browser.close()
-        print('PASS: smart sync, HA-driven narrow host header, real ES modules, canonical logo, PNG QR, explicit save, draft preservation, safe areas and responsive views')
+        print('PASS: smart sync, HA-driven narrow host header, real ES modules, canonical logo, PNG QR, explicit save, draft preservation, safe areas, responsive views and panel tools')
 
 
 if __name__ == '__main__':
