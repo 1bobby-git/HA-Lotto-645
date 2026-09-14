@@ -274,7 +274,7 @@ class LottoTicketPanel extends HTMLElement {
     this.rows('predictions',(w?.results||[]).filter(g=>g.source!=='purchased').map(g=>[g.sensor_name,(g.recommended_numbers||[]).join(', '),g.prize]));
     const rr=data.review_round||{},current=new Map((rr.methods||[]).map(r=>[r.method_id,r]));
     this.rows('reviews',(data.reviews||[]).map(r=>{const now=current.get(r.method_id);return [r.display_name||r.label,r.reviewed_rounds||0,now&&Number.isFinite(now.review_score)?`${rr.status==='provisional'?'잠정 ':''}${now.review_score.toFixed(1)}점`:r.unrated_result?`${r.unrated_result.round}회 ${r.unrated_result.comparison?.prize||'판정 대기'} · 누적 제외`:'평가 대기',now?`${now.exact_match_count}개 / ${now.near_match_count}개`:'—',now?`${now.rank_this_round} / ${rr.peer_count}`:'—'];}));
-    this.node('method-count').textContent=`${(data.reviews||[]).length}개 방식`;
+    this.node('method-count').textContent=`${(data.reviews||[]).length}개 공식`;
     let status=data.review_storage_error?'리뷰 저장소 오류: 기존 파일을 보존하며 새 점수를 누적하지 않습니다.':data.review_save_pending?'리뷰 저장 재시도를 기다리고 있어요. 현재 점수가 아직 저장되지 않았을 수 있습니다.':rr.round?`${rr.round}회 결과 기준 · 누적 별점에는 공식 확인된 회차만 포함해요.`:'추첨 전에 저장된 추천 결과를 기다리고 있어요.';
     if((data.reviews||[]).some(r=>r.unrated_result))status+=' 생성시각·기준회차가 확인되지 않은 과거 기록은 누적평가에서 제외합니다.';
     this.node('reviewstatus').textContent=status;
@@ -285,7 +285,7 @@ class LottoTicketPanel extends HTMLElement {
     this.node('sync-status').textContent=`최근 확인 ${now} · 30초마다 자동 확인`;
   }
   rows(id,rows) {
-    const headers=id==='reviews'?['추천 방식 / 별점','평가 회차','이번 점수','정확 / ±1','순위']:['추천 방식','번호','결과'];
+    const headers=id==='reviews'?['추첨 공식 / 별점','평가 회차','이번 점수','정확 / ±1','순위']:['추첨 공식','번호','결과'];
     const empty=id==='reviews'?['아직 누적된 리뷰가 없어요.','공식 확인된 회차부터 실제 추천 결과를 평가합니다.']:['대조할 추천번호를 기다리고 있어요.','추첨 전에 저장한 추천이 있으면 결과 발표 후 표시됩니다.'];
     renderRows(this.node(id),rows,headers,empty);
   }

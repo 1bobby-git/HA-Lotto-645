@@ -90,7 +90,7 @@
 
 ## 사용자가 확인할 위치
 
-`구성 → 명리 사주정보 입력·수정`에서 저장하고 `추천 방식·AI·데이터 소스`에서 명리를 선택합니다. 기존 두 메뉴 구조와 엔티티 ID는 유지합니다.
+`구성 → 명리 사주정보 입력·수정`에서 저장하고 `추첨 공식·AI·데이터 소스`에서 명리를 선택합니다. 기존 두 메뉴 구조와 엔티티 ID는 유지합니다.
 
 추천 센서 상세 속성에는 `structural_analysis`, `favorable_analysis`, `luck_layers`, `number_ten_god_roles`, `number_score_trace`, `calendar_rules`, `rule_sources`, `calculation_warnings`가 추가됩니다. 사주 프로필 센서에서도 원국/후보/계산법을 확인할 수 있습니다.
 

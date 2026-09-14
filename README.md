@@ -4,39 +4,49 @@
 
 # HA-Lotto-645
 
-Home Assistant용 **로또 6/45 전체 회차 분석 · 선택형 번호 추천 · 개인 사주 명리 추천 · Home Assistant AI 추천** 커스텀 통합입니다. 구매한 복권의 QR·번호를 등록하고 추첨 결과와 추천 방식별 리뷰를 확인할 수 있습니다.
+Home Assistant용 **로또 6/45 전체 회차 분석 · 선택형 번호 추천 · 개인 사주 명리 추천 · Home Assistant AI 추천** 커스텀 통합입니다. 구매한 복권의 QR·번호를 등록하고 추첨 결과와 추첨 공식별 리뷰를 확인할 수 있습니다.
 
-> 공정하고 독립적인 추첨에서 모든 6개 조합의 1등 확률은 **1 / 8,145,060**입니다. 이 통합의 통계·명리 방식은 조합 선택용 휴리스틱이며, 당첨을 보장하거나 실제 당첨 확률을 높인다고 주장하지 않습니다. 추천 적합도와 과거 리뷰 별점은 당첨 확률이 아닙니다.
+> 공정하고 독립적인 추첨에서 모든 6개 조합의 1등 확률은 **1 / 8,145,060**입니다. 이 통합의 통계·명리 공식은 조합 선택용 휴리스틱이며, 당첨을 보장하거나 실제 당첨 확률을 높인다고 주장하지 않습니다. 추천 적합도와 과거 리뷰 별점은 당첨 확률이 아닙니다.
 
-## 추천 방식 17종
+## 추첨 공식 23종
 
-**방식 이름을 누르면 해당 방식의 상세 안내로 이동합니다.** 각 문서에는 사용 데이터, 실제 계산 원리와 가중치, 이해를 돕는 가상 예시, 설정 방법, 센서 속성 및 해석의 한계가 담겨 있습니다.
+기본값은 균등 추첨 5종이며 조합 인덱스 공식을 추가로 선택할 수 있습니다. 기존 17개 공식 ID는 유지하고 베이지안 수축은 과거 영향 5%의 실험적 샘플러로 개선했습니다. 기존 사용자의 선택·엔티티·자동화는 유지됩니다. 균등 공식의 결과에는 적합도 점수를 붙이지 않습니다.
 
-1. [독창 패턴 · 위상잔차 그래프](docs/methods/phase_residual_graph.md)
-2. [독창 패턴 · 전이·간격 위상](docs/methods/transition_gap_phase.md)
-3. [독창 패턴 · 다중시간대 공명](docs/methods/multiscale_resonance.md)
-4. [공개 공식 · 가중 빈도](docs/methods/weighted_frequency.md)
-5. [공개 공식 · 핫넘버](docs/methods/hot_numbers.md)
-6. [공개 공식 · 콜드·미출현](docs/methods/overdue_gap.md)
-7. [공개 공식 · 동반출현쌍](docs/methods/pair_cooccurrence.md)
-8. [공개 공식 · 삼중 동반출현](docs/methods/triplet_cooccurrence.md)
-9. [공개 공식 · 지수감쇠 최근성](docs/methods/recency_decay.md)
-10. [공개 공식 · 베이지안 수축](docs/methods/bayesian_shrinkage.md)
-11. [공개 공식 · 재등장 주기](docs/methods/cycle_rhythm.md)
-12. [공개 공식 · 균형 필터](docs/methods/balance_formula.md)
-13. [공개 공식 · 델타 시스템](docs/methods/delta_system.md)
-14. [공개 공식 · 이월수](docs/methods/carryover_formula.md)
-15. [공개 공식 · 종합 앙상블](docs/methods/public_ensemble.md)
-16. [명리 권장 · 개인 사주 원국·대운·추첨일](docs/methods/myungri_hetu_day_pillar.md)
-17. [합의 추천 · 선택 방식 중앙값](docs/methods/selected_median_consensus.md)
+기존 과거 1등 조합 제외 정책을 유지하므로 제품에서는 **제외 후 허용된 공간에서의 조건부 균등성**을 표시합니다. 과거 조합 제외가 당첨확률을 높이지는 않습니다. [연구 반영·검증 범위](docs/RESEARCH_FORMULAS.md)
 
-먼저 [공통 계산 원리·점수 읽는 법](docs/FORMULAS.md)을 확인하면 각 방식의 차이를 비교하기 쉽습니다. 위 17개는 **로컬 추천 방식**이며 Home Assistant AI 추천은 별도 기능입니다.
+**공식 이름을 누르면 해당 공식의 상세 안내로 이동합니다.** 각 문서에는 사용 데이터, 실제 계산 원리와 가중치, 이해를 돕는 가상 예시, 설정 방법, 센서 속성 및 해석의 한계가 담겨 있습니다.
 
-## 추천 방식 선택과 상세 정보
+1. [균등 공식 · 부분 Fisher–Yates](docs/methods/uniform_fisher_yates.md)
+2. [균등 공식 · Floyd](docs/methods/uniform_floyd.md)
+3. [균등 공식 · 중복거부](docs/methods/uniform_rejection.md)
+4. [균등 공식 · 순차 포함](docs/methods/uniform_sequential.md)
+5. [균등 공식 · 조합보정 층화 CCSS](docs/methods/calibrated_stratified.md)
+6. [균등 공식 · 조합 인덱스](docs/methods/uniform_combination_rank.md)
+7. [독창 패턴 · 위상잔차 그래프](docs/methods/phase_residual_graph.md)
+8. [독창 패턴 · 전이·간격 위상](docs/methods/transition_gap_phase.md)
+9. [독창 패턴 · 다중시간대 공명](docs/methods/multiscale_resonance.md)
+10. [공개 공식 · 가중 빈도](docs/methods/weighted_frequency.md)
+11. [공개 공식 · 핫넘버](docs/methods/hot_numbers.md)
+12. [공개 공식 · 콜드·미출현](docs/methods/overdue_gap.md)
+13. [공개 공식 · 동반출현쌍](docs/methods/pair_cooccurrence.md)
+14. [공개 공식 · 삼중 동반출현](docs/methods/triplet_cooccurrence.md)
+15. [공개 공식 · 지수감쇠 최근성](docs/methods/recency_decay.md)
+16. [실험 공식 · 베이지안 수축](docs/methods/bayesian_shrinkage.md)
+17. [공개 공식 · 재등장 주기](docs/methods/cycle_rhythm.md)
+18. [공개 공식 · 균형 필터](docs/methods/balance_formula.md)
+19. [공개 공식 · 델타 시스템](docs/methods/delta_system.md)
+20. [공개 공식 · 이월수](docs/methods/carryover_formula.md)
+21. [공개 공식 · 종합 앙상블](docs/methods/public_ensemble.md)
+22. [명리 권장 · 개인 사주 원국·대운·추첨일](docs/methods/myungri_hetu_day_pillar.md)
+23. [합의 추천 · 선택 공식 중앙값](docs/methods/selected_median_consensus.md)
 
-**설정 → 기기 및 서비스 → Lotto 6/45 Analysis → 구성**의 추천 설정에서 여러 방식을 선택합니다. 선택한 방식마다 번호 6개로 구성된 1게임과 근거가 생성됩니다. 개인 사주 방식은 사주정보 저장이 먼저 필요하고, 선택 방식 중앙값은 다른 로컬 방식 2개 이상을 함께 선택해야 합니다.
+먼저 [공통 계산 원리·점수 읽는 법](docs/FORMULAS.md)을 확인하면 각 공식의 차이를 비교하기 쉽습니다. 위 23개는 **로컬 추첨 공식**이며 Home Assistant AI 추천은 별도 기능입니다.
 
-`추천 방식 안내` 센서의 상태는 점수가 아니라 지원 방식 수입니다. 전체 설명은 `methods`, 각 추천번호 센서의 설명은 `method_description`에서 볼 수 있습니다. 속성이 접혀 보이면 **개발자 도구 → 상태 → 해당 엔티티 선택**으로 확인하세요. 임의의 예시 entity_id를 입력할 필요는 없습니다.
+## 추첨 공식 선택과 상세 정보
+
+**설정 → 기기 및 서비스 → Lotto 6/45 Analysis → 구성**의 추천 설정에서 여러 공식을 선택합니다. 선택한 공식마다 번호 6개로 구성된 1게임과 근거가 생성됩니다. 개인 사주 공식은 사주정보 저장이 먼저 필요하고, 선택 공식 중앙값은 다른 점수형 로컬 공식 2개 이상 (균등 샘플링 제외)을 함께 선택해야 합니다.
+
+`추첨 공식 안내` 센서의 상태는 점수가 아니라 지원 공식 수입니다. 전체 설명은 `methods`, 각 추천번호 센서의 설명은 `method_description`에서 볼 수 있습니다. 속성이 접혀 보이면 **개발자 도구 → 상태 → 해당 엔티티 선택**으로 확인하세요. 임의의 예시 entity_id를 입력할 필요는 없습니다.
 
 ## 로또 복권 페이지
 
@@ -50,7 +60,7 @@ Home Assistant용 **로또 6/45 전체 회차 분석 · 선택형 번호 추천 
 
 - **`n회 추첨번호`**: 수신한 해당 회차의 본번호 6개와 보너스·추첨일 등 결과를 확인합니다. 회차가 바뀌어도 엔티티 ID는 유지됩니다.
 - **`n회 당첨 여부` / 내 구매번호**: 추첨 전에 저장된 추천·AI와 해당 회차의 구매번호를 구분해 대조합니다. 미래 회차·미등록·판정 보류는 미당첨과 다르게 표시합니다.
-- **추천 요약 / 추천 리뷰**: 추천 요약은 대상 회차와 방식별 번호·근거를 모은 정보입니다. 리뷰 별점은 추첨 전 실제 저장 추천의 공식 확인 회차 평균을 바탕으로 하며, ±1 유사도나 과거 별점은 실제 당첨 또는 미래 예측력을 뜻하지 않습니다.
+- **추천 요약 / 추천 리뷰**: 추천 요약은 대상 회차와 공식별 번호·근거를 모은 정보입니다. 리뷰 별점은 추첨 전 실제 저장 추천의 공식 확인 회차 평균을 바탕으로 하며, ±1 유사도나 과거 별점은 실제 당첨 또는 미래 예측력을 뜻하지 않습니다.
 
 공개 속보를 먼저 받으면 공식 확인 전임을 표시하고, 출처가 충돌하면 판정을 보류합니다. 공식 이력이 도착하면 다시 대조합니다. 발표 지연·접근 제한에 따라 결과 수신이 늦어질 수 있습니다.
 
@@ -62,7 +72,7 @@ Home Assistant용 **로또 6/45 전체 회차 분석 · 선택형 번호 추천 
 action: lotto_645.refresh
 ```
 
-공유 이력 미러를 확인한 뒤 각 선택 방식의 고득점 후보군에서 **AI를 제외한 추천번호만** 새로 선택합니다. 과거 1등 완전일치 조합은 계속 제외하며 기존 Home Assistant AI 추천은 변경하지 않습니다. 재생성은 당첨 확률을 높이는 기능이 아닙니다.
+공유 이력 미러를 확인한 뒤 **AI를 제외한 추천번호만** 다시 생성합니다. 균등 공식은 CSPRNG로 새로 추첨하고 기존 점수형 공식은 고득점 후보군에서 선택합니다. 과거 1등 완전일치 조합은 계속 제외하며 기존 Home Assistant AI 추천은 변경하지 않습니다. 재생성은 당첨 확률을 높이는 기능이 아닙니다.
 
 ## Home Assistant AI
 
@@ -70,7 +80,7 @@ action: lotto_645.refresh
 action: lotto_645.generate_ai_recommendation
 ```
 
-설정 → AI의 기본 데이터 생성 AI 또는 선택한 `ai_task.*` 엔티티를 사용하며, 결과는 번호 범위·중복·과거 1등 완전일치·로컬 추천 완전복제를 다시 검증합니다. AI는 위 17개 로컬 방식이나 중앙값 집계에 포함되지 않습니다.
+번호는 백엔드 CCSS 공식과 OS CSPRNG가 확정하고, 설정 → AI의 기본 데이터 생성 AI 또는 선택한 `ai_task.*` 엔티티는 근거만 설명합니다. AI가 번호를 반환하거나 추첨 공식을 바꾸면 거절합니다. AI는 위 23개 로컬 공식이나 중앙값 집계에 포함되지 않습니다.
 
 ## 데이터 수집 안전 구조
 
@@ -86,7 +96,7 @@ HACS 사용자 저장소: `https://github.com/1bobby-git/HA-Lotto-645`
 
 ## 주요 엔티티
 
-- 추천 요약 / 추천 방식 안내 / 선택한 방식별 추천 센서
+- 추천 요약 / 추첨 공식 안내 / 선택한 공식별 추천 센서
 - 명리 선택 시 명리 사주 프로필
 - 최신 당첨 결과 / 추첨번호 / 당첨 여부 / 내 구매번호
 - 즉시 새로고침 · 번호 재생성

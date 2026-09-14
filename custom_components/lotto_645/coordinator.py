@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 import asyncio
-import math
 import logging
 from typing import Any
 
@@ -20,7 +19,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .methods import METHODS_BY_ID
 from .analysis import build_analysis
+from .ai_formula import (AI_BASE_FORMULA, make_ai_ticket, explanation_prompt,
+                         validate_explanation, validate_backend_ticket)
+from .formula_cache import restore_tickets, store_tickets
+from .sampling import FORMULA_VERSION
 from .api import LottoApiClient, LottoApiError
 from .const import (
     AI_MAX_ATTEMPTS,
@@ -79,6 +83,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         self._needs_storage_save = False
         self._cached_ai_recommendation: Recommendation | None = None
         self._cached_ai_generated_at: datetime | None = None
+        self._sampling_cache: dict[str, Any] = {}
         self._local_generation_nonce = 0
         self._local_generated_at: datetime | None = None
         self._suppress_ai_generation_once = False
@@ -214,6 +219,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 self._fast_result = None
                 self._frozen_result_snapshot = None
             try:
+                self._sampling_cache = payload.get("sampling_cache", {})
                 prediction_snapshot = payload.get("prediction_snapshot")
                 if isinstance(prediction_snapshot, dict):
                     self._prediction_snapshot = prediction_snapshot
@@ -291,6 +297,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 "frozen_result_snapshot": getattr(self, "_frozen_result_snapshot", None),
                 "latest_round": self.history[-1].round if self.history else 0,
                 "draws": [draw.to_storage() for draw in self.history],
+                "sampling_cache": getattr(self, "_sampling_cache", {}),
                 "local_generation_sequence": self._local_generation_nonce,
                 "local_excluded_combinations": [list(item) for item in self._regeneration_exclusions],
                 "local_generated_at": (
@@ -430,7 +437,8 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 self.data.ai_recommendation,
                 self.data.ai_generated_at,
             )
-        elif self._prediction_snapshot is None and self.history:
+        elif (self._prediction_snapshot is None and self.history
+              and not any(METHODS_BY_ID[key].sampling for key in self.selected_method_ids)):
             # Upgrade compatibility: v1.7 and older did not persist recommendation
             # snapshots.  Reconstruct the currently displayed target round from
             # the cached pre-draw history before accepting a newer mirror round.
@@ -555,6 +563,12 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                     return self.data
                 return replace(self.data, source_status=source_status)
 
+        excluded = self._regeneration_exclusions
+        cached_ai = self._cached_ai_recommendation
+        if cached_ai is not None and cached_ai.details.get("target_round") == self.history[-1].round + 1:
+            excluded = (*excluded, cached_ai.numbers)
+        restored = restore_tickets(getattr(self, "_sampling_cache", {}), self.history,
+                                   self.selected_method_ids, self._local_generation_nonce)
         try:
             profile = self.saju_profile if self.saju_profile_ready else None
             analysis = await self.hass.async_add_executor_job(
@@ -563,12 +577,15 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 self.selected_method_ids,
                 self._local_generation_nonce,
                 profile,
-                self._regeneration_exclusions,
+                excluded,
+                restored,
             )
         except ValueError as err:
             raise UpdateFailed(f"로또 분석 실패: {err}") from err
 
-        if self._local_generated_at is None:
+        self._sampling_cache = store_tickets(analysis, self.history, self.selected_method_ids,
+                                            self._local_generation_nonce)
+        if self._local_generated_at is None or not restored:
             self._local_generated_at = datetime.now(UTC)
             self._needs_storage_save = True
 
@@ -654,115 +671,54 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             await self.async_request_refresh()
 
     def _ai_structure(self) -> vol.Schema:
-        number_selector = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=1, max=45, step=1, mode=selector.NumberSelectorMode.BOX
-            )
-        )
-        return vol.Schema(
-            {vol.Required(f"number_{index}"): number_selector for index in range(1, 7)}
-            | {
-                vol.Required("reason"): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
-                vol.Optional("basis"): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
-            }
-        )
+        return vol.Schema({
+            vol.Required("formula_id"): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=[AI_BASE_FORMULA])),
+            vol.Required("reason"): selector.TextSelector(
+                selector.TextSelectorConfig(multiline=True)),
+            vol.Optional("basis"): selector.TextSelector(
+                selector.TextSelectorConfig(multiline=True)),
+        })
 
-    def _ai_prompt(self, analysis: AnalysisResult, attempt: int) -> str:
-        # Only derived local recommendation text is shared with the configured AI
-        # Task. Raw birth date/time/place/timezone values never enter this prompt.
-        local_games = "\n".join(
-            f"- {item.label}: {', '.join(map(str, item.numbers))} / {item.reason}"
-            for item in analysis.recommendations
-            if item.method_id != METHOD_MYUNGRI_HETU
-        )
-        summary = analysis.summary
-        retry_text = (
-            "이전 결과가 중복 번호, 범위 오류 또는 과거 1등 완전일치로 거절되었습니다. 반드시 다른 유효 조합을 만드세요."
-            if attempt > 1
-            else ""
-        )
-        return f"""당신은 로또 6/45 통계 해석 보조 엔진입니다.
-아래 데이터만 참고해 {analysis.target_round}회용 번호 6개와 핵심 근거를 생성하세요.
-추첨은 독립 무작위이며 당첨을 보장하거나 확률을 높인다고 표현하면 안 됩니다.
-개인 사주 원본 생년월일·출생시간·출생지는 제공되지 않으며 추정해서도 안 됩니다.
+    def _ai_prompt(self, analysis: AnalysisResult, attempt: int, numbers=()) -> str:
+        return explanation_prompt(numbers, analysis.target_round, analysis.based_on_round, attempt)
 
-필수 규칙:
-1. 1~45의 서로 다른 정수 정확히 6개
-2. 과거 1회~{analysis.based_on_round}회 1등 조합과 완전히 동일하지 않게 선택
-3. 제공된 로컬 추천과 완전히 같은 조합은 피하고 통계적 관점을 달리할 것
-4. 근거는 실제 제공 통계에 연결해 180자 이내 한국어로 작성
-5. number_1~number_6 필드에는 번호를 하나씩 넣을 것
-{retry_text}
-
-분석 기준 회차: {analysis.based_on_round}
-위상 변화 상위: {summary.get('top_phase_change')}
-다음 회차 전이 상위: {summary.get('top_transition')}
-번호쌍 그래프 상위: {summary.get('top_graph_strength')}
-삼중 동반출현 상위: {summary.get('top_triplet_strength')}
-로컬 추천:
-{local_games}
-
-참고: 모든 6개 조합의 1등 확률은 {FIRST_PRIZE_ODDS}로 동일합니다.
-"""
-
-    def _parse_ai_result(self, data: Any, analysis: AnalysisResult) -> Recommendation:
-        if not isinstance(data, dict):
-            raise AiRecommendationError("AI Task가 구조화된 객체를 반환하지 않았습니다")
+    def _parse_ai_result(self, data: Any, analysis: AnalysisResult,
+                         numbers=(), entity_id: str | None = None) -> Recommendation:
         try:
-            raw = [data[f"number_{index}"] for index in range(1, 7)]
-            if any(isinstance(n, bool) or not isinstance(n, (int, float))
-                   or not math.isfinite(n) or int(n) != n for n in raw):
-                raise ValueError("non-integral AI number")
-            numbers = tuple(sorted(int(n) for n in raw))
-        except (KeyError, TypeError, ValueError, OverflowError) as err:
-            raise AiRecommendationError("AI Task는 1~45 정수 6개를 반환해야 합니다") from err
-        if len(numbers) != 6 or len(set(numbers)) != 6:
-            raise AiRecommendationError("AI Task가 중복 없는 번호 6개를 반환하지 않았습니다")
-        if any(number < 1 or number > 45 for number in numbers):
-            raise AiRecommendationError("AI Task 번호 범위가 1~45를 벗어났습니다")
-        past_combos = {tuple(draw.numbers) for draw in self.history}
-        if numbers in past_combos:
-            raise AiRecommendationError("AI Task 조합이 과거 1등 조합과 완전히 같습니다")
-        if any(numbers == item.numbers for item in analysis.recommendations):
-            raise AiRecommendationError("AI Task 조합이 로컬 추천과 완전히 같습니다")
-        reason = data.get("reason", "")
-        reason = reason.strip() if isinstance(reason, str) else ""
-        if not reason:
-            raise AiRecommendationError("AI Task가 추천 근거를 반환하지 않았습니다")
+            reason, basis = validate_explanation(data)
+            numbers = validate_backend_ticket(numbers, analysis, self.history)
+        except (ValueError, TypeError) as err:
+            raise AiRecommendationError(str(err)) from err
         values = set(numbers)
-        max_overlap = max(
-            (len(values & set(draw.numbers)) for draw in self.history), default=0
-        )
         details = {
-            "target_round": analysis.target_round,
-            "based_on_round": analysis.based_on_round,
-            "basis": str(data.get("basis", "")).strip()[:500],
-            "provider": self.configured_ai_entity_id or "HA preferred data AI Task",
+            "target_round": analysis.target_round, "based_on_round": analysis.based_on_round,
+            "base_formula_id": AI_BASE_FORMULA, "formula_version": FORMULA_VERSION,
+            "rng": "system_csprng", "number_source": "backend_formula_engine",
+            "ai_role": "explanation_only", "history_used_for_weighting": False,
+            "history_cutoff_round": analysis.based_on_round,
+            "uniformity": "uniform_over_allowed_combinations",
+            "exclusions": "past_winning_combinations_and_duplicate_tickets",
+            "basis": basis, "provider": entity_id or self.configured_ai_entity_id or "HA preferred data AI Task",
             "exact_past_first_prize_match": False,
-            "max_numbers_matching_any_past_first_prize": max_overlap,
+            "max_numbers_matching_any_past_first_prize": max(
+                (len(values & set(draw.numbers)) for draw in self.history), default=0),
             "latest_draw_overlap": len(values & set(self.history[-1].numbers)),
-            "first_prize_odds": FIRST_PRIZE_ODDS,
-            "disclaimer": DISCLAIMER,
+            "first_prize_odds": FIRST_PRIZE_ODDS, "disclaimer": DISCLAIMER,
         }
         return Recommendation(
-            index=len(analysis.recommendations) + 1,
-            method_id=AI_METHOD_ID,
-            label="Home Assistant AI 추천",
-            method="HA AI Task",
-            numbers=numbers,  # type: ignore[arg-type]
-            reason=reason[:300],
-            score=None,
-            details=details,
-            source="ai_task",
+            index=len(analysis.recommendations) + 1, method_id=AI_METHOD_ID,
+            label="Home Assistant AI 추천", method="HA AI 설명 · CCSS 추첨 공식",
+            numbers=numbers, reason=reason, score=None, details=details, source="ai_task",
         )
 
     async def _async_create_ai_recommendation(
         self, analysis: AnalysisResult, entity_id: str | None
     ) -> Recommendation:
+        # Freeze a CSPRNG ticket before invoking the language model. Retries can
+        # only change explanation, never use the LLM as a random-number source.
+        numbers = await self.hass.async_add_executor_job(
+            make_ai_ticket, self.history, analysis.recommendations, self._cached_ai_recommendation)
         last_error: Exception | None = None
         for attempt in range(1, AI_MAX_ATTEMPTS + 1):
             try:
@@ -770,10 +726,10 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                     self.hass,
                     task_name=f"로또 6/45 {analysis.target_round}회 추천",
                     entity_id=entity_id,
-                    instructions=self._ai_prompt(analysis, attempt),
+                    instructions=self._ai_prompt(analysis, attempt, numbers),
                     structure=self._ai_structure(),
                 )
-                return self._parse_ai_result(result.data, analysis)
+                return self._parse_ai_result(result.data, analysis, numbers, entity_id)
             except (AiRecommendationError, HomeAssistantError, KeyError) as err:
                 last_error = err
                 _LOGGER.debug(
@@ -803,6 +759,14 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 self.data.analysis,
                 entity_id or self.configured_ai_entity_id,
             )
+            # The AI awaited external I/O; local regeneration/round advancement
+            # may have happened meanwhile. Never publish against stale state.
+            if self.data is None or recommendation.details["target_round"] != self.data.analysis.target_round:
+                raise AiRecommendationError("AI 설명 중 기준 회차가 바뀌었습니다")
+            try:
+                validate_backend_ticket(recommendation.numbers, self.data.analysis, self.history)
+            except ValueError as err:
+                raise AiRecommendationError(str(err)) from err
         except (AiRecommendationError, HomeAssistantError, KeyError) as err:
             self.data = replace(self.data, ai_status="error", ai_error=str(err))
             self.async_update_listeners()

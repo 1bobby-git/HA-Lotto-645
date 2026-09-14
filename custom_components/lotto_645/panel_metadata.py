@@ -57,7 +57,7 @@ def panel_metadata(result_round: int | None, result_status: str) -> dict:
         "method_id": AI_METHOD_ID,
         "name": "Home Assistant AI 추천",
         "category": "Home Assistant AI",
-        "description": "Home Assistant에 설정된 AI가 추천한 번호를 형식·제외 규칙으로 검증합니다.",
+        "description": "번호는 백엔드 CCSS 공식으로 추첨하고 Home Assistant AI는 실행 근거만 설명합니다. AI가 번호를 만들거나 당첨을 예측하지 않습니다.",
         "requirements": "AI 추천 활성화 및 데이터 생성 AI 설정",
     })
     return {"method_catalog": catalog, "draw_schedule": draw_schedule(result_round, result_status)}

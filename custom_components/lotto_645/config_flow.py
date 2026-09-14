@@ -41,6 +41,7 @@ from .methods import (
     DEFAULT_METHOD_IDS,
     METHOD_MYUNGRI_HETU,
     METHOD_SELECTED_MEDIAN,
+    is_score_formula,
     METHODS_BY_ID,
     method_selector_options,
     normalize_method_ids,
@@ -256,7 +257,7 @@ class Lotto645OptionsFlow(OptionsFlow):
                     errors[CONF_SELECTED_METHODS] = "select_at_least_one"
                 elif (
                     METHOD_SELECTED_MEDIAN in normalized
-                    and sum(method_id != METHOD_SELECTED_MEDIAN for method_id in normalized) < 2
+                    and sum(is_score_formula(method_id) for method_id in normalized) < 2
                 ):
                     errors["base"] = "consensus_sources_required"
                 else:
@@ -280,7 +281,7 @@ class Lotto645OptionsFlow(OptionsFlow):
                     if not errors:
                         return self.async_create_entry(title="", data=pending)
             except (TypeError, ValueError) as err:
-                _LOGGER.exception("추천 방식 옵션 처리 중 오류: %s", err)
+                _LOGGER.exception("추첨 공식 옵션 처리 중 오류: %s", err)
                 errors["base"] = "options_error"
 
         return self.async_show_form(

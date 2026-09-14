@@ -17,24 +17,24 @@
         "title": "Lotto 6/45 settings",
         "description": "Choose which settings to edit. Recommendation settings and personal Four Pillars data are separated so the Configure dialog remains compatible and reliable.",
         "menu_options": {
-          "recommendations": "Recommendation methods, AI, and data source",
+          "recommendations": "Draw formulas, AI, and data source",
           "saju": "Personal Four Pillars profile",
           "purchases": "Purchased tickets: enter / edit"
         }
       },
       "recommendations": {
-        "title": "Recommendation methods, AI, and data source",
-        "description": "Select one or more methods. To enable Personal Four Pillars, first save the birth profile from the previous menu. Detailed explanations are available on the Recommendation Method Guide sensor.",
+        "title": "Draw formulas, AI, and data source",
+        "description": "Select one or more formulas. To enable Personal Four Pillars, first save the birth profile from the previous menu. Detailed explanations are available on the Recommendation Method Guide sensor.",
         "data": {
-          "selected_methods": "Recommendation methods (multiple selection)",
+          "selected_methods": "Draw formulas (multiple selection)",
           "enable_ai_recommendation": "Enable Home Assistant AI recommendation",
           "ai_task_entity_id": "AI Task entity (optional; blank uses the preferred data AI Task)",
           "ai_auto_generate": "Automatically generate AI recommendation for a new draw",
           "allow_official_direct_fallback": "Allow limited direct Donghaeng Lottery fallback"
         },
         "data_description": {
-          "selected_methods": "Multiple methods can be selected. Personal Four Pillars can only be enabled after the personal profile has been saved. None of these methods changes the mathematical winning probability. The selected-method median consensus requires at least two other local methods and excludes AI.",
-          "enable_ai_recommendation": "AI is independent from local methods. Manual Refresh / Regenerate does not regenerate the AI recommendation.",
+          "selected_methods": "Multiple formulas can be selected. Personal Four Pillars can only be enabled after the personal profile has been saved. None of these formulas changes the mathematical winning probability. The selected-formula median consensus requires at least two other local formulas and excludes AI.",
+          "enable_ai_recommendation": "AI is independent from local formulas. Manual Refresh / Regenerate does not regenerate the AI recommendation.",
           "ai_auto_generate": "Only generates AI automatically when a new official draw is detected. Manual local regeneration suppresses AI generation.",
           "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed."
         }
@@ -86,11 +86,11 @@
       }
     },
     "error": {
-      "select_at_least_one": "Select at least one recommendation method.",
-      "saju_profile_required": "Save the Personal Four Pillars profile from the previous menu before enabling this recommendation method.",
+      "select_at_least_one": "Select at least one draw formula.",
+      "saju_profile_required": "Save the Personal Four Pillars profile from the previous menu before enabling this draw formula.",
       "invalid_saju_profile": "Check birth date, time, lunar standard/leap month, timezone and longitude. Solar-term or DST boundary ambiguity requires a known time.",
       "options_error": "An error occurred while processing the options. Check the entered values and try again.",
-      "consensus_sources_required": "The selected-method median consensus requires at least two other recommendation methods.",
+      "consensus_sources_required": "The selected-formula median consensus requires at least two other draw formulas.",
       "invalid_purchase_round": "Enter a positive draw number.",
       "invalid_purchase_numbers": "Enter six distinct integers 1–45 separated by commas/spaces, or twelve zero-padded digits.",
       "purchase_games_required": "Enter at least one game, or select delete explicitly.",

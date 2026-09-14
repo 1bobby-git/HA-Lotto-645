@@ -41,7 +41,9 @@ from .methods import (
     METHODS_BY_ID,
     MethodDefinition,
     normalize_method_ids,
+    is_score_formula,
 )
+from .sampling import generate_ticket, validate_fixed
 from .models import AnalysisResult, LottoDraw, Recommendation
 from .myungri import build_myungri_context, combo_myungri_details, combo_myungri_score
 
@@ -193,7 +195,7 @@ def _decayed_frequency(history: list[LottoDraw], half_life: float = 20.0) -> dic
     return {number: weighted[number] / total_weight - NUMBER_PROBABILITY for number in NUMBERS}
 
 
-def _bayesian_recent(history: list[LottoDraw], window: int = 60, prior_strength: float = 45.0) -> dict[int, float]:
+def _bayesian_recent(history: list[LottoDraw], window: int = 300, prior_strength: float = 500.0) -> dict[int, float]:
     rows = history[-min(window, len(history)) :]
     counts: Counter[int] = Counter()
     for draw in rows:
@@ -318,10 +320,14 @@ def _feature_maps(
 
 
 def _method_number_scores(method: MethodDefinition, ranked: dict[str, dict[int, float]]) -> dict[int, float]:
+    if method.method_id == METHOD_BAYESIAN_SHRINKAGE:
+        # Compatibility input to median consensus, NOT a ticket probability or
+        # the selection rule of the Bayesian sampler. Keep the 5% effect weak.
+        return {n: 0.5 + 0.05 * (ranked["bayesian_60"][n] - 0.5) for n in NUMBERS}
     if method.method_id == METHOD_SELECTED_MEDIAN:
         values = ranked.get("_selected_median_consensus")
         if values is None:
-            raise ValueError("선택 방식 중앙값 계산 정보가 준비되지 않았습니다")
+            raise ValueError("선택 공식 중앙값 계산 정보가 준비되지 않았습니다")
         return dict(values)
     return {
         number: sum(weight * ranked[feature][number] for feature, weight in method.weights.items())
@@ -337,10 +343,10 @@ def _prepare_selected_median(
     """Build a robust consensus score from the user's other selected methods."""
     contributors = tuple(
         method_id for method_id in selected_method_ids
-        if method_id != METHOD_SELECTED_MEDIAN
+        if is_score_formula(method_id)
     )
     if len(contributors) < 2:
-        raise ValueError("선택 방식 중앙값은 다른 추천 방식을 2개 이상 함께 선택해야 합니다")
+        raise ValueError("선택 공식 중앙값은 다른 점수형 추첨 공식을 2개 이상 함께 선택해야 합니다 (균등 샘플링 제외)")
     source_scores = {
         method_id: _method_number_scores(METHODS_BY_ID[method_id], ranked)
         for method_id in contributors
@@ -359,7 +365,7 @@ def _prepare_selected_median(
         "median_scores": medians,
         "score_spreads": spreads,
         "vote_counts": {number: 0 for number in NUMBERS},
-        "rule": "선택한 다른 로컬 방식들의 번호별 0~1 적합도 중앙값; AI 제외",
+        "rule": "선택한 다른 로컬 공식들의 번호별 0~1 적합도 중앙값; AI 제외",
     }
 
 
@@ -557,7 +563,7 @@ def _recommendation_reason(method: MethodDefinition, combo: tuple[int, ...], con
         votes = meta.get("vote_counts", {})
         vote_leaders = sorted(combo, key=lambda n: (-votes.get(n, 0), -meta["median_scores"][n], n))[:2]
         reason = (
-            f"선택한 다른 {meta['source_count']}개 방식의 번호별 적합도 중앙값을 사용; "
+            f"선택한 다른 {meta['source_count']}개 공식의 번호별 적합도 중앙값을 사용; "
             f"선택결과 중 지지표가 높은 {vote_leaders[0]}·{vote_leaders[1]}, "
             f"중앙값 상위 조합을 과거 1등·중복 제외 조건으로 확정"
         )
@@ -636,6 +642,8 @@ def build_analysis(
     generation_nonce: int = 0,
     saju_profile: dict[str, Any] | None = None,
     excluded_combinations: Sequence[tuple[int, ...]] = (),
+    restored_tickets: dict[str, tuple[int, ...]] | None = None,
+    *, rng=None, progress_callback=None,
 ) -> AnalysisResult:
     """Build one recommendation per selected method.
 
@@ -676,6 +684,7 @@ def build_analysis(
     past_combos = {tuple(draw.numbers) for draw in history}
     quads, quints = _build_seen_subset_counts(history)
 
+    restored_tickets = restored_tickets or {}
     selected: list[tuple[int, ...]] = []
     recommendations: list[Recommendation] = []
     execution_method_ids = tuple(
@@ -684,6 +693,47 @@ def build_analysis(
     ) + ((METHOD_SELECTED_MEDIAN,) if METHOD_SELECTED_MEDIAN in selected_method_ids else ())
     for index, method_id in enumerate(execution_method_ids, start=1):
         method = METHODS_BY_ID[method_id]
+        if progress_callback:
+            progress_callback({"phase": "method_start", "method_id": method_id, "index": index})
+        if method.sampling:
+            blocked = past_combos | set(selected) | set(context["excluded_combinations"])
+            # Reserve restored tickets belonging to later formulas as well.
+            blocked.update(ticket for key, ticket in restored_tickets.items() if key != method_id)
+            if method_id in restored_tickets:
+                combo = validate_fixed(restored_tickets[method_id])
+                if len(combo) != 6 or combo in blocked:
+                    raise ValueError("저장된 추첨 공식 번호가 현재 제외 조건과 충돌합니다")
+            else:
+                combo = generate_ticket(method.sampling, excluded_combinations=blocked,
+                                        history=[d.numbers for d in history], rng=rng)
+            selected.append(combo)
+            experimental = method_id == METHOD_BAYESIAN_SHRINKAGE
+            details = {
+                "formula_id": method_id, "formula_version": method.formula_version,
+                "method_description": method.description, "method_category": method.category,
+                "restored_from_cache": method_id in restored_tickets,
+                "generation_sequence": generation_nonce, "rng": "injected_test_rng" if rng is not None else "system_csprng",
+                "uniformity": "nonuniform_experimental" if experimental else "uniform_over_allowed_combinations",
+                "eligible_combination_count": math.comb(45, 6) - len(blocked),
+                "history_used_for_weighting": experimental, "history_cutoff_round": history[-1].round,
+                "exclusions": "past_winning_combinations_and_duplicate_tickets",
+                "exclusion_notice": "과거 제외는 당첨확률을 높이지 않으며 전체 조합 공간의 균등 추출과 다릅니다",
+                "score_meaning": "난수 추출 결과에는 적합도 점수를 부여하지 않습니다",
+                "validation_scope": "표본추출 구현 검증; 당첨 예측 검증이 아닙니다",
+                "exact_past_first_prize_match": False,
+                "max_numbers_matching_any_past_first_prize": _max_past_overlap(combo, history),
+                "latest_draw_overlap": len(set(combo) & set(history[-1].numbers)),
+                "number_sum": sum(combo), "odd_count": sum(n % 2 for n in combo),
+                "first_prize_odds": FIRST_PRIZE_ODDS, "disclaimer": DISCLAIMER,
+            }
+            if experimental:
+                details.update({"history_lookback": 300, "history_sample_size": min(300, len(history)),
+                                "prior_strength": 500, "history_mix": 0.05})
+            recommendations.append(Recommendation(index, method_id, method.label, method.category,
+                                                 combo, method.description, None, details))
+            if progress_callback:
+                progress_callback({"phase": "method_complete", "method_id": method_id, "index": index})
+            continue
         if method_id == METHOD_SELECTED_MEDIAN:
             contributor_ids = set(context["selected_median_consensus"]["source_method_ids"])
             votes = Counter(
@@ -696,12 +746,14 @@ def build_analysis(
                 number: votes[number] for number in NUMBERS
             }
         combo, score, components = _select_candidate(
-            method, history, ranked, context, selected, past_combos, quads, quints, generation_nonce
+            method, history, ranked, context, selected, past_combos | set(restored_tickets.values()), quads, quints, generation_nonce
         )
         selected.append(combo)
         reason, details = _recommendation_reason(method, combo, context)
         details.update(
             {
+                "formula_id": method_id, "formula_version": method.formula_version,
+                "uniformity": "nonuniform_personalization", "predictive_evidence": "not_established",
                 "generation_sequence": generation_nonce,
                 "score_components": {key: round(value, 4) for key, value in components.items()},
                 "score_component_weights": {key: round(value, 6) for key, value in _component_weights(method).items()},
@@ -747,16 +799,20 @@ def build_analysis(
             )
         )
 
+        if progress_callback:
+            progress_callback({"phase": "method_complete", "method_id": method_id, "index": index})
+
     transition = context["transition_raw"]
     velocity = context["velocity"]
     graph_strength = context["graph_strength_raw"]
     triplet_strength = context["triplet_strength_raw"]
     myungri = context["myungri"]
     summary = {
-        "algorithm": "selectable_multi_formula_v7_selected_median_consensus",
+        "algorithm": "research_formulas_v8_csprng_ccss",
         "generation_sequence": generation_nonce,
         "history_draws": len(history),
         "selected_method_ids": list(selected_method_ids),
+        "selected_formula_ids": list(selected_method_ids),
         "execution_method_ids": list(execution_method_ids),
         "selected_methods": [
             {

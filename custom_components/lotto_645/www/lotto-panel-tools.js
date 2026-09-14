@@ -1,5 +1,5 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '1.11.10';
+const VERSION = '1.12.0';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
 const REPO = `https://github.com/1bobby-git/HA-Lotto-645/blob/v${VERSION}/`;
@@ -172,8 +172,8 @@ class LottoPanelTools extends HTMLElement {
         <p class="clock-note">정규 일정 기준 · 회차별 방송 편성 변경은 자동 확인하지 않습니다.<br><a href="https://www.dhlottery.co.kr/guide/wnrGuide" target="_blank" rel="noopener noreferrer">동행복권 추첨 안내</a> · <a href="https://program.imbc.com/lotto" target="_blank" rel="noopener noreferrer">MBC 방송 안내</a></p>
       </section>
       <dialog id="method-dialog" aria-modal="true" aria-labelledby="method-title">
-        <header class="method-head"><h2 id="method-title" class="method-title" tabindex="-1"></h2><button class="method-close" type="button" aria-label="추천 방식 설명 닫기">×</button></header>
-        <div class="method-body" tabindex="0" aria-label="추천 방식 상세 설명"></div>
+        <header class="method-head"><h2 id="method-title" class="method-title" tabindex="-1"></h2><button class="method-close" type="button" aria-label="추첨 공식 설명 닫기">×</button></header>
+        <div class="method-body" tabindex="0" aria-label="추첨 공식 상세 설명"></div>
         <footer class="method-foot"><p>추천 점수와 과거 리뷰는 당첨 확률이 아닙니다.</p><a class="method-source" target="_blank" rel="noopener noreferrer">GitHub 원문 보기</a></footer>
       </dialog>`;
     this.catalog = new Map(); this._generation = 0;
@@ -338,7 +338,7 @@ export function applyPanelTools(panel) {
   for (const id of ['predictions', 'reviews']) {
     const block = panel.node(id)?.closest('.review-block');
     if (block && !block.querySelector('.method-help-hint')) {
-      const hint = element('p', '추천 방식 이름을 누르면 계산 원리·가중치·예시를 확인할 수 있어요.', 'method-help-hint'); block.insertBefore(hint, block.querySelector('.table-scroll'));
+      const hint = element('p', '추첨 공식 이름을 누르면 계산 원리·가중치·예시를 확인할 수 있어요.', 'method-help-hint'); block.insertBefore(hint, block.querySelector('.table-scroll'));
     }
   }
   if (!panel._toolsDataHook) {

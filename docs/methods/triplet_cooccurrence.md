@@ -1,10 +1,10 @@
 # 공개 공식 · 삼중 동반출현
 
-[17개 방식 목록](../../README.md#추천-방식-17종) · [공통 계산 원리](../FORMULAS.md)
+[23개 공식 목록](../../README.md#추첨-공식-23종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: triplet_cooccurrence` · 분류: 공개 분석식 · 후보 풀: **23개**
 
-## 1. 어떤 방식인가요?
+## 1. 어떤 공식인가요?
 
 세 번호가 같은 회차에 함께 등장한 이력을 평가합니다. 두 번호 관계만으로는 구분하기 어려운 **세 번호 묶음의 동시출현 형태**를 조합 선택에 반영합니다.
 
@@ -54,7 +54,7 @@
 
 통합 **구성 → 추천 설정**에서 선택합니다. 사주정보와 AI는 필요하지 않습니다. 후보 풀 23개와 기간·가중치는 코드에 고정되어 있습니다.
 
-`number_feature_scores`의 `triplet_strength`, `graph_strength`와 `score_components`의 `triplet`, `pair`를 비교하세요. 공통 설명에 등장하는 `strongest_pair`는 여전히 두 번호짜리 연결입니다. 이 값 하나가 삼중 방식의 전체 근거를 대표하지는 않습니다.
+`number_feature_scores`의 `triplet_strength`, `graph_strength`와 `score_components`의 `triplet`, `pair`를 비교하세요. 공통 설명에 등장하는 `strongest_pair`는 여전히 두 번호짜리 연결입니다. 이 값 하나가 삼중 공식의 전체 근거를 대표하지는 않습니다.
 
 ## 7. 차이와 해석의 한계
 

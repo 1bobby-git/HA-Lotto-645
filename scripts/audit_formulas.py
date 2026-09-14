@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import hashlib
 import importlib
 import json
+import random
 from pathlib import Path
 import sys
 import types
@@ -33,17 +34,17 @@ FIXTURE={'calendar':'solar','birth_date':'1990-05-17','birth_time':'14:30',
 
 def evaluate(target_index):
     history,_=history_module.load_bundled_history()
-    result=analysis.build_analysis(history[:target_index],tuple(m.method_id for m in methods.METHODS),0,FIXTURE)
+    result=analysis.build_analysis(history[:target_index],tuple(m.method_id for m in methods.METHODS),0,FIXTURE, rng=random.Random(20260914 + target_index))
     truth=history[target_index]
     assert result.target_round==truth.round
     assert len({r.numbers for r in result.recommendations})==len(methods.METHODS)
     rows=[]
     for rec in result.recommendations:
-        assert 0<=rec.score<=1
+        assert rec.score is None or 0<=rec.score<=1
         assert rec.numbers not in {r.numbers for r in history[:target_index]}
         rows.append({'round':truth.round,'method_id':rec.method_id,'numbers':' '.join(map(str,rec.numbers)),
                      'winning_numbers':' '.join(map(str,truth.numbers)),
-                     'matches':len(set(rec.numbers)&set(truth.numbers)), 'score':round(rec.score,6)})
+                     'matches':len(set(rec.numbers)&set(truth.numbers)), 'score':round(rec.score,6) if rec.score is not None else None})
     return rows
 
 
@@ -74,19 +75,21 @@ def main():
                        'total_matches':total,'mean_matches':round(total/len(selected),6),
                        'games_with_at_least_3_matches':sum(r['matches']>=3 for r in selected),
                        'maximum_matches':max(r['matches'] for r in selected),
-                       'upper_tail_p':round(p,6),'bonferroni_p_16_methods':round(min(1,16*p),6)})
+                       'upper_tail_p':round(p,6),'bonferroni_p':round(min(1,len(methods.METHODS)*p),6)})
     raw_source=(ROOT/'custom_components/lotto_645/history_seed.json').read_bytes()
     result={'scope':'exploratory historical replay; NOT prospective or independent model validation',
-            'test_rounds':[history[i].round for i in indices], 'training':'expanding 1..t-1 only; nonce 0; all 16 methods together',
+            'test_rounds':[history[i].round for i in indices], 'training':f'expanding 1..t-1 only; nonce 0; all {len(methods.METHODS)} formulas together',
+            'test_rng':'random.Random, seed 20260914 + target_index (test only)',
+            'component_version':'1.12.0', 'created_at':datetime.now(timezone.utc).isoformat(),
             'saju_profile':'synthetic fixture in scripts/audit_formulas.py, not the account owner',
             'history_sha256':hashlib.sha256(raw_source).hexdigest(), 'draws_sha256':meta['draws_sha256'],
             'expected_matches_per_game':.8, 'first_prize_odds':'1/8,145,060',
-            'statistical_test':'one-sided exact convolution of Hypergeom(45,6,6) over draws; Bonferroni across16methods',
+            'statistical_test':'one-sided exact convolution of Hypergeom(45,6,6) over draws; Bonferroni across the current formula catalog',
             'limitations':['Historical outcomes were available during development; this is not a preregistered holdout.',
                            'Small sample; cannot certify superiority or infer a reliable winning probability.',
                            'Choosing the best result after this replay is multiple testing, not validated prediction.'],
             'results':report}
-    out=ROOT/'docs';out.mkdir(exist_ok=True)
+    out=ROOT/'docs/audits/1.12.0';out.mkdir(parents=True,exist_ok=True)
     (out/'formula-audit-results.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     with (out/'formula-audit-predictions.csv').open('w',newline='') as f:
         writer=csv.DictWriter(f,fieldnames=list(rows[0]),lineterminator='\n');writer.writeheader();writer.writerows(rows)

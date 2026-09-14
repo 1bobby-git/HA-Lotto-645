@@ -1,7 +1,7 @@
 """Selectable recommendation method catalog for Lotto 6/45.
 
-All methods are deterministic heuristic ranking/filtering profiles. They do not
-change the mathematical probability of an individual six-number combination.
+Uniform formulas use OS CSPRNG sampling. Legacy profiles are experimental
+ranking/filtering heuristics. No formula improves an individual ticket's odds.
 Traditional metaphysics is included as a reproducible cultural heuristic only.
 """
 
@@ -28,6 +28,8 @@ class MethodDefinition:
     carryover_weight: float = 0.0
     myungri_weight: float = 0.0
     pool_size: int = 22
+    sampling: str | None = None
+    formula_version: int = 1
 
 
 METHOD_PHASE_RESIDUAL: Final = "phase_residual_graph"
@@ -49,7 +51,57 @@ METHOD_SELECTED_MEDIAN: Final = "selected_median_consensus"
 # Keep the legacy ID for existing config-entry compatibility.
 METHOD_MYUNGRI_HETU: Final = "myungri_hetu_day_pillar"
 
+METHOD_UNIFORM_FISHER_YATES: Final = "uniform_fisher_yates"
+METHOD_UNIFORM_FLOYD: Final = "uniform_floyd"
+METHOD_UNIFORM_REJECTION: Final = "uniform_rejection"
+METHOD_UNIFORM_SEQUENTIAL: Final = "uniform_sequential"
+METHOD_CALIBRATED_STRATIFIED: Final = "calibrated_stratified"
+METHOD_UNIFORM_COMBINATION_RANK: Final = "uniform_combination_rank"
+
 METHODS: Final[tuple[MethodDefinition, ...]] = (
+    MethodDefinition(
+        METHOD_UNIFORM_FISHER_YATES,
+        "균등 공식 · 부분 Fisher–Yates",
+        "균등 추첨 공식",
+        "남은 번호 중 하나를 편향 없는 정수 난수로 선택해 교환합니다. OS CSPRNG 기반 비복원추출입니다. 기존 과거 1등 제외 조건이 켜진 생성 경로에서는 허용된 조합 안에서 균등합니다. 당첨확률은 높아지지 않습니다.",
+        {}, pool_size=45, sampling="uniform_fisher_yates",
+    ),
+    MethodDefinition(
+        METHOD_UNIFORM_FLOYD,
+        "균등 공식 · Floyd",
+        "균등 추첨 공식",
+        "중복 사건을 아직 처리하지 않은 인덱스로 대응시켜 균등한 부분집합을 생성합니다. 기존 과거 1등 제외 조건이 켜진 생성 경로에서는 허용된 조합 안에서 균등합니다. 당첨확률은 높아지지 않습니다.",
+        {}, pool_size=45, sampling="uniform_floyd",
+    ),
+    MethodDefinition(
+        METHOD_UNIFORM_REJECTION,
+        "균등 공식 · 중복거부",
+        "균등 추첨 공식",
+        "이미 선택한 번호가 나오면 다시 추첨합니다. 반복 상한에 도달해도 균등한 잔여 추출로 마무리합니다. 기존 과거 1등 제외 조건이 켜진 생성 경로에서는 허용된 조합 안에서 균등합니다. 당첨확률은 높아지지 않습니다.",
+        {}, pool_size=45, sampling="uniform_rejection",
+    ),
+    MethodDefinition(
+        METHOD_UNIFORM_SEQUENTIAL,
+        "균등 공식 · 순차 포함",
+        "균등 추첨 공식",
+        "각 번호를 남은 필요 개수/남은 번호 수 확률로 포함합니다. 실수 비교 대신 정확한 정수 난수를 사용합니다. 기존 과거 1등 제외 조건이 켜진 생성 경로에서는 허용된 조합 안에서 균등합니다. 당첨확률은 높아지지 않습니다.",
+        {}, pool_size=45, sampling="uniform_sequential",
+    ),
+    MethodDefinition(
+        METHOD_CALIBRATED_STRATIFIED,
+        "균등 공식 · 조합보정 층화 CCSS",
+        "균등 추첨 공식",
+        "구간별 배분을 조합 개수로 보정합니다. 구간 균형을 강제하지 않아 조건부 균등성을 유지합니다. 기존 과거 1등 제외 조건이 켜진 생성 경로에서는 허용된 조합 안에서 균등합니다. 당첨확률은 높아지지 않습니다.",
+        {}, pool_size=45, sampling="calibrated_stratified",
+    ),
+    MethodDefinition(
+        METHOD_UNIFORM_COMBINATION_RANK,
+        "균등 공식 · 조합 인덱스",
+        "균등 추첨 공식",
+        "가능한 조합의 인덱스 하나를 균등하게 뽑아 번호로 변환합니다. 연구 보고서 외 추가한 조합론적 공식입니다. 기존 과거 1등 제외 조건이 켜진 생성 경로에서는 허용된 조합 안에서 균등합니다. 당첨확률은 높아지지 않습니다.",
+        {}, pool_size=45, sampling="uniform_combination_rank",
+    ),
+
     MethodDefinition(
         METHOD_PHASE_RESIDUAL,
         "독창 패턴 · 위상잔차 그래프",
@@ -82,7 +134,7 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         METHOD_WEIGHTED_FREQUENCY,
         "공개 공식 · 가중 빈도",
         "공개 분석식",
-        "최근 10·30·100회와 전체 출현 빈도에 서로 다른 비중을 주는 방식입니다. 최근성은 반영하지만 장기 통계도 남겨 특정 짧은 구간에 과도하게 맞추지 않습니다.",
+        "최근 10·30·100회와 전체 출현 빈도에 서로 다른 비중을 주는 공식입니다. 최근성은 반영하지만 장기 통계도 남겨 특정 짧은 구간에 과도하게 맞추지 않습니다.",
         {"frequency_10": 0.34, "frequency_30": 0.28, "frequency_100": 0.23, "frequency_long": 0.15},
         pair_weight=0.08,
         balance_weight=0.10,
@@ -92,7 +144,7 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         METHOD_HOT_NUMBERS,
         "공개 공식 · 핫넘버",
         "공개 분석식",
-        "최근 10·30회에서 출현이 늘고 있는 번호를 우선하는 전형적인 핫넘버 방식입니다. 번호대와 조합 내부 연결을 함께 보정해 최근 번호만 과도하게 몰리는 현상을 줄입니다.",
+        "최근 10·30회에서 출현이 늘고 있는 번호를 우선하는 전형적인 핫넘버 공식입니다. 번호대와 조합 내부 연결을 함께 보정해 최근 번호만 과도하게 몰리는 현상을 줄입니다.",
         {"frequency_10": 0.44, "frequency_30": 0.34, "phase_velocity_positive": 0.22},
         pair_weight=0.10,
         balance_weight=0.08,
@@ -102,7 +154,7 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         METHOD_OVERDUE_GAP,
         "공개 공식 · 콜드·미출현",
         "공개 분석식",
-        "현재까지 나오지 않은 회차 간격이 긴 번호를 우선하는 콜드넘버 방식입니다. 극단적으로 오래 안 나온 번호만 몰리지 않도록 상한을 두고 장기·최근 중립성으로 보정합니다.",
+        "현재까지 나오지 않은 회차 간격이 긴 번호를 우선하는 콜드넘버 공식입니다. 극단적으로 오래 안 나온 번호만 몰리지 않도록 상한을 두고 장기·최근 중립성으로 보정합니다.",
         {"overdue_capped": 0.48, "gap_surprise": 0.22, "long_neutral": 0.18, "recent_neutral": 0.12},
         pair_weight=0.07,
         balance_weight=0.10,
@@ -132,7 +184,7 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         METHOD_RECENCY_DECAY,
         "공개 공식 · 지수감쇠 최근성",
         "공개 분석식",
-        "가장 최근 회차에 큰 가중치를 주고 과거로 갈수록 반감기 방식으로 영향력을 줄입니다. 고정 10·30회 경계 대신 연속적인 최근성 가중치를 사용합니다.",
+        "가장 최근 회차에 큰 가중치를 주고 과거로 갈수록 반감기 공식으로 영향력을 줄입니다. 고정 10·30회 경계 대신 연속적인 최근성 가중치를 사용합니다.",
         {"frequency_decay": 0.58, "frequency_30": 0.16, "frequency_100": 0.10, "graph_strength": 0.08, "gap_balance": 0.08},
         pair_weight=0.08,
         balance_weight=0.09,
@@ -140,13 +192,10 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
     ),
     MethodDefinition(
         METHOD_BAYESIAN_SHRINKAGE,
-        "공개 공식 · 베이지안 수축",
+        "실험 공식 · 베이지안 수축",
         "공개 분석식",
-        "최근 60회 출현률을 전체 평균 6/45 쪽으로 수축시켜 작은 표본의 과도한 핫/콜드 판단을 완화합니다. 최근 빈도와 장기 중립성을 함께 사용해 극단값을 보수적으로 평가합니다.",
-        {"bayesian_60": 0.52, "recent_neutral": 0.16, "long_neutral": 0.14, "graph_strength": 0.10, "gap_balance": 0.08},
-        pair_weight=0.08,
-        balance_weight=0.10,
-        diversity_weight=0.06,
+        "최근 최대 300회 빈도를 균등 사전분포(강도 500)로 수축하고 5%만 반영합니다. 순위 재확대 없이 가중 비복원추출하며 당첨 예측 근거는 없습니다.",
+        {}, pool_size=45, sampling="bayesian_shrinkage", formula_version=2,
     ),
     MethodDefinition(
         METHOD_CYCLE_RHYTHM,
@@ -215,7 +264,7 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
             "연주·월주·일주·시주(시간 미상 시 제외), 월령·통근·투간, 십신 10종, 지장간 비율, 격국 후보를 계산합니다. "
             "억부·조후·통관·병약의 보완오행 후보와 대운·세운·월운·일시운의 합충형파해를 점수에 반영합니다. "
             "하도 끝자리 배속과 점수 가중치는 현대 응용이며 용신 확정·당첨 예측이 아닙니다. 각 번호의 십신과 점수 근거를 공개합니다. "
-            "개인 사주정보 입력 전에는 이 방식이 활성화되지 않습니다."
+            "개인 사주정보 입력 전에는 이 공식이 활성화되지 않습니다."
         ),
         {"myungri_resonance": 0.72, "graph_strength": 0.08, "transition": 0.07, "gap_balance": 0.05, "frequency_100": 0.04, "long_neutral": 0.04},
         pair_weight=0.05,
@@ -226,12 +275,12 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
     ),
     MethodDefinition(
         METHOD_SELECTED_MEDIAN,
-        "합의 추천 · 선택 방식 중앙값",
-        "선택 방식 집계",
+        "합의 추천 · 선택 공식 중앙값",
+        "선택 공식 집계",
         (
-            "현재 함께 선택한 다른 로컬 추천 방식들의 1~45 번호별 0~1 적합도를 모아 각 번호의 중앙값을 계산합니다. "
-            "한 방식의 극단값이 전체를 끌고 가지 않도록 중앙값을 사용하며, 그 중앙값이 높은 번호들로 최종 6개 조합을 만듭니다. "
-            "AI 추천은 집계에서 제외하고, 명리 방식은 사용자가 함께 선택한 경우에만 포함합니다. 의미 있는 중앙값을 위해 다른 추천 방식 2개 이상이 필요합니다."
+            "현재 함께 선택한 다른 로컬 추첨 공식들의 1~45 번호별 0~1 적합도를 모아 각 번호의 중앙값을 계산합니다. "
+            "한 공식의 극단값이 전체를 끌고 가지 않도록 중앙값을 사용하며, 그 중앙값이 높은 번호들로 최종 6개 조합을 만듭니다. "
+            "AI 추천은 집계에서 제외하고, 명리 공식은 사용자가 함께 선택한 경우에만 포함합니다. 의미 있는 중앙값을 위해 다른 추첨 공식 2개 이상이 필요합니다."
         ),
         {},
         pool_size=26,
@@ -243,11 +292,11 @@ METHODS_BY_ID: Final = {method.method_id: method for method in METHODS}
 # Personal Saju is intentionally not selected by default. A user must explicitly
 # select it and complete the birth-profile step before the integration may use it.
 DEFAULT_METHOD_IDS: Final[tuple[str, ...]] = (
-    METHOD_PHASE_RESIDUAL,
-    METHOD_TRANSITION_GAP,
-    METHOD_WEIGHTED_FREQUENCY,
-    METHOD_PAIR_COOCCURRENCE,
-    METHOD_PUBLIC_ENSEMBLE,
+    METHOD_UNIFORM_FISHER_YATES,
+    METHOD_UNIFORM_FLOYD,
+    METHOD_UNIFORM_REJECTION,
+    METHOD_UNIFORM_SEQUENTIAL,
+    METHOD_CALIBRATED_STRATIFIED,
 )
 
 PUBLIC_METHOD_IDS: Final[tuple[str, ...]] = tuple(
@@ -294,10 +343,27 @@ def method_catalog() -> list[dict[str, str]]:
             "requirements": (
                 "생년월일, 출생시간, 양력/음력, 성별, 출생지, 시간대"
                 if method.method_id == METHOD_MYUNGRI_HETU
-                else "다른 추천 방식 2개 이상"
+                else "다른 점수형 추첨 공식 2개 이상 (균등 샘플링 제외)"
                 if method.method_id == METHOD_SELECTED_MEDIAN
                 else "없음"
             ),
         }
         for method in METHODS
     ]
+
+
+# Additive semantic aliases; saved IDs and automation keys stay compatible.
+FormulaDefinition = MethodDefinition
+FORMULAS = METHODS
+FORMULAS_BY_ID = METHODS_BY_ID
+DEFAULT_FORMULA_IDS = DEFAULT_METHOD_IDS
+normalize_formula_ids = normalize_method_ids
+
+
+def resolve_formula(data: dict, default: str) -> str:
+    """Prefer the semantic key without breaking legacy automation payloads."""
+    return data.get("formula_id", data.get("formula", data.get("method_id", data.get("method", default))))
+
+
+def is_score_formula(method_id: str) -> bool:
+    return method_id != METHOD_SELECTED_MEDIAN and (method_id == METHOD_BAYESIAN_SHRINKAGE or not METHODS_BY_ID[method_id].sampling)

@@ -72,7 +72,7 @@ def _profile():
 
 
 def test_catalog_and_default_gating():
-    assert len(methods.METHODS) == 17
+    assert len(methods.METHODS) == 23
     assert len(methods.PUBLIC_METHOD_IDS) == 12
     assert methods.METHOD_MYUNGRI_HETU not in methods.DEFAULT_METHOD_IDS
     myungri_method = methods.METHODS_BY_ID[methods.METHOD_MYUNGRI_HETU]
@@ -176,7 +176,7 @@ def test_selected_median_uses_only_selected_local_methods_and_runs_last():
     assert consensus.method_id == methods.METHOD_SELECTED_MEDIAN
     assert consensus.details["consensus_source_count"] == 3
     assert consensus.details["consensus_source_method_ids"] == list(selected[:-1])
-    assert consensus.details["consensus_rule"].startswith("선택한 다른 로컬 방식")
+    assert consensus.details["consensus_rule"].startswith("선택한 다른 로컬 공식")
     assert set(consensus.details["consensus_number_median_scores"]) == {
         str(number) for number in consensus.numbers
     }
@@ -186,3 +186,27 @@ def test_selected_median_uses_only_selected_local_methods_and_runs_last():
     )
     assert consensus.numbers not in {draw.numbers for draw in history}
     assert result.summary["execution_method_ids"][-1] == methods.METHOD_SELECTED_MEDIAN
+
+
+def test_new_default_formulas_are_unscored_and_restart_reuses_saved_tickets():
+    history = _history(40)
+    first = analysis.build_analysis(history, rng=random.Random(37))
+    assert all(r.score is None for r in first.recommendations)
+    assert all(r.details["uniformity"] == "uniform_over_allowed_combinations" for r in first.recommendations)
+    cached = {r.method_id: r.numbers for r in first.recommendations}
+    second = analysis.build_analysis(history, restored_tickets=cached, rng=random.Random(99))
+    assert [r.numbers for r in first.recommendations] == [r.numbers for r in second.recommendations]
+    assert all(r.details["restored_from_cache"] for r in second.recommendations)
+
+
+def test_legacy_bayesian_plus_scoring_formula_median_configuration_survives():
+    ids = (methods.METHOD_BAYESIAN_SHRINKAGE, methods.METHOD_WEIGHTED_FREQUENCY, methods.METHOD_SELECTED_MEDIAN)
+    result = analysis.build_analysis(_history(40), ids, rng=random.Random(17))
+    assert len(result.recommendations) == 3
+    assert result.recommendations[0].score is None
+    assert result.recommendations[-1].details["consensus_source_count"] == 2
+
+
+def test_uniform_samplers_do_not_masquerade_as_median_score_contributors():
+    with pytest.raises(ValueError, match="2개 이상"):
+        analysis.build_analysis(_history(40), (*methods.DEFAULT_METHOD_IDS, methods.METHOD_SELECTED_MEDIAN))

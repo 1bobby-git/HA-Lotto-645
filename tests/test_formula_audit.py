@@ -26,8 +26,8 @@ def test_bayesian_shrinkage_retains_effect_size():
     weak=analysis._bayesian_feature(analysis._bayesian_recent(history,prior_strength=1))
     strong=analysis._bayesian_feature(analysis._bayesian_recent(history,prior_strength=1000))
     assert max(abs(v-.5) for v in strong.values()) < max(abs(v-.5) for v in weak.values())
-    counts=analysis._count_window(history,60)
-    expected={n:(counts[n]+6)/105-6/45 for n in range(1,46)}
+    counts=analysis._count_window(history,300)
+    expected={n:(counts[n]+500*6/45)/(len(history)+500)-6/45 for n in range(1,46)}
     assert analysis._bayesian_recent(history) == expected
 
 def test_windows_recency_and_pair_scores_are_independently_recomputed():

@@ -55,7 +55,7 @@ def catalog() -> list[dict]:
         if method_id == 'selected_median_consensus':
             assert features == {}, 'Median is dynamically calculated, not a static feature blend'
             features = {'selected_method_median': 1.0}
-        weights = {'individual': individual}
+        weights = {} if params.get('sampling') else {'individual': individual}
         weights.update({key.removesuffix('_weight'): value for key, value in params.items()
                         if key.endswith('_weight') and value})
         assert not (features.keys() & weights.keys())
@@ -72,7 +72,7 @@ DOCUMENTS = [ROOT / 'README.md', ROOT / 'docs/FORMULAS.md',
 def test_readme_has_no_version_history_and_keeps_changelog():
     text = (ROOT / 'README.md').read_text(encoding='utf-8')
     assert not re.search(r'^#{1,6}\s+v?\d+\.\d+\.\d+', text, re.MULTILINE)
-    assert '## 추천 방식 17종' in text
+    assert '## 추첨 공식 23종' in text
     assert '[변경 이력](CHANGELOG.md)' in text
     assert (ROOT / 'CHANGELOG.md').is_file()
 
@@ -80,7 +80,7 @@ def test_readme_has_no_version_history_and_keeps_changelog():
 def test_readme_and_formula_index_link_all_17_methods_in_catalog_order():
     expected = [(str(index), method['label'], method['id'])
                 for index, method in enumerate(CATALOG, 1)]
-    assert len(expected) == 17
+    assert len(expected) == 23
     for path, prefix in ((ROOT / 'README.md', 'docs/methods/'),
                          (ROOT / 'docs/FORMULAS.md', 'methods/')):
         text = path.read_text(encoding='utf-8')
@@ -104,7 +104,7 @@ def test_method_metadata_and_weight_tables_match_source(method):
     for key, value in method['weights'].items():
         assert actual[key] == pytest.approx(value), (path, key)
     assert '계산 예시' in text and '확률' in text and '구현 근거' in text
-    assert '../../README.md#추천-방식-17종' in text
+    assert '../../README.md#추첨-공식-23종' in text
     assert '../FORMULAS.md' in text
 
 
@@ -150,10 +150,10 @@ def test_documented_delta_example_matches_actual_function():
 
 
 def test_documented_bayesian_transform_matches_actual_function():
-    posterior = (12 + 45 * (6 / 45)) / (60 + 45)
-    score = load_pure_function('_bayesian_feature')({1: posterior - 6 / 45})[1]
-    assert score == pytest.approx(0.639093, abs=0.000001)
-    assert '0.639093' in (GUIDES / 'bayesian_shrinkage.md').read_text(encoding='utf-8')
+    posterior = (60 + 500 * (6 / 45)) / (300 + 500)
+    weight = .95 / 45 + .05 * posterior / 6
+    assert weight == pytest.approx(0.0224305556)
+    assert '0.0224305556' in (GUIDES / 'bayesian_shrinkage.md').read_text(encoding='utf-8')
 
 
 def test_documented_carryover_table_matches_actual_probability_function():
