@@ -1,7 +1,7 @@
 /* Production entry: component presentation with HA-owned narrow-state decisions. */
 import './lotto-panel.js?v=1.11.5';
 import { applyComponentDesign } from './lotto-panel-design.js?v=1.11.7';
-import { applyPanelTools } from './lotto-panel-tools.js?v=1.11.9';
+import { applyPanelTools } from './lotto-panel-tools.js?v=1.11.10';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const Panel = customElements.get('lotto-ticket-panel');
