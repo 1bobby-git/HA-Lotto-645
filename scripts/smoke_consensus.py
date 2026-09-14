@@ -17,7 +17,11 @@ async def verify_consensus(hass):
 
     a, b, c = 'uniform_fisher_yates', 'uniform_floyd', 'bayesian_shrinkage'
     obj = object.__new__(Lotto645Coordinator)
-    DataUpdateCoordinator.__init__(obj, hass, logging.getLogger(__name__), name='consensus-smoke')
+    # This isolated fixture is not created inside a config-entry setup context.
+    # Explicit None avoids the deprecated ContextVar fallback in real HA.
+    DataUpdateCoordinator.__init__(
+        obj, hass, logging.getLogger(__name__), name='consensus-smoke', config_entry=None,
+    )
     obj.entry = SimpleNamespace(entry_id='consensus-smoke', options={'selected_methods': [a,b,MID]})
     obj._saju_profile_valid = False
     obj._consensus_save_task = None
