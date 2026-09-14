@@ -28,6 +28,7 @@ async def verify_component_design(page: Page) -> None:
     }""")
     assert await page.locator('style[data-lotto-component-design]').count() == 1
     assert await page.locator('style[data-lotto-official-ball-colors]').count() == 1
+    assert await page.locator('.hero-draw-countdown').count() == 1
     assert await page.locator('.component-version').count() == 1
     assert await page.locator('.settings-copy').count() == 1
     assert await page.locator('.ha-component-title').count() == 0
@@ -112,11 +113,11 @@ async def verify_component_design(page: Page) -> None:
             assert state['connectionRect']['right'] <= state['settings']['left'] + 1, (label, state)
             assert abs(state['logo']['left'] - (state['main']['left'] + float(state['gutter'][:-2]))) < 1, (label, state)
             expected = {
-                '1':'rgb(251, 196, 0)',
-                '2':'rgb(105, 200, 242)',
-                '3':'rgb(255, 114, 114)',
-                '4':'rgb(170, 170, 170)',
-                '5':'rgb(176, 216, 64)',
+                '1':'rgb(224, 143, 0)',
+                '2':'rgb(0, 99, 204)',
+                '3':'rgb(216, 49, 79)',
+                '4':'rgb(109, 115, 129)',
+                '5':'rgb(44, 158, 68)',
             }
             assert len(state['palette']) == 7
             assert len(state['ticketPalette']) >= 6
@@ -141,4 +142,4 @@ async def verify_component_design(page: Page) -> None:
     }""")
     # Design application, theme/width switches and local tabs must not fetch data.
     assert await page.evaluate('requests.length===designRequestsBefore')
-    print(f'PASS: {checked} shared design fixtures and Donghaeng palette on draw/ticket balls')
+    print(f'PASS: {checked} shared design fixtures, darker screenshot palette and unchanged layout')
