@@ -41,7 +41,7 @@ from .methods import (
     DEFAULT_METHOD_IDS,
     METHOD_MYUNGRI_HETU,
     METHOD_SELECTED_MEDIAN,
-    is_score_formula,
+    consensus_source_ids,
     METHODS_BY_ID,
     method_selector_options,
     normalize_method_ids,
@@ -257,7 +257,7 @@ class Lotto645OptionsFlow(OptionsFlow):
                     errors[CONF_SELECTED_METHODS] = "select_at_least_one"
                 elif (
                     METHOD_SELECTED_MEDIAN in normalized
-                    and sum(is_score_formula(method_id) for method_id in normalized) < 2
+                    and len(consensus_source_ids(normalized)) < 2
                 ):
                     errors["base"] = "consensus_sources_required"
                 else:

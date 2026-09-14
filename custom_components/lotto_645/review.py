@@ -154,7 +154,7 @@ class ReviewBook:
                 continue
             timestamp_key = "ai_generated_at" if raw.get("source") in ("ai", "ai_task") else "local_generated_at"
             try:
-                when = _timestamp(snapshot.get(timestamp_key))
+                when = _timestamp(raw.get("generated_at", snapshot.get(timestamp_key)))
                 numbers = parse_ticket(raw.get("numbers"))
                 if when >= cutoff or when > now:
                     continue

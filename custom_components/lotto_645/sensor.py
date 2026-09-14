@@ -19,7 +19,7 @@ from .const import (
 )
 from .coordinator import Lotto645Coordinator
 from .entity import Lotto645Entity
-from .methods import METHOD_MYUNGRI_HETU, METHODS_BY_ID, method_catalog
+from .methods import METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, METHODS_BY_ID, method_catalog
 from .review import review_name, NOTICE as REVIEW_NOTICE
 from .result_details import decorate_result, winning_attributes
 
@@ -256,6 +256,16 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
         data = self.coordinator.data
         recommendation = data.analysis.recommendation_by_method(self.method_id)
         if recommendation is None:
+            if self.method_id == METHOD_SELECTED_MEDIAN:
+                meta = data.analysis.summary.get("selected_median_consensus", {})
+                return {
+                    "formula_id": self.method_id,
+                    "consensus_status": meta.get("status", "waiting_for_sources"),
+                    "consensus_source_count": meta.get("source_count", 0),
+                    "consensus_missing_source_method_ids": meta.get("missing_source_method_ids", []),
+                    "consensus_tolerance": 1,
+                    "notice": "유효한 다른 로컬 공식 2개 이상과 중앙값 ±1의 유효 조합이 필요합니다. 원본 변경 시 자동 재계산합니다.",
+                }
             return {}
         method = METHODS_BY_ID[self.method_id]
         return {

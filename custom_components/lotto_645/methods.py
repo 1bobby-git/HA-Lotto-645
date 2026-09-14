@@ -278,12 +278,13 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         "합의 추천 · 선택 공식 중앙값",
         "선택 공식 집계",
         (
-            "현재 함께 선택한 다른 로컬 추첨 공식들의 1~45 번호별 0~1 적합도를 모아 각 번호의 중앙값을 계산합니다. "
-            "한 공식의 극단값이 전체를 끌고 가지 않도록 중앙값을 사용하며, 그 중앙값이 높은 번호들로 최종 6개 조합을 만듭니다. "
-            "AI 추천은 집계에서 제외하고, 명리 공식은 사용자가 함께 선택한 경우에만 포함합니다. 의미 있는 중앙값을 위해 다른 추첨 공식 2개 이상이 필요합니다."
+            "선택한 다른 로컬 공식의 실제 추천번호 6개를 정렬하고 같은 순번끼리 중앙값을 계산해 ±1 범위에서 구성합니다. "
+            "원본 추천번호 변경·공식 추가·제거 시 자동 갱신하며 같은 입력에서는 번호를 유지합니다. "
+            "균등·실험 공식도 포함하고 AI와 자기 자신은 제외합니다. 다른 공식 2개 이상이 필요합니다."
         ),
         {},
-        pool_size=26,
+        pool_size=0,
+        formula_version=2,
     ),
 )
 
@@ -343,7 +344,7 @@ def method_catalog() -> list[dict[str, str]]:
             "requirements": (
                 "생년월일, 출생시간, 양력/음력, 성별, 출생지, 시간대"
                 if method.method_id == METHOD_MYUNGRI_HETU
-                else "다른 점수형 추첨 공식 2개 이상 (균등 샘플링 제외)"
+                else "다른 로컬 추첨 공식 2개 이상 (균등·실험 포함, AI 제외)"
                 if method.method_id == METHOD_SELECTED_MEDIAN
                 else "없음"
             ),
@@ -367,3 +368,9 @@ def resolve_formula(data: dict, default: str) -> str:
 
 def is_score_formula(method_id: str) -> bool:
     return method_id != METHOD_SELECTED_MEDIAN and (method_id == METHOD_BAYESIAN_SHRINKAGE or not METHODS_BY_ID[method_id].sampling)
+
+
+def consensus_source_ids(method_ids) -> tuple[str, ...]:
+    """All explicitly selected local formulas with actual tickets can contribute."""
+    return tuple(dict.fromkeys(key for key in method_ids
+                               if key in METHODS_BY_ID and key != METHOD_SELECTED_MEDIAN))

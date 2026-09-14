@@ -25,7 +25,7 @@ def evaluate_saved(snapshot: dict | None, draw: LottoDraw) -> dict:
                 continue
             kind = 'ai_generated_at' if raw.get('source') in ('ai', 'ai_task') else 'local_generated_at'
             try:
-                timestamp = datetime.fromisoformat(snapshot.get(kind) or '')
+                timestamp = datetime.fromisoformat(raw.get('generated_at', snapshot.get(kind)) or '')
                 recommendation = Recommendation.from_storage(raw)
                 if timestamp.tzinfo is None or timestamp >= draw_cutoff(draw.round):
                     raise ValueError('not a pre-draw prediction')
