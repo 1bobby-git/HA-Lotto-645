@@ -159,6 +159,7 @@ async def run():
                     ]}});
             await el.refreshStatus();
         }""")
+        await page.locator('#close-editor').click()
         await page.locator('#tab-review').click()
         winning_rows=page.locator('#predictions tr[data-winning="true"]')
         assert await winning_rows.count()==2
@@ -173,7 +174,6 @@ async def run():
         assert await second.locator('.ball[data-hit="bonus"]').count()==1
         assert await second.locator('.ball[data-hit="bonus"]').evaluate("n=>getComputedStyle(n).outlineStyle==='dashed'")
         assert '보너스 9' in await second.locator('.result-detail').text_content()
-        await page.locator('#close-editor').click()
         assert await page.get_by_role('link', name='로또 통합 및 센서 설정').get_attribute('href') == '/config/integrations/integration/lotto_645'
         await page.evaluate("window.menuCount=0;el.addEventListener('hass-toggle-menu',()=>menuCount++);el.narrow=true")
         await page.locator('#menu').click()
