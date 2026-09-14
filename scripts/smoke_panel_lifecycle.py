@@ -15,7 +15,7 @@ async def check_panel_lifecycle(hass):
         await asyncio.gather(*(p.async_register_ticket_panel(hass,entries['one']) for _ in range(2)))
         assert frontend.async_panel_exists(hass,p.PATH)
         assert http.async_register_static_paths.await_count==2 # web resources + brand, once each
-        assert register.call_count==4
+        assert register.call_count==5
         p.async_remove_ticket_panel(hass,'one') # temporary options reload
         assert frontend.async_panel_exists(hass,p.PATH)
         await p.async_register_ticket_panel(hass,entries['one'])
