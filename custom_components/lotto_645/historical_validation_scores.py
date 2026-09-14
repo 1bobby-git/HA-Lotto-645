@@ -11,9 +11,6 @@ import asyncio
 from copy import deepcopy
 from typing import Any
 
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.storage import Store
-
 from .const import DOMAIN
 
 STORE_VERSION = 1
@@ -128,9 +125,23 @@ def summary(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 async def async_record(hass, entry_id: str, result: dict[str, Any]) -> dict[str, Any]:
-    """Atomically load, append, save and return the cumulative scoreboard."""
+    """Atomically append a completed validation and persist it when HA is available."""
     cache = hass.data.setdefault(CACHE_KEY, {})
     state = cache.setdefault(entry_id, {"lock": asyncio.Lock(), "payload": None, "storage_error": False})
+
+    # Unit tests for the isolated validation runtime intentionally run without
+    # Home Assistant installed. Keep the pure score policy usable there while
+    # production HA uses Store for durable persistence.
+    try:
+        from homeassistant.exceptions import HomeAssistantError
+        from homeassistant.helpers.storage import Store
+    except ModuleNotFoundError:
+        async with state["lock"]:
+            payload = state["payload"] if state["payload"] is not None else _empty()
+            updated = apply_result(payload, result)
+            state["payload"] = updated
+            return summary(updated)
+
     async with state["lock"]:
         if state["storage_error"]:
             return {"total_runs": 0, "unique_rounds": 0, "methods": [], "recent": [], "storage_error": True}
