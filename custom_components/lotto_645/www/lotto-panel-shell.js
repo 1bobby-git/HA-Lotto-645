@@ -58,22 +58,23 @@ const HA_HOST_HEADER_STYLE = `
 }
 `;
 
-/* Colors sampled from the two user-supplied Donghaeng Lottery result captures.
-   Apply the same palette to recent draw, saved-ticket and recommendation balls. */
+/* Colors sampled directly from the two user-supplied Donghaeng Lottery result captures.
+   !important is intentional: these five colors are the canonical ball palette for every
+   rendered Lotto number and must win over legacy view/design styles after hot updates. */
 const LOTTO_BALL_AND_COUNTDOWN_STYLE = `
 .draw-numbers .ball[data-band],
 .ticket-balls .ball[data-band]{
-  color:#fff;
-  border:0;
-  background-image:none;
-  box-shadow:none;
-  text-shadow:0 1px 1px rgba(0,0,0,.16);
+  color:#fff!important;
+  border:0!important;
+  background-image:none!important;
+  box-shadow:none!important;
+  text-shadow:0 1px 1px rgba(0,0,0,.16)!important;
 }
-.draw-numbers .ball[data-band="1"],.ticket-balls .ball[data-band="1"]{background:#e08f00}
-.draw-numbers .ball[data-band="2"],.ticket-balls .ball[data-band="2"]{background:#0063cc}
-.draw-numbers .ball[data-band="3"],.ticket-balls .ball[data-band="3"]{background:#d8314f}
-.draw-numbers .ball[data-band="4"],.ticket-balls .ball[data-band="4"]{background:#6d7381}
-.draw-numbers .ball[data-band="5"],.ticket-balls .ball[data-band="5"]{background:#2c9e44}
+.draw-numbers .ball[data-band="1"],.ticket-balls .ball[data-band="1"]{background:#e08f00!important}
+.draw-numbers .ball[data-band="2"],.ticket-balls .ball[data-band="2"]{background:#0063cc!important}
+.draw-numbers .ball[data-band="3"],.ticket-balls .ball[data-band="3"]{background:#d8314f!important}
+.draw-numbers .ball[data-band="4"],.ticket-balls .ball[data-band="4"]{background:#6d7381!important}
+.draw-numbers .ball[data-band="5"],.ticket-balls .ball[data-band="5"]{background:#2c9e44!important}
 .hero-draw-countdown{
   display:flex;
   align-items:baseline;
@@ -111,10 +112,10 @@ lotto-panel-tools{display:block!important;height:0!important;min-height:0!import
 }
 @media(forced-colors:active){
   .draw-numbers .ball[data-band],.ticket-balls .ball[data-band]{
-    background:Canvas;
-    color:CanvasText;
-    border:1px solid CanvasText;
-    text-shadow:none;
+    background:Canvas!important;
+    color:CanvasText!important;
+    border:1px solid CanvasText!important;
+    text-shadow:none!important;
   }
 }
 `;
@@ -179,7 +180,7 @@ function renderHeroCountdown(panel, state, schedule) {
 }
 
 /* Reuse the existing local-only timer, but move its visible result into the
-   “이번 주의 작은 기대.” hero.  The old standalone countdown is always hidden. */
+   “이번 주의 작은 기대.” hero. The old standalone countdown is always hidden. */
 const Tools = customElements.get('lotto-panel-tools');
 if (Tools && !Tools.prototype._lottoHeroCountdownPatched) {
   Tools.prototype._lottoHeroCountdownPatched = true;
@@ -251,21 +252,26 @@ Panel.prototype.render = function (...args) {
       hostHeader.append(title);
       appHeader.insertBefore(hostHeader, appHeader.firstChild);
     }
-    if (!root.querySelector('style[data-lotto-ha-host-header]')) {
-      const style = document.createElement('style');
-      style.setAttribute('data-lotto-ha-host-header', '1.11.11');
-      style.textContent = HA_HOST_HEADER_STYLE;
-      root.append(style);
+    let hostStyle = root.querySelector('style[data-lotto-ha-host-header]');
+    if (!hostStyle) {
+      hostStyle = document.createElement('style');
+      root.append(hostStyle);
     }
+    hostStyle.setAttribute('data-lotto-ha-host-header', '1.11.12');
+    hostStyle.textContent = HA_HOST_HEADER_STYLE;
   }
   ensureHeroCountdown(this);
   applyComponentDesign(this);
   applyPanelTools(this);
-  if (root && !root.querySelector('style[data-lotto-official-ball-colors]')) {
-    const style = document.createElement('style');
-    style.setAttribute('data-lotto-official-ball-colors', '1.11.11');
-    style.textContent = LOTTO_BALL_AND_COUNTDOWN_STYLE;
-    root.append(style);
+  if (root) {
+    let ballStyle = root.querySelector('style[data-lotto-official-ball-colors]');
+    if (!ballStyle) {
+      ballStyle = document.createElement('style');
+      root.append(ballStyle);
+    }
+    /* Refresh stale v1.11.10/11 style nodes instead of accepting their old text. */
+    ballStyle.setAttribute('data-lotto-official-ball-colors', '1.11.12');
+    ballStyle.textContent = LOTTO_BALL_AND_COUNTDOWN_STYLE;
   }
   const tools = root?.querySelector('lotto-panel-tools');
   if (tools) {
