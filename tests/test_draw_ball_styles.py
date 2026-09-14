@@ -43,8 +43,12 @@ def test_wallet_chips_and_responsive_sizing_are_preserved():
     assert '@media(forced-colors:active)' in VIEW
 
 
-def test_panel_entry_cache_key_matches_integration_version():
-    entry = (WWW / 'lotto-panel.js').read_text(encoding='utf-8')
+def test_panel_shell_is_the_versioned_production_entry():
+    shell = (WWW / 'lotto-panel-shell.js').read_text(encoding='utf-8')
+    ticket_panel = (WWW.parent / 'ticket_panel.py').read_text(encoding='utf-8')
     version = json.loads((WWW.parent / 'manifest.json').read_text(encoding='utf-8'))['version']
-    assert f"import './lotto-panel-core.js?v={version}';" in entry
+    assert f"module_url': f'/lotto_645_static/lotto-panel-shell.js?v={{VERSION}}'" in ticket_panel
+    assert f"data-lotto-ha-host-header', '{version}'" in shell
+    assert "import './lotto-panel.js?v=1.11.5';" in shell
+    assert (WWW / 'lotto-panel.js').exists()
     assert (WWW / 'lotto-panel-core.js').exists()
