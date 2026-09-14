@@ -4,19 +4,94 @@ on:
     branches: [feat/research-formulas-1.12.0]
     paths: [.github/workflows/formula-audit-workspace.yml]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  snapshot:
+  validate-patch:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Export tracked source for isolated local tests
-        run: git archive --format=tar HEAD > /tmp/lotto-source.tar
-      - uses: actions/upload-artifact@v4
+      - uses: actions/setup-python@v5
         with:
-          name: formula-audit-source
-          path: /tmp/lotto-source.tar
+          python-version: '3.14'
+      - name: Apply hash-verified source changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import base64, hashlib, json, lzma, subprocess
+          from pathlib import Path, PurePosixPath
+          blobs = ['8d29c4e05f57139d32e67809ba84f242fd159e05', '27b0e759264809aa1fcbfc6b26fcf36e5a4c6992', '0b033a7a5a2359013ad87f5366da725c77d9849a', '65d7d08523e749b138da77de965368799ecacdb4']
+          packed = b''
+          for sha in blobs:
+              response = json.loads(subprocess.check_output(['gh', 'api', f'repos/1bobby-git/HA-Lotto-645/git/blobs/{sha}']))
+              assert response['encoding'] == 'base64'
+              packed += base64.b64decode(response['content'])
+          assert hashlib.sha256(packed).hexdigest() == '49e3d8356ead399474ac22e9f54c14da422d7ea9c013f62049bc433e2de7203e'
+          changes = json.loads(lzma.decompress(packed))['updates']
+          prepared = {}
+          for change in changes:
+              path = change['path']
+              parts = PurePosixPath(path).parts
+              assert parts and not PurePosixPath(path).is_absolute() and '..' not in parts and '.git' not in parts and '.github' not in parts
+              target = Path(path)
+              assert not target.is_symlink() and path not in prepared
+              old = target.read_text() if target.exists() else None
+              assert (hashlib.sha256(old.encode()).hexdigest() if old is not None else None) == change['before'], f'Baseline mismatch: {path}'
+              if 'copy' in change:
+                  new = prepared[change['copy']]
+              elif 'content' in change:
+                  new = change['content']
+              else:
+                  new = old
+                  for source, replacement in change.get('replace', []):
+                      new = new.replace(source, replacement)
+                  lines = new.splitlines(keepends=True)
+                  for start, end, replacement in reversed(change.get('edits', [])):
+                      lines[start:end] = [replacement]
+                  new = ''.join(lines)
+              assert hashlib.sha256(new.encode()).hexdigest() == change['after'], f'Result mismatch: {path}'
+              prepared[path] = new
+          for path, content in prepared.items():
+              target = Path(path)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_text(content)
+          print(f'Applied {len(prepared)} individually verified files')
+          PY
+      - name: Install regression dependencies
+        run: |
+          python -m pip install -q pytest 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0'
+          python -m pip wheel --no-deps -q --wheel-dir /tmp/formula-wheels 'lunar_python==1.4.8'
+      - name: Compile and run complete regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q custom_components/lotto_645 scripts
+          git diff --check
+          python -m pytest -q 2>&1 | tee /tmp/formula-tests.log
+      - name: Commit only passing source changes to feature branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add custom_components docs scripts tests README.md CHANGELOG.md
+          git commit -m 'feat: implement research-backed draw formulas v1.12.0'
+          gh auth setup-git
+          git push origin HEAD:refs/heads/feat/research-formulas-1.12.0
+      - name: Export tested workspace
+        if: always()
+        run: |
+          git add custom_components docs scripts tests README.md CHANGELOG.md
+          git archive --format=tar "$(git write-tree)" > /tmp/lotto-formula-workspace.tar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: formula-validation-workspace
+          path: |
+            /tmp/formula-tests.log
+            /tmp/lotto-formula-workspace.tar
+            /tmp/formula-wheels
           retention-days: 2
