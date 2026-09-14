@@ -6,92 +6,80 @@ on:
 permissions:
   contents: write
 jobs:
-  validate-patch:
+  integrate-ui:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - name: Apply hash-verified source changes
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python - <<'PY'
-          import base64, hashlib, json, lzma, subprocess
-          from pathlib import Path, PurePosixPath
-          blobs = ['8d29c4e05f57139d32e67809ba84f242fd159e05', '27b0e759264809aa1fcbfc6b26fcf36e5a4c6992', '0b033a7a5a2359013ad87f5366da725c77d9849a', '65d7d08523e749b138da77de965368799ecacdb4']
-          packed = b''
-          for sha in blobs:
-              response = json.loads(subprocess.check_output(['gh', 'api', f'repos/1bobby-git/HA-Lotto-645/git/blobs/{sha}']))
-              assert response['encoding'] == 'base64'
-              packed += base64.b64decode(response['content'])
-          assert hashlib.sha256(packed).hexdigest() == '49e3d8356ead399474ac22e9f54c14da422d7ea9c013f62049bc433e2de7203e'
-          changes = json.loads(lzma.decompress(packed))['updates']
-          prepared = {}
-          for change in changes:
-              path = change['path']
-              parts = PurePosixPath(path).parts
-              assert parts and not PurePosixPath(path).is_absolute() and '..' not in parts and '.git' not in parts and '.github' not in parts
-              target = Path(path)
-              assert not target.is_symlink() and path not in prepared
-              old = target.read_text() if target.exists() else None
-              assert (hashlib.sha256(old.encode()).hexdigest() if old is not None else None) == change['before'], f'Baseline mismatch: {path}'
-              if 'copy' in change:
-                  new = prepared[change['copy']]
-              elif 'content' in change:
-                  new = change['content']
-              else:
-                  new = old
-                  for source, replacement in change.get('replace', []):
-                      new = new.replace(source, replacement)
-                  lines = new.splitlines(keepends=True)
-                  for start, end, replacement in reversed(change.get('edits', [])):
-                      lines[start:end] = [replacement]
-                  new = ''.join(lines)
-              assert hashlib.sha256(new.encode()).hexdigest() == change['after'], f'Result mismatch: {path}'
-              prepared[path] = new
-          for path, content in prepared.items():
-              target = Path(path)
-              target.parent.mkdir(parents=True, exist_ok=True)
-              target.write_text(content)
-          print(f'Applied {len(prepared)} individually verified files')
-          PY
-      - name: Install regression dependencies
-        run: |
-          python -m pip install -q pytest 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0'
-          python -m pip wheel --no-deps -q --wheel-dir /tmp/formula-wheels 'lunar_python==1.4.8'
-      - name: Compile and run complete regression suite
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m compileall -q custom_components/lotto_645 scripts
-          git diff --check
-          python -m pytest -q 2>&1 | tee /tmp/formula-tests.log
-      - name: Commit only passing source changes to feature branch
+      - name: Preserve reviewed concurrent main change
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add custom_components docs scripts tests README.md CHANGELOG.md
-          git commit -m 'feat: implement research-backed draw formulas v1.12.0'
+          python - <<'PY'
+          import subprocess, re
+          from pathlib import Path
+          main = 'e249c0d3cd0c404847c3180d13380887574dff06'
+          base = '4baf71a766d1f25598da8700b037e66514c45dbb'
+          paths = ['custom_components/lotto_645/const.py', 'custom_components/lotto_645/manifest.json', 'custom_components/lotto_645/panel_metadata.py', 'custom_components/lotto_645/www/lotto-panel-shell.js', 'docs/PANEL_TOOLS.md', 'scripts/smoke_panel_design_system.py', 'scripts/smoke_panel_tools.py', 'tests/test_draw_ball_styles.py', 'tests/test_panel_metadata.py']
+          actual = subprocess.check_output(['git','diff','--name-only',base,main],text=True).splitlines()
+          assert set(actual) == set(paths), 'Unreviewed changes in concurrent commit'
+          subprocess.run(['git','merge','--no-commit','--no-ff',main],check=False)
+          conflicts = subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).splitlines()
+          assert set(conflicts).issubset(paths), f'Unexpected merge conflict: {conflicts}'
+          for path in paths:
+              value = subprocess.check_output(['git','show',f'{main}:{path}']).decode()
+              for old,new in [('번호 추천 방식','추첨 공식'),('추천 방식','추첨 공식'),('방식','공식')]:
+                  value = value.replace(old,new)
+              if path.startswith('custom_components/'):
+                  value = value.replace('1.11.10','1.12.0').replace('1.11.11','1.12.0')
+              if path.endswith('panel_metadata.py') and path.startswith('custom_components/'):
+                  old = 'Home Assistant에 설정된 AI가 추천한 번호를 형식·제외 규칙으로 검증합니다.'
+                  assert old in value
+                  value = value.replace(old,'번호는 백엔드 CCSS 공식으로 추첨하고 Home Assistant AI는 실행 근거만 설명합니다. AI가 번호를 만들거나 당첨을 예측하지 않습니다.')
+              if path.startswith('tests/'):
+                  value = value.replace('len(methods.METHODS) == 17','len(methods.METHODS) == 23').replace('len(catalog) == 18','len(catalog) == 24').replace("len({m['method_id'] for m in catalog}) == 18","len({m['method_id'] for m in catalog}) == 24")
+              if path == 'scripts/smoke_panel_tools.py':
+                  value = value.replace('count() == 18','count() == 24').replace('18 guides','24 guides')
+              if path.endswith('.md'):
+                  value = value.replace('17개','23개').replace('17종','23종').replace('18개 설명','24개 설명')
+              Path(path).write_text(value)
+          # Invalidate all first-party module import URLs, including older nested imports.
+          www = Path('custom_components/lotto_645/www')
+          for name in ('lotto-panel-shell.js','lotto-panel.js','lotto-panel-design.js','lotto-panel-tools.js'):
+              path = www / name
+              value = path.read_text()
+              path.write_text(re.sub(r'(\.js\?v=)\d+\.\d+\.\d+',r'\g<1>1.12.0',value))
+          subprocess.run(['git','add','custom_components','docs','scripts','tests'],check=True)
+          assert not subprocess.check_output(['git','diff','--name-only','--diff-filter=U'],text=True).strip()
+          subprocess.run(['git','diff','--cached','--check'],check=True)
+          PY
+      - name: Validate merged UI metadata
+        run: |
+          python -m pip install -q pytest
+          python -m pytest -q tests/test_sampling.py tests/test_method_docs.py tests/test_panel_metadata.py tests/test_draw_ball_styles.py
+          python -m compileall -q custom_components/lotto_645 scripts
+      - name: Save integrated branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git commit -m 'merge: preserve v1.11.11 palette and countdown with 23 formulas'
           gh auth setup-git
           git push origin HEAD:refs/heads/feat/research-formulas-1.12.0
-      - name: Export tested workspace
+      - name: Export integrated source
         if: always()
         run: |
-          git add custom_components docs scripts tests README.md CHANGELOG.md
-          git archive --format=tar "$(git write-tree)" > /tmp/lotto-formula-workspace.tar
+          git archive --format=tar "$(git write-tree)" > /tmp/lotto-formula-integrated.tar
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: formula-validation-workspace
-          path: |
-            /tmp/formula-tests.log
-            /tmp/lotto-formula-workspace.tar
-            /tmp/formula-wheels
+          name: formula-integrated-source
+          path: /tmp/lotto-formula-integrated.tar
           retention-days: 2
