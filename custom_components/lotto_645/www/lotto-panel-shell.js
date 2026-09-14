@@ -10,9 +10,9 @@ const HA_HOST_HEADER_STYLE = `
    the narrow property; this row follows the same visibility condition used by
    Home Assistant's ha-panel-app. */
 .app-header{padding-top:var(--lotto-safe-top)}
-:host([data-ha-host-header="true"]) .app-header{padding-top:0}
+:host([data-ha-host-header]) .app-header{padding-top:0}
 .ha-host-header{display:none}
-:host([data-ha-host-header="true"]) .ha-host-header{
+:host([data-ha-host-header]) .ha-host-header{
   display:flex;
   align-items:center;
   box-sizing:border-box;
