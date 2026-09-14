@@ -148,7 +148,32 @@ async def run():
         assert '1241회 5등 · 누적 제외' in await page.locator('#reviews').text_content()
         assert '생성시각' in await page.locator('#reviewstatus').text_content()
         assert await page.locator('#game_a').input_value() == '2, 3, 4, 5, 6, 7'
+        await page.evaluate("""async()=>{
+            const base=el._hass.callWS;
+            el._hass.callWS=async msg=>({...await base(msg),result_round:1241,
+                draw:{numbers:[7,24,30,31,32,42],bonus:9},result_verification:{status:'official_confirmed'},
+                winning:{status:'evaluated',round:1241,winning_game_count:2,highest_prize:'2등',
+                    winning_numbers:[7,24,30,31,32,42],bonus_number:9,results:[
+                      {method_id:'public_ensemble',sensor_name:'공개 공식 · 종합 앙상블',source:'local',recommended_numbers:[7,13,15,24,38,42],prize:'5등',prize_rank:5,main_match_count:3,matched_main_numbers:[7,24,42],bonus_match:false,matched_bonus_number:null},
+                      {method_id:'weighted_frequency',sensor_name:'공개 공식 · 가중 빈도',source:'local',recommended_numbers:[7,9,24,30,31,32],prize:'2등',prize_rank:2,main_match_count:5,matched_main_numbers:[7,24,30,31,32],bonus_match:true,matched_bonus_number:9}
+                    ]}});
+            await el.refreshStatus();
+        }""")
         await page.locator('#close-editor').click()
+        await page.locator('#tab-review').click()
+        winning_rows=page.locator('#predictions tr[data-winning="true"]')
+        assert await winning_rows.count()==2
+        first=winning_rows.nth(0)
+        assert await first.locator('.ball[data-hit="main"]').count()==3
+        assert await first.locator('.ball[data-hit="miss"]').count()==3
+        label=await first.locator('.result-balls').get_attribute('aria-label')
+        assert '당첨번호 일치 7, 24, 42' in label and '미일치 13, 15, 38' in label
+        assert float(await first.locator('.ball[data-hit="miss"]').first.evaluate('n=>getComputedStyle(n).opacity')) < 0.5
+        assert await first.locator('.ball[data-hit="main"]').first.evaluate("n=>getComputedStyle(n).outlineStyle==='solid'")
+        second=winning_rows.nth(1)
+        assert await second.locator('.ball[data-hit="bonus"]').count()==1
+        assert await second.locator('.ball[data-hit="bonus"]').evaluate("n=>getComputedStyle(n).outlineStyle==='dashed'")
+        assert '보너스 9' in await second.locator('.result-detail').text_content()
         assert await page.get_by_role('link', name='로또 통합 및 센서 설정').get_attribute('href') == '/config/integrations/integration/lotto_645'
         await page.evaluate("window.menuCount=0;el.addEventListener('hass-toggle-menu',()=>menuCount++);el.narrow=true")
         await page.locator('#menu').click()
