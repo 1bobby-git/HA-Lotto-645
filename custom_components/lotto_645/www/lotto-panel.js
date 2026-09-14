@@ -1,7 +1,13 @@
-/* UI entry point: keep the stable controller isolated and add the Home Assistant-style two-tier header. */
-import './lotto-panel-core.js?v=1.11.4';
+/* UI entry point: two-tier Home Assistant header plus demand-driven panel synchronization. */
+import './lotto-panel-core.js?v=1.11.5';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
+const PANEL_SYNC_INTERVAL = 60_000;
+const PANEL_RESUME_MIN_GAP = 15_000;
+const KST_OFFSET = 9 * 60 * 60 * 1000;
+const OFFICIAL_RESULT_STATES = new Set(['official_history', 'official_confirmed', 'official_corrected']);
+const UNSETTLED_RESULT_STATES = new Set(['provisional', 'cross_checked', 'conflict']);
+
 const HEADER_STYLE = `
 .app-header{padding-top:var(--lotto-safe-top)}
 .header-row{
@@ -90,8 +96,191 @@ const HEADER_STYLE = `
 }
 `;
 
+function kstClock(now = Date.now()) {
+  const shifted = new Date(now + KST_OFFSET);
+  return {
+    shifted,
+    day: shifted.getUTCDay(),
+    seconds: shifted.getUTCHours() * 3600 + shifted.getUTCMinutes() * 60 + shifted.getUTCSeconds(),
+  };
+}
+
+function inPublicationWindow(now = Date.now()) {
+  const {day, seconds} = kstClock(now);
+  return (day === 6 && seconds >= 20 * 3600 + 30 * 60)
+    || (day === 0 && seconds <= 10 * 3600 + 30 * 60);
+}
+
+function msUntilPublicationWindow(now = Date.now()) {
+  if (inPublicationWindow(now)) return 0;
+  const {shifted, day, seconds} = kstClock(now);
+  let days = (6 - day + 7) % 7;
+  if (day === 6 && seconds < 20 * 3600 + 30 * 60) days = 0;
+  else if (days === 0) days = 7;
+  const target = Date.UTC(
+    shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate() + days,
+    20, 30, 0, 0,
+  );
+  return Math.max(1000, target - shifted.getTime());
+}
+
 const Panel = customElements.get('lotto-ticket-panel');
 if (!Panel) throw new Error('lotto-ticket-panel controller did not register');
+
+Panel.prototype._hasPendingFutureDraw = function () {
+  const target = Number(this._targetRound);
+  const result = Number(this._panelResultRound);
+  return Number.isInteger(target) && target > 0
+    && (!Number.isInteger(result) || result <= 0 || result < target);
+};
+
+Panel.prototype._smartSyncPolicy = function (now = Date.now()) {
+  const status = this._panelResultStatus || 'waiting';
+  if (UNSETTLED_RESULT_STATES.has(status)) {
+    return {mode: 'poll', delay: PANEL_SYNC_INTERVAL, reason: 'official_recheck'};
+  }
+  if (this._hasPendingFutureDraw()) {
+    if (inPublicationWindow(now)) {
+      return {mode: 'poll', delay: PANEL_SYNC_INTERVAL, reason: 'draw_window'};
+    }
+    return {mode: 'wake', delay: msUntilPublicationWindow(now), reason: 'next_draw_window'};
+  }
+  return {mode: 'idle', delay: 0, reason: OFFICIAL_RESULT_STATES.has(status) ? 'official_done' : 'stable'};
+};
+
+Panel.prototype._renderSmartSyncStatus = function (now = Date.now(), policy = this._smartSyncPolicy(now)) {
+  const node = this.node?.('sync-status');
+  if (!node || !this._lastPanelSyncAt) return;
+  const time = new Intl.DateTimeFormat('ko-KR', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(this._lastPanelSyncAt));
+  const status = this._panelResultStatus || 'waiting';
+  let suffix = '';
+  if (policy.mode === 'poll') {
+    suffix = UNSETTLED_RESULT_STATES.has(status)
+      ? '공식 대조 대기 · HA 상태 자동 동기화 중'
+      : '추첨 결과 대기 · HA 상태 자동 동기화 중';
+  } else if (OFFICIAL_RESULT_STATES.has(status)) {
+    suffix = '공식 결과 확인 완료';
+  } else if (status === 'waiting') {
+    suffix = '추첨 결과 대기';
+  } else {
+    suffix = '동기화 완료';
+  }
+  node.textContent = `최근 동기화 ${time}${suffix ? ` · ${suffix}` : ''}`;
+};
+
+Panel.prototype._clearSmartSync = function () {
+  clearTimeout(this._smartSyncTimer);
+  this._smartSyncTimer = null;
+};
+
+Panel.prototype._scheduleSmartSync = function (now = Date.now()) {
+  this._clearSmartSync();
+  if (!this.isConnected || document.hidden || !this.node?.('entry')?.value) return;
+  const policy = this._smartSyncPolicy(now);
+  this._renderSmartSyncStatus(now, policy);
+  if (policy.mode === 'idle') return;
+  this._smartSyncTimer = setTimeout(() => {
+    this._smartSyncTimer = null;
+    void this._runSmartSync();
+  }, policy.delay);
+};
+
+Panel.prototype._runSmartSync = async function () {
+  if (!this.isConnected || document.hidden || !this.node?.('entry')?.value) return;
+  if (this._busy) {
+    this._smartSyncTimer = setTimeout(() => {
+      this._smartSyncTimer = null;
+      void this._runSmartSync();
+    }, PANEL_RESUME_MIN_GAP);
+    return;
+  }
+  const policy = this._smartSyncPolicy();
+  if (policy.mode === 'idle' || policy.mode === 'wake') {
+    this._scheduleSmartSync();
+    return;
+  }
+  await this.operation(() => this.refreshStatus(), true);
+  if (!this._smartSyncTimer) this._scheduleSmartSync();
+};
+
+Panel.prototype._resumePanelSync = function () {
+  if (!this.isConnected || document.hidden || this._busy || !this.node?.('entry')?.value) return;
+  const now = Date.now();
+  if (now - (this._lastPanelSyncAt || 0) < PANEL_RESUME_MIN_GAP) {
+    this._scheduleSmartSync(now);
+    return;
+  }
+  void this.operation(() => this.refreshStatus(), true).then(() => {
+    if (!this._smartSyncTimer) this._scheduleSmartSync();
+  });
+};
+
+const baseStart = Panel.prototype._start;
+Panel.prototype._start = function (...args) {
+  const value = baseStart.apply(this, args);
+  // v1.11.4 core creates a legacy 30-second interval. The entry module owns
+  // synchronization now, so cancel it immediately on every HA property update.
+  if (this._poll) {
+    clearInterval(this._poll);
+    this._poll = null;
+  }
+  return value;
+};
+
+const baseConnected = Panel.prototype.connectedCallback;
+Panel.prototype.connectedCallback = function (...args) {
+  const value = baseConnected.apply(this, args);
+  if (!this._smartVisibilityHandler) {
+    this._smartVisibilityHandler = () => {
+      if (!document.hidden) this._resumePanelSync();
+    };
+    this._smartFocusHandler = () => this._resumePanelSync();
+    this._smartPageShowHandler = () => this._resumePanelSync();
+    document.addEventListener('visibilitychange', this._smartVisibilityHandler);
+    window.addEventListener('focus', this._smartFocusHandler);
+    window.addEventListener('pageshow', this._smartPageShowHandler);
+  }
+  return value;
+};
+
+const baseDisconnected = Panel.prototype.disconnectedCallback;
+Panel.prototype.disconnectedCallback = function (...args) {
+  if (this._smartVisibilityHandler) {
+    document.removeEventListener('visibilitychange', this._smartVisibilityHandler);
+    window.removeEventListener('focus', this._smartFocusHandler);
+    window.removeEventListener('pageshow', this._smartPageShowHandler);
+    this._smartVisibilityHandler = null;
+    this._smartFocusHandler = null;
+    this._smartPageShowHandler = null;
+  }
+  this._clearSmartSync();
+  return baseDisconnected.apply(this, args);
+};
+
+const baseUpdateResults = Panel.prototype.updateResults;
+Panel.prototype.updateResults = function (data, ...args) {
+  const value = baseUpdateResults.call(this, data, ...args);
+  this._panelResultStatus = data?.result_verification?.status || 'waiting';
+  this._panelResultRound = Number(data?.result_round) || null;
+  this._lastPanelSyncAt = Date.now();
+  this._renderSmartSyncStatus();
+  this._scheduleSmartSync();
+  return value;
+};
+
+const baseOperation = Panel.prototype.operation;
+Panel.prototype.operation = async function (action, background = false) {
+  const value = await baseOperation.call(this, action, background);
+  if (background) {
+    const status = this.node?.('sync-status');
+    if (status?.textContent?.startsWith('자동 확인 실패')) {
+      status.textContent = '자동 동기화 실패 · 다시 확인해 주세요';
+    }
+  }
+  return value;
+};
 
 const baseRender = Panel.prototype.render;
 Panel.prototype.render = function (...args) {
@@ -107,9 +296,20 @@ Panel.prototype.render = function (...args) {
   }
   if (root && !root.querySelector('style[data-lotto-two-tier-header]')) {
     const style = document.createElement('style');
-    style.setAttribute('data-lotto-two-tier-header', '1.11.4');
+    style.setAttribute('data-lotto-two-tier-header', '1.11.5');
     style.textContent = HEADER_STYLE;
     root.append(style);
+  }
+  const check = this.node?.('check');
+  if (check) {
+    check.onclick = () => this.operation(async () => {
+      this.message('새 추첨 결과를 확인하고 있어요.');
+      this.updateResults(await this.request('result_check'));
+      await this.refreshStatus();
+      this.message(OFFICIAL_RESULT_STATES.has(this._panelResultStatus)
+        ? '공식 결과를 확인했어요.'
+        : '확인했어요. 결과가 확정될 때까지만 필요한 시간에 자동 동기화합니다.');
+    });
   }
   return value;
 };

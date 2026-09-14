@@ -75,6 +75,23 @@ async def run():
         assert resources.keys() <= assets
         assert await page.locator('.draw-stage').evaluate("n=>getComputedStyle(n).backgroundColor==='rgb(255, 255, 255)' && getComputedStyle(n).backgroundImage==='none'")
 
+        # The legacy core's fixed 30-second interval must be cancelled by the entry module.
+        assert await page.evaluate('el._poll===null')
+        assert '30초마다' not in await page.locator('#sync-status').text_content()
+        assert '공식 결과 확인 완료' in await page.locator('#sync-status').text_content()
+        policies = await page.evaluate("""() => ({
+            weekday: el._smartSyncPolicy(Date.UTC(2026,8,14,0,0,0)).mode,
+            drawWindow: el._smartSyncPolicy(Date.UTC(2026,8,12,12,0,0)).mode,
+            settled: (() => {
+                const state=[el._panelResultStatus,el._panelResultRound,el._targetRound];
+                el._panelResultStatus='official_confirmed';el._panelResultRound=1241;el._targetRound=1241;
+                const mode=el._smartSyncPolicy(Date.UTC(2026,8,14,0,0,0)).mode;
+                [el._panelResultStatus,el._panelResultRound,el._targetRound]=state;
+                return mode;
+            })(),
+        })""")
+        assert policies == {'weekday': 'wake', 'drawWindow': 'poll', 'settled': 'idle'}
+
         await page.locator('[data-register]').first.click()
         assert await page.locator('#editor').evaluate('n=>n.open')
         with tempfile.TemporaryDirectory() as tmp:
@@ -111,6 +128,7 @@ async def run():
         assert await page.evaluate("el._revision===draftRevision && el._walletData.revision==='server-newer'")
         assert '★4.5' in await page.locator('#reviews').text_content()
         assert '잠정' in await page.locator('#reviews').text_content()
+        assert 'HA 상태 자동 동기화 중' in await page.locator('#sync-status').text_content()
         await page.evaluate("""async()=>{
             const base=el._hass.callWS;
             el._hass.callWS=async msg=>({...await base(msg),review_round:{},
@@ -137,7 +155,7 @@ async def run():
         await verify_safe_area(page)
         assert not errors, errors
         await browser.close()
-        print('PASS: two-tier header, real ES modules, canonical logo, white result card, local PNG QR decode, explicit save, draft/revision preservation, safe areas and responsive views')
+        print('PASS: smart sync, two-tier header, real ES modules, canonical logo, PNG QR, explicit save, draft preservation, safe areas and responsive views')
 
 
 if __name__ == '__main__':
