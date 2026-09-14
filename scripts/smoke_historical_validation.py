@@ -22,10 +22,10 @@ async def verify_historical_validation(hass, owner):
     schema=panel.historical_validate._ws_schema
     valid=schema({'id':601,'type':'lotto_645/historical_validate','entry_id':owner.entry.entry_id,
                   'round':61,'method_ids':['uniform_floyd']})
-    assert valid['seed']==0 and valid['round']==61
-    for key,bad in [('round',True),('round',31.5),('seed',False),('seed',-1)]:
+    assert 'seed' not in valid and valid['round']==61
+    for key,bad in [('round',True),('round',31.5),('seed',0),('seed',-1)]:
         msg={'id':601,'type':'lotto_645/historical_validate','entry_id':owner.entry.entry_id,
-             'round':61,'method_ids':['uniform_floyd'],'seed':0,key:bad}
+             'round':61,'method_ids':['uniform_floyd'],key:bad}
         try:schema(msg)
         except vol.Invalid:pass
         else:raise AssertionError(f'Invalid integer accepted: {key}={bad}')
@@ -46,8 +46,7 @@ async def verify_historical_validation(hass, owner):
     with patch.object(hass,'config_entries',SimpleNamespace(async_get_entry=lambda key:owner.entry if key==owner.entry.entry_id else None)):
         await inspect.unwrap(panel.historical_validate)(hass,connection,{
             'id':602,'entry_id':owner.entry.entry_id,'round':61,
-            'method_ids':['uniform_floyd','uniform_fisher_yates','selected_median_consensus','home_assistant_ai'],
-            'seed':10})
+            'method_ids':['uniform_floyd','uniform_fisher_yates','selected_median_consensus','home_assistant_ai']})
     connection.send_error.assert_not_called()
     result=connection.send_result.call_args.args[1]
     assert result['mode']=='historical_validation' and result['based_on_round']==60

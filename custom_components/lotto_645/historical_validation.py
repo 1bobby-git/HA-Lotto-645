@@ -11,11 +11,12 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from hashlib import sha256
 import json
-import random
+import secrets
 from typing import Any
 
 from .ai_formula import AI_BASE_FORMULA, make_ai_ticket
 from .analysis import build_analysis
+from .consensus import refresh_consensus, valid_ticket
 from .const import AI_METHOD_ID, VERSION
 from .methods import METHODS_BY_ID, METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, consensus_source_ids
 from .models import LottoDraw
@@ -23,7 +24,6 @@ from .result_evaluator import evaluate_ticket
 from .sampling import FORMULA_VERSION
 
 MIN_TARGET_ROUND = 31  # Same minimum 30-draw history as the production engine.
-MAX_SEED = 2**32 - 1
 NOTICE = (
     "현재 버전의 추첨 공식을 당시 이전 데이터로 다시 실행한 검증용 시뮬레이션입니다. "
     "그때 실제로 생성·저장했던 추천이 아니며 실제 추천번호·당첨 기록·리뷰 점수에 반영하지 않습니다. "
@@ -53,18 +53,17 @@ def validate_method_ids(value: object) -> tuple[str, ...]:
 
 def run_historical_validation(
     history: Sequence[LottoDraw], target_round: int, method_ids: Sequence[str],
-    seed: int = 0, saju_profile: dict[str, Any] | None = None,
+    saju_profile: dict[str, Any] | None = None, *, previous_tickets: Sequence[tuple[int, ...]] = (), rng=None,
 ) -> dict[str, Any]:
     """Generate once from [1, R-1], then compare to R, returning ephemeral JSON.
 
-    Fixed seeds provide repeatable simulations, not production CSPRNG draws.
-    The seed also selects the heuristic candidate variant; it is never derived
-    from target/future numbers or a live generation counter. Call in executor.
+    Every production request uses fresh OS randomness. Only unit tests may
+    inject a random generator; no seed is accepted or returned by the UI/API.
+    Previous simulations for this target can be excluded without reading any
+    target numbers or live recommendation state. Call in executor.
     """
     if type(target_round) is not int or not MIN_TARGET_ROUND <= target_round <= 999999:
         raise HistoricalValidationError('invalid_round', '과거 회차 검증은 최소 30회 이력이 필요한 31회부터 가능합니다.')
-    if type(seed) is not int or not 0 <= seed <= MAX_SEED:
-        raise HistoricalValidationError('invalid_seed', f'검증 시드는 0~{MAX_SEED} 사이의 정수여야 합니다.')
     ids = validate_method_ids(method_ids)
     target_rows = [d for d in history if d.round == target_round]
     if len(target_rows) != 1:
@@ -81,10 +80,22 @@ def run_historical_validation(
         [(d.round, d.draw_date, d.numbers, d.bonus) for d in training],
         separators=(',', ':'), ensure_ascii=False,
     ).encode()).hexdigest()
-    rng = random.Random(seed)
+    rng = rng if rng is not None else secrets.SystemRandom()
+    generation_variant = rng.randrange(1, 2**32)
+    blocked = set()
+    if len(previous_tickets) > len(METHODS_BY_ID) + 1:
+        raise HistoricalValidationError('invalid_previous', '이전 검증 결과가 올바르지 않습니다.')
+    for value in previous_tickets:
+        ticket = valid_ticket(value)
+        if ticket is None:
+            raise HistoricalValidationError('invalid_previous', '이전 검증 결과가 올바르지 않습니다.')
+        blocked.add(ticket)
     local_ids = tuple(key for key in ids if key != AI_METHOD_ID)
     try:
-        analysis = build_analysis(training, local_ids, seed, deepcopy(saju_profile), rng=rng)
+        analysis = build_analysis(training, local_ids, generation_variant, deepcopy(saju_profile),
+                                  excluded_combinations=tuple(blocked), rng=rng)
+        if METHOD_SELECTED_MEDIAN in local_ids and blocked:
+            analysis = refresh_consensus(analysis, local_ids, training, excluded_combinations=blocked)
     except ValueError as err:
         raise HistoricalValidationError('generation_failed', '선택한 공식으로 검증번호를 만들 수 없습니다. 이력과 사주 설정, 합의 참여 공식을 확인하세요.') from err
     if analysis.based_on_round != target_round - 1 or analysis.target_round != target_round:
@@ -97,7 +108,7 @@ def run_historical_validation(
         'generation_status': 'generated',
     } for r in analysis.recommendations}
     if AI_METHOD_ID in ids:
-        ticket = make_ai_ticket(training, analysis.recommendations, rng=rng)
+        ticket = make_ai_ticket(training, analysis.recommendations, rng=rng, excluded_combinations=blocked)
         generated[AI_METHOD_ID] = {
             'method_id': AI_METHOD_ID, 'formula_id': AI_METHOD_ID,
             'sensor_name': 'Home Assistant AI 추천 · CCSS 번호만 검증',
@@ -132,8 +143,9 @@ def run_historical_validation(
         'training_first_round': 1, 'training_last_round': target_round - 1,
         'training_draw_count': len(training), 'training_sha256': fingerprint,
         'target_and_future_used_for_generation': False,
-        'generated_at': datetime.now(UTC).isoformat(), 'seed': seed,
-        'rng': 'seeded_simulation_prng', 'generation_sequence': seed,
+        'generated_at': datetime.now(UTC).isoformat(),
+        'rng': 'system_csprng' if isinstance(rng, secrets.SystemRandom) else 'injected_test_rng',
+        'previous_simulation_excluded': bool(blocked),
         'uses_current_saju_profile': METHOD_MYUNGRI_HETU in ids,
         'method_ids': list(ids), 'results': results,
         'draw': {'round': target.round, 'draw_date': target.draw_date,

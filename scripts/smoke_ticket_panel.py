@@ -14,6 +14,7 @@ from smoke_panel_safe_area import verify_safe_area
 from smoke_panel_design_system import verify_component_design
 from smoke_panel_tools import verify_panel_tools
 from smoke_panel_validation import verify_panel_validation
+from smoke_match_layout import verify_match_layout
 
 ROOT = Path(__file__).resolve().parents[1]
 WWW = ROOT / 'custom_components/lotto_645/www'
@@ -191,6 +192,7 @@ async def run():
         assert await page.locator('.draw-stage').evaluate("n=>getComputedStyle(n).backgroundColor==='rgb(255, 255, 255)' && getComputedStyle(n).color==='rgb(25, 31, 40)'")
         await verify_safe_area(page)
         await verify_component_design(page)
+        await verify_match_layout(page)
         await verify_panel_tools(page)
         await verify_panel_validation(page)
         assert not errors, errors

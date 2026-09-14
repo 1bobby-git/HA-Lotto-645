@@ -1,5 +1,5 @@
 /* On-demand historical simulations. Never updates live tickets or review rows. */
-import { numberBalls, renderPredictionRows } from './lotto-panel-view.js?v=1.14.0';
+import { numberBalls, renderPredictionRows } from './lotto-panel-view.js?v=1.15.0';
 
 const SAJU = 'myungri_hetu_day_pillar';
 const AI = 'home_assistant_ai';
@@ -18,6 +18,7 @@ const STYLE = `
 .validation-settings summary{font-size:14px;font-weight:650}
 .validation-settings .validation-defaults{margin:10px 0;font-size:12px}
 .validation-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin:12px 0 20px;max-height:380px;overflow:auto;padding:4px}
+.validation-advanced{grid-column:1/-1}
 .validation-choice{display:flex;align-items:flex-start;gap:9px;margin:0;padding:8px 4px;min-height:44px;font-size:13px;line-height:1.6;font-weight:500;overflow-wrap:anywhere}
 .validation-choice input{width:20px;height:20px;min-height:20px;padding:0;flex:none;margin:2px 0;accent-color:var(--blue)}
 .validation-choice:has(input:disabled){color:var(--muted)}
@@ -54,7 +55,7 @@ class HistoricalValidationView {
   constructor(panel) {
     this.panel = panel; this.form = panel.node('validation-form'); this.sequence = 0; this.busy = false; this.entry = null;
     this.node('validation-form').onsubmit = event => { event.preventDefault(); void this.run(); };
-    for (const id of ['validation-round', 'validation-seed']) this.node(id).oninput = () => this.changed();
+    for (const id of ['validation-round']) this.node(id).oninput = () => this.changed();
     this.node('validation-choices').onchange = () => this.changed();
     this.node('validation-defaults').onclick = () => { this.selectDefaults(); this.changed(); };
   }
@@ -78,7 +79,7 @@ class HistoricalValidationView {
     if (switched) {
       this.entry = entry; this.sequence++; this.busy = false; this.catalogSignature = null; this.initialized = false;
       this.node('validation-output').hidden = true; this.message('');
-      this.node('validation-seed').value = '0'; this.node('validation-round').value = '';
+      this.node('validation-round').value = '';
     }
     this.options = data.historical_validation || {};
     const ready = this.options.saju_profile_ready === true;
@@ -88,6 +89,8 @@ class HistoricalValidationView {
       const prior = !this.initialized || switched ? null : new Set(this.ids());
       this.catalogSignature = signature;
       const root = this.node('validation-choices'); root.replaceChildren();
+      const advanced = document.createElement('details'); advanced.className = 'validation-advanced';
+      const heading = document.createElement('summary'); heading.textContent = '고급 선택 · 균등 알고리즘과 빈도 프리셋'; advanced.append(heading);
       for (const method of catalog) {
         const label = document.createElement('label'); label.className = 'validation-choice';
         const input = document.createElement('input'); input.type = 'checkbox'; input.value = method.method_id;
@@ -96,8 +99,10 @@ class HistoricalValidationView {
         const text = document.createElement('span');
         text.textContent = method.name + (input.disabled ? ' · 사주정보 설정 필요' : method.method_id === AI ? ' · CCSS 번호만 검증' : '');
         input.checked = !input.disabled && (prior || new Set(this.options.default_method_ids || [])).has(method.method_id);
-        label.append(input, text); root.append(label);
+        label.append(input, text); (method.selection_group === 'advanced' ? advanced : root).append(label);
+        if (input.checked && method.selection_group === 'advanced') advanced.open = true;
       }
+      if (advanced.children.length > 1) root.append(advanced);
       if (prior) this.changed();
     }
     const max = Number(this.options.max_round) || 0, min = Number(this.options.min_round) || 31;
@@ -121,13 +126,13 @@ class HistoricalValidationView {
   }
   async run() {
     if (this.busy || !this.node('validation-form').reportValidity()) return;
-    const round = Number(this.node('validation-round').value), seed = Number(this.node('validation-seed').value), method_ids = this.ids();
+    const round = Number(this.node('validation-round').value), method_ids = this.ids();
     if (!method_ids.length) { this.message('검증할 추첨 공식을 선택하세요.', true); return; }
     const sequence = ++this.sequence, entry = this.entry;
     this.busy = true; this.node('validation-output').hidden = true; this.renderConditions();
     this.message(`${round}회 직전까지의 이력으로 번호를 생성하고 있습니다. 실제 추천번호와 리뷰는 변경하지 않습니다.`);
     try {
-      const result = await this.panel.request('historical_validate', {round, method_ids, seed});
+      const result = await this.panel.request('historical_validate', {round, method_ids});
       if (sequence !== this.sequence || entry !== this.node('entry')?.value || !this.panel.isConnected) return;
       if (result.mode !== 'historical_validation' || result.counts_toward_reviews !== false || result.persisted !== false
           || result.target_round !== round || result.based_on_round !== round - 1 || !Array.isArray(result.results)) throw new Error('검증 응답의 회차 또는 분리 상태를 확인할 수 없습니다.');
@@ -141,7 +146,7 @@ class HistoricalValidationView {
   }
   render(data) {
     this.node('validation-title').textContent = `${data.target_round}회 검증 결과 · 실제 추천과 별도`;
-    this.node('validation-meta').textContent = `사용 이력 1~${data.based_on_round}회 (${data.training_draw_count}회) · 현재 공식 v${data.component_version} · 시드 ${data.seed}`;
+    this.node('validation-meta').textContent = `사용 이력 1~${data.based_on_round}회 (${data.training_draw_count}회) · 현재 공식 v${data.component_version}`;
     numberBalls(this.node('validation-draw'), data.draw?.numbers || [], data.draw?.bonus);
     this.node('validation-summary').textContent = `검증 ${data.checked_game_count}게임 · 당첨 ${data.winning_game_count}게임${data.highest_prize ? ` · 최고 ${data.highest_prize}` : ''}${data.unavailable_game_count ? ` · 생성 불가 ${data.unavailable_game_count}개` : ''} · 실선: 본번호 일치 / 점선: 보너스 일치`;
     const root = this.node('validation-results');
@@ -156,7 +161,7 @@ class HistoricalValidationView {
       tr.cells[2].firstElementChild?.append(detail);
     });
     this.panel.shadowRoot.querySelector('lotto-panel-tools')?.decorate('validation-results', data.results);
-    this.node('validation-audit-text').textContent = `생성시각 ${data.generated_at} · 입력 마감 ${data.training_last_round}회 · 검증용 시드 난수 · AI 호출 없음 · 저장 및 리뷰 반영 없음${data.uses_current_saju_profile ? ' · 현재 사주 설정 사용' : ''}. 아래 해시는 생성에 사용한 이전 회차 데이터만의 SHA-256입니다.`;
+    this.node('validation-audit-text').textContent = `생성시각 ${data.generated_at} · 입력 마감 ${data.training_last_round}회 · 매 실행 새 번호 생성 · AI 호출 없음 · 저장 및 리뷰 반영 없음${data.uses_current_saju_profile ? ' · 현재 사주 설정 사용' : ''}. 아래 해시는 생성에 사용한 이전 회차 데이터만의 SHA-256입니다.`;
     this.node('validation-hash').textContent = data.training_sha256;
     this.node('validation-notice').textContent = data.notice;
     this.node('validation-output').hidden = false;
@@ -166,7 +171,7 @@ class HistoricalValidationView {
 export function applyHistoricalValidation(panel) {
   if (!panel.node('screen-validation')) return;
   if (!panel.shadowRoot.querySelector('style[data-lotto-validation]')) {
-    const style = document.createElement('style'); style.dataset.lottoValidation = '1.14.0'; style.textContent = STYLE; panel.shadowRoot.append(style);
+    const style = document.createElement('style'); style.dataset.lottoValidation = '1.15.0'; style.textContent = STYLE; panel.shadowRoot.append(style);
   }
   if (panel._historicalValidation && panel._historicalValidation.form !== panel.node('validation-form')) { panel._historicalValidation.sequence++; panel._historicalValidation = null; }
   if (!panel._historicalValidation) panel._historicalValidation = new HistoricalValidationView(panel);

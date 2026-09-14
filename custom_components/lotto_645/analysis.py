@@ -608,9 +608,6 @@ def build_analysis(
             raise ValueError("유효하지 않은 당첨 회차 데이터입니다")
     profile = saju_profile if METHOD_MYUNGRI_HETU in selected_method_ids else None
     ranked, context = _feature_maps(history, profile)
-    if (METHOD_SELECTED_MEDIAN in selected_method_ids
-            and len(consensus_source_ids(selected_method_ids)) < 2):
-        raise ValueError("선택 공식 중앙값은 다른 로컬 추첨 공식을 2개 이상 함께 선택해야 합니다")
     context["excluded_combinations"] = tuple(tuple(sorted(combo)) for combo in excluded_combinations)
     if (
         METHOD_MYUNGRI_HETU in selected_method_ids

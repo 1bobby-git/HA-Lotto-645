@@ -30,13 +30,15 @@
           "enable_ai_recommendation": "Enable Home Assistant AI recommendation",
           "ai_task_entity_id": "AI Task entity (optional; blank uses the preferred data AI Task)",
           "ai_auto_generate": "Automatically generate AI recommendation for a new draw",
-          "allow_official_direct_fallback": "Allow limited direct Donghaeng Lottery fallback"
+          "allow_official_direct_fallback": "Allow limited direct Donghaeng Lottery fallback",
+          "advanced_methods": "Advanced: uniform algorithms / frequency presets (optional)"
         },
         "data_description": {
           "selected_methods": "Multiple formulas can be selected. Personal Four Pillars can only be enabled after the personal profile has been saved. None of these formulas changes the mathematical winning probability. The selected-formula median consensus requires at least two other local formulas and excludes AI.",
           "enable_ai_recommendation": "AI is independent from local formulas. Manual Refresh / Regenerate does not regenerate the AI recommendation.",
           "ai_auto_generate": "Only generates AI automatically when a new official draw is detected. Manual local regeneration suppresses AI generation.",
-          "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed."
+          "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed.",
+          "advanced_methods": "Alternative implementations/presets of existing families, not better winning strategies. Existing selections are preserved."
         }
       },
       "saju": {

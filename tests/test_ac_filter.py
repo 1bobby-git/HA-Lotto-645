@@ -107,10 +107,9 @@ def test_csprng_wiring_and_no_history_weighting(monkeypatch):
 
 
 def test_additive_catalog_defaults_legacy_ids_and_consensus_eligibility():
-    assert len(methods.METHODS) == 24
+    assert len(methods.METHODS) == 19
     assert AC not in sampling.UNIFORM_IDS and AC not in methods.DEFAULT_METHOD_IDS
-    assert methods.DEFAULT_METHOD_IDS == ('uniform_fisher_yates', 'uniform_floyd',
-        'uniform_rejection', 'uniform_sequential', 'calibrated_stratified')
+    assert methods.DEFAULT_METHOD_IDS == ('uniform_fisher_yates',)
     assert methods.METHODS_BY_ID[AC].sampling == AC
     assert methods.METHODS_BY_ID[AC].weights == {}
     assert methods.normalize_method_ids([AC, AC, 'delta_system']) == (AC, 'delta_system')

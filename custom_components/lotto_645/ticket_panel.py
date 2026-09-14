@@ -15,10 +15,10 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN, VERSION
 from .panel_metadata import panel_metadata
-from .historical_validation import MIN_TARGET_ROUND, MAX_SEED, HistoricalValidationError
+from .historical_validation import MIN_TARGET_ROUND, HistoricalValidationError
 from .historical_validation_runtime import async_validate_history
 from .const import AI_METHOD_ID
-from .methods import METHODS_BY_ID
+from .methods import METHODS_BY_ID, RETIRED_METHOD_LABELS
 from .purchased_tickets import PurchaseInputError, parse_round
 from .ticket_qr import parse_ticket_qr
 
@@ -53,7 +53,7 @@ def _coordinator(hass: HomeAssistant, message: dict) -> Any:
 
 def _review_rows(coordinator) -> list[dict]:
     from .const import AI_METHOD_ID
-    from .methods import METHODS_BY_ID
+    from .methods import METHODS_BY_ID, RETIRED_METHOD_LABELS
     from .review import review_name
     ids = list(getattr(coordinator, 'configured_method_ids', ()))
     ids.extend(key for key in getattr(coordinator, '_review_summaries', {}) if key not in ids)
@@ -62,7 +62,7 @@ def _review_rows(coordinator) -> list[dict]:
     rows = []
     for method_id in ids:
         summary = coordinator.review_for_method(method_id) if hasattr(coordinator, 'review_for_method') else {}
-        label = METHODS_BY_ID[method_id].label if method_id in METHODS_BY_ID else 'Home Assistant AI 추천' if method_id == AI_METHOD_ID else method_id
+        label = METHODS_BY_ID[method_id].label if method_id in METHODS_BY_ID else 'Home Assistant AI 추천' if method_id == AI_METHOD_ID else RETIRED_METHOD_LABELS.get(method_id, method_id)
         rows.append({'method_id': method_id, 'label': label, 'display_name': review_name(label, summary), **summary})
     return rows
 
@@ -80,7 +80,6 @@ def _view(coordinator: Any, round_no: int | None = None) -> dict:
                 'default_method_ids': list(getattr(coordinator, 'selected_method_ids', ()))
                     + ([AI_METHOD_ID] if getattr(coordinator, 'ai_enabled', False) else []),
                 'saju_profile_ready': getattr(coordinator, 'saju_profile_ready', False),
-                'default_seed': 0,
             },
             'reviews': _review_rows(coordinator),
             'review_round': coordinator.review_for_round(coordinator.result_round) if hasattr(coordinator, 'review_for_round') else {},
@@ -175,7 +174,6 @@ def _strict_int(value):
     vol.Required('round'): vol.All(_strict_int, vol.Range(min=MIN_TARGET_ROUND, max=999999)),
     vol.Required('method_ids'): vol.All([vol.In((*METHODS_BY_ID, AI_METHOD_ID))],
                                       vol.Length(min=1, max=len(METHODS_BY_ID) + 1)),
-    vol.Optional('seed', default=0): vol.All(_strict_int, vol.Range(min=0, max=MAX_SEED)),
 })
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -183,7 +181,7 @@ async def historical_validate(hass, connection, msg):
     """A read-only simulation response; deliberately never passed into _view."""
     try:
         coordinator = _coordinator(hass, msg)
-        result = await async_validate_history(hass, coordinator, msg['round'], msg['method_ids'], msg['seed'])
+        result = await async_validate_history(hass, coordinator, msg['round'], msg['method_ids'])
         if _coordinator(hass, msg) is not coordinator:
             raise HomeAssistantError('Integration reloaded during validation')
     except HistoricalValidationError as err:
