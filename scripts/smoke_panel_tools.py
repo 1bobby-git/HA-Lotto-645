@@ -42,18 +42,23 @@ async def verify_panel_tools(page):
     await page.evaluate("""catalog => {
         window.tools=el.shadowRoot.querySelector('lotto-panel-tools');
         window.toolsFixture={...el._latestToolsData,method_catalog:catalog,
-            draw_schedule:{round:1242,basis:'regular_schedule',scheduled_at:'2026-09-19T20:35:00+09:00',rollover_at:'2026-09-20T00:00:00+09:00',server_now:new Date().toISOString()},
+            draw_schedule:{round:1242,basis:'regular_schedule',scheduled_at:'2026-09-19T20:35:00+09:00',
+                sales_reopen_at:'2026-09-20T06:00:00+09:00',rollover_at:'2026-09-20T06:00:00+09:00',server_now:new Date().toISOString()},
             winning:{status:'evaluated',round:1241,winning_game_count:0,results:catalog.map(m=>({method_id:m.method_id,sensor_name:m.name,source:'local',recommended_numbers:[1,7,15,24,33,45],prize:'미당첨'}))},
             reviews:catalog.map(m=>({method_id:m.method_id,display_name:'★1.0 · '+m.name,reviewed_rounds:1})),
             review_round:{},result_verification:{status:'official_confirmed'},result_round:1241};
-        el.updateResults(toolsFixture);el._clearSmartSync();el.showScreen('review');
+        el.updateResults(toolsFixture);el._clearSmartSync();el.showScreen('home');
         window.wsBeforeTools=requests.length;
     }""", catalog)
     assert await page.locator('#predictions .method-info-trigger').count() == 18
     assert await page.locator('#reviews .method-info-trigger').count() == 18
     assert await page.locator('lotto-panel-tools').count() == 1
-    assert await page.locator('.clock-value').is_visible()
-    assert '한국시간' in await page.locator('.clock-date').text_content()
+    assert await page.locator('.hero-draw-countdown').is_visible()
+    assert '제 1,242회 추첨까지' in await page.locator('.hero-clock-label').text_content()
+    assert '동행복권 정규 일정 기준' in await page.locator('.hero-clock-date').text_content()
+    assert not await page.locator('lotto-panel-tools .countdown').is_visible()
+    assert await page.locator('lotto-panel-tools').evaluate('n=>n.getBoundingClientRect().height===0')
+    await page.evaluate("el.showScreen('review')")
 
     # Test unpositioned, sidebar-offset HA layouts as well as a positioned box.
     await verify_panel_host_layout(page)
@@ -144,20 +149,42 @@ async def verify_panel_tools(page):
         await page.keyboard.press('Escape')
     await page.evaluate("el.style.removeProperty('--safe-area-inset-top');el.style.removeProperty('--safe-area-inset-bottom')")
 
-    # Explicit instants, elapsed deadline, rollover, malformed data and XSS.
+    # Explicit instants: count reaches zero at draw time, remains zero until the
+    # Sunday 06:00 sales boundary, then starts the following-round countdown.
     result = await page.evaluate("""async () => {
-        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=1.11.9');
+        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=1.11.10');
         const s=toolsFixture.draw_schedule;
         const prior=countdownState(s,Date.parse(s.scheduled_at)-1000);
         const at=countdownState(s,Date.parse(s.scheduled_at));
+        const beforeReopen=countdownState(s,Date.parse(s.rollover_at)-1000);
         const next=countdownState(s,Date.parse(s.rollover_at));
+        tools.tickClock(Date.parse(s.scheduled_at));
+        const zeroAt=el.shadowRoot.querySelector('.hero-clock-value').textContent;
+        tools.tickClock(Date.parse(s.rollover_at)-1000);
+        const zeroBefore=el.shadowRoot.querySelector('.hero-clock-value').textContent;
+        const reopenNote=el.shadowRoot.querySelector('.hero-clock-date').textContent;
+        tools.tickClock(Date.parse(s.rollover_at));
+        const nextLabel=el.shadowRoot.querySelector('.hero-clock-label').textContent;
+        const nextValue=el.shadowRoot.querySelector('.hero-clock-value').textContent;
         const invalid=countdownState({...s,scheduled_at:'bad'});
         const div=document.createElement('div');
-        div.append(renderGuideMarkdown('# Test\\n\\n<script>window.bad=1</script>\\n\\n[x](javascript:alert) [data](data:text/html,bad) [ok](https://example.com/)','https://github.com/1bobby-git/HA-Lotto-645/blob/v1.11.9/docs/methods/a.md'));
-        return {prior:prior.seconds,waiting:at.waiting,at:at.seconds,next:next.round,invalid,
+        div.append(renderGuideMarkdown('# Test\\n\\n<script>window.bad=1</script>\\n\\n[x](javascript:alert) [data](data:text/html,bad) [ok](https://example.com/)','https://github.com/1bobby-git/HA-Lotto-645/blob/v1.11.10/docs/methods/a.md'));
+        tools.tickClock(Date.now()+(tools._clockOffset||0));
+        return {prior:prior.seconds,atWaiting:at.waiting,at:at.seconds,
+            beforeWaiting:beforeReopen.waiting,before:beforeReopen.seconds,next:next.round,
+            zeroAt,zeroBefore,reopenNote,nextLabel,nextValue,invalid,
+            oldVisible:!tools.shadowRoot.querySelector('.countdown').hidden,
             scripts:div.querySelectorAll('script').length,links:[...div.querySelectorAll('a')].map(n=>n.protocol)};
     }""")
-    assert result == {'prior':1,'waiting':True,'at':0,'next':1243,'invalid':None,'scripts':0,'links':['https:']}, result
+    assert result['prior'] == 1
+    assert result['atWaiting'] and result['at'] == 0
+    assert result['beforeWaiting'] and result['before'] == 0
+    assert result['next'] == 1243
+    assert result['zeroAt'] == result['zeroBefore'] == '0일 00시간 00분 00초'
+    assert '판매 시작' in result['reopenNote']
+    assert '1,243회 추첨까지' in result['nextLabel'] and result['nextValue'] != '0일 00시간 00분 00초'
+    assert result['invalid'] is None and not result['oldVisible']
+    assert result['scripts'] == 0 and result['links'] == ['https:']
     # A timer tick must never send purchases_get/result_check/generate requests.
     await page.wait_for_timeout(1150)
     assert await page.evaluate('requests.length===wsBeforeTools')
@@ -165,4 +192,4 @@ async def verify_panel_tools(page):
     assert await page.evaluate('tools._clockTimer===null')
     await page.evaluate("delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));el.remove()")
     assert await page.evaluate('tools._clockTimer===null && !tools.dialog.open && !el.hasAttribute("data-method-open")')
-    print('PASS: 18 guides, retry/cache/security/focus, 7 allocated scroll viewports, modal safe areas, deadline/rollover and no timer network')
+    print('PASS: 18 guides, single scroll, hero countdown zero-hold/restart, modal safe areas and no timer network')

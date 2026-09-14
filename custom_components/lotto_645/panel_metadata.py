@@ -10,43 +10,57 @@ from .methods import method_catalog
 KST = ZoneInfo("Asia/Seoul")
 FIRST_DRAW_DATE = date(2002, 12, 7)
 REGULAR_DRAW_TIME = time(20, 35)
-SCHEDULE_SOURCE = "https://www.dhlottery.co.kr/guide/wnrGuide"
+NEXT_ROUND_SALES_TIME = time(6, 0)
+SCHEDULE_SOURCE = "https://www.dhlottery.co.kr/lt645/intro"
 SCHEDULE_VERIFIED_ON = "2026-09-14"
-PUBLISHED_STATES = frozenset({"official_history", "official_confirmed", "official_corrected", "provisional", "cross_checked"})
 
 
 def draw_schedule(result_round: int | None = None, result_status: str = "waiting", *, now: datetime | None = None) -> dict:
-    """Calculate the upcoming regular draw, NOT a live broadcast confirmation.
+    """Calculate the regular draw countdown and next-round sales boundary.
 
-    Keep Saturday's elapsed deadline until a published result arrives or Sunday
-    begins. Missing historical results must not pin the clock to an old round.
-    All returned instants have an explicit Korean UTC offset.
+    Donghaeng Lottery currently publishes the regular draw at about Saturday
+    20:35 and internet sales are available Sunday-Friday 06:00-24:00, with
+    Saturday sales ending at 20:00.  After the Saturday draw deadline the
+    countdown intentionally stays at zero until Sunday 06:00; only then does it
+    roll to the next round.  ``result_round`` and ``result_status`` are accepted
+    for API compatibility but never make the display skip that sales boundary.
     """
+    del result_round, result_status
     current = now or datetime.now(KST)
     if current.tzinfo is None or current.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
     current = current.astimezone(KST)
-    day = current.date() + timedelta(days=(5 - current.weekday()) % 7)
+
+    # Sunday before internet sales reopen still belongs to Saturday's completed
+    # sales cycle.  From Sunday 06:00 onward the next Saturday is the active
+    # purchasable round and a fresh countdown may begin.
+    if current.weekday() == 6 and current.time() < NEXT_ROUND_SALES_TIME:
+        day = current.date() - timedelta(days=1)
+    else:
+        day = current.date() + timedelta(days=(5 - current.weekday()) % 7)
+
     round_no = (day - FIRST_DRAW_DATE).days // 7 + 1
     if round_no < 1:
         raise ValueError("date precedes the first Lotto draw")
-    # A published result settles this Saturday; advance the countdown only,
-    # never recommendations or the currently displayed result/wallet round.
-    if current.weekday() == 5 and result_status in PUBLISHED_STATES and type(result_round) is int and result_round >= round_no:
-        day += timedelta(days=7)
-        round_no += 1
+
     scheduled = datetime.combine(day, REGULAR_DRAW_TIME, KST)
-    rollover = datetime.combine(day + timedelta(days=1), time.min, KST)
+    sales_reopen = datetime.combine(day + timedelta(days=1), NEXT_ROUND_SALES_TIME, KST)
     return {
         "round": round_no,
         "scheduled_at": scheduled.isoformat(),
-        "rollover_at": rollover.isoformat(),
+        "sales_reopen_at": sales_reopen.isoformat(),
+        # Kept for the browser countdown API: rollover now means the exact point
+        # at which the following round becomes purchasable online.
+        "rollover_at": sales_reopen.isoformat(),
         "server_now": current.isoformat(),
         "timezone": "Asia/Seoul",
         "basis": "regular_schedule",
         "source_url": SCHEDULE_SOURCE,
         "source_verified_on": SCHEDULE_VERIFIED_ON,
-        "notice": "정규 일정 기준 · 회차별 방송 편성 변경은 자동 확인하지 않습니다.",
+        "notice": (
+            "정규 추첨·인터넷 판매시간 기준 · 토요일 20:35경부터 카운트를 0으로 유지하고 "
+            "일요일 06:00 다음 회차 판매 시작부터 새 카운트를 시작합니다. 방송 편성 및 판매점 운영시간은 달라질 수 있습니다."
+        ),
     }
 
 

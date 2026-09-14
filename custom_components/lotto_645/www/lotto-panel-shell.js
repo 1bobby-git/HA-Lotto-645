@@ -1,7 +1,7 @@
 /* Production entry: component presentation with HA-owned narrow-state decisions. */
 import './lotto-panel.js?v=1.11.5';
 import { applyComponentDesign } from './lotto-panel-design.js?v=1.11.7';
-import { applyPanelTools } from './lotto-panel-tools.js?v=1.11.10';
+import { applyPanelTools, countdownState } from './lotto-panel-tools.js?v=1.11.10';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const Panel = customElements.get('lotto-ticket-panel');
@@ -58,35 +58,56 @@ const HA_HOST_HEADER_STYLE = `
 }
 `;
 
-/* Donghaeng Lottery Lotto 6/45 number-band palette.
-   Apply it to every rendered lottery ball: recent draw, saved tickets and review rows. */
-const OFFICIAL_BALL_STYLE = `
+/* Colors sampled from the two user-supplied Donghaeng Lottery result captures.
+   Apply the same palette to recent draw, saved-ticket and recommendation balls. */
+const LOTTO_BALL_AND_COUNTDOWN_STYLE = `
 .draw-numbers .ball[data-band],
 .ticket-balls .ball[data-band]{
   color:#fff;
   border:0;
   background-image:none;
   box-shadow:none;
+  text-shadow:0 1px 1px rgba(0,0,0,.16);
 }
-.draw-numbers .ball[data-band="1"],.ticket-balls .ball[data-band="1"]{
-  background:#fbc400;
-  text-shadow:0 0 3px rgba(73,57,0,.8);
+.draw-numbers .ball[data-band="1"],.ticket-balls .ball[data-band="1"]{background:#e08f00}
+.draw-numbers .ball[data-band="2"],.ticket-balls .ball[data-band="2"]{background:#0063cc}
+.draw-numbers .ball[data-band="3"],.ticket-balls .ball[data-band="3"]{background:#d8314f}
+.draw-numbers .ball[data-band="4"],.ticket-balls .ball[data-band="4"]{background:#6d7381}
+.draw-numbers .ball[data-band="5"],.ticket-balls .ball[data-band="5"]{background:#2c9e44}
+.hero-draw-countdown{
+  display:flex;
+  align-items:baseline;
+  flex-wrap:wrap;
+  gap:4px 8px;
+  margin-top:15px;
+  min-height:28px;
+  font-variant-numeric:tabular-nums;
 }
-.draw-numbers .ball[data-band="2"],.ticket-balls .ball[data-band="2"]{
-  background:#69c8f2;
-  text-shadow:0 0 3px rgba(0,49,70,.8);
+.hero-clock-label{
+  color:var(--muted);
+  font-size:13px;
+  font-weight:600;
 }
-.draw-numbers .ball[data-band="3"],.ticket-balls .ball[data-band="3"]{
-  background:#ff7272;
-  text-shadow:0 0 3px rgba(64,0,0,.8);
+.hero-clock-value{
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.5;
+  font-weight:750;
+  letter-spacing:-.02em;
 }
-.draw-numbers .ball[data-band="4"],.ticket-balls .ball[data-band="4"]{
-  background:#aaa;
-  text-shadow:0 0 3px rgba(61,61,61,.8);
+.hero-clock-date{
+  flex-basis:100%;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.55;
 }
-.draw-numbers .ball[data-band="5"],.ticket-balls .ball[data-band="5"]{
-  background:#b0d840;
-  text-shadow:0 0 3px rgba(41,56,0,.8);
+.hero-draw-countdown[data-waiting="true"] .hero-clock-value{color:var(--blue)}
+lotto-panel-tools{display:block!important;height:0!important;min-height:0!important;margin:0!important;overflow:visible!important}
+@container wallet (max-width:560px){
+  .hero-draw-countdown{margin-top:12px;gap:2px 7px}
+  .hero-clock-label{font-size:12px}
+  .hero-clock-value{font-size:14px}
+  .hero-clock-date{font-size:11px}
 }
 @media(forced-colors:active){
   .draw-numbers .ball[data-band],.ticket-balls .ball[data-band]{
@@ -97,6 +118,79 @@ const OFFICIAL_BALL_STYLE = `
   }
 }
 `;
+
+function ensureHeroCountdown(panel) {
+  const headingCopy = panel.shadowRoot?.querySelector('#screen-home .page-heading > div');
+  if (!headingCopy) return null;
+  let countdown = headingCopy.querySelector('.hero-draw-countdown');
+  if (countdown) return countdown;
+  countdown = document.createElement('div');
+  countdown.className = 'hero-draw-countdown';
+  countdown.hidden = true;
+  countdown.setAttribute('aria-label', '로또 추첨까지 남은 시간');
+  countdown.setAttribute('aria-live', 'off');
+  const label = document.createElement('span');
+  label.className = 'hero-clock-label';
+  const value = document.createElement('strong');
+  value.className = 'hero-clock-value';
+  const date = document.createElement('span');
+  date.className = 'hero-clock-date';
+  countdown.append(label, value, date);
+  headingCopy.append(countdown);
+  return countdown;
+}
+
+function formatKst(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone:'Asia/Seoul', month:'2-digit', day:'2-digit', weekday:'short',
+    hour:'2-digit', minute:'2-digit', hour12:false,
+  }).format(date);
+}
+
+function renderHeroCountdown(panel, state, schedule) {
+  const root = ensureHeroCountdown(panel);
+  if (!root) return;
+  root.hidden = !state;
+  if (!state) return;
+  root.dataset.waiting = String(state.waiting);
+  const label = root.querySelector('.hero-clock-label');
+  const value = root.querySelector('.hero-clock-value');
+  const date = root.querySelector('.hero-clock-date');
+  const pad = number => String(number).padStart(2, '0');
+  label.textContent = state.waiting
+    ? `제 ${state.round.toLocaleString('ko-KR')}회 추첨 시간`
+    : `제 ${state.round.toLocaleString('ko-KR')}회 추첨까지`;
+  value.textContent = state.waiting
+    ? '0일 00시간 00분 00초'
+    : `${state.days}일 ${pad(state.hours)}시간 ${pad(state.minutes)}분 ${pad(state.remainder)}초`;
+  if (state.waiting) {
+    const reopen = formatKst(schedule?.sales_reopen_at || schedule?.rollover_at);
+    date.textContent = reopen
+      ? `다음 회차 인터넷 판매 시작 ${reopen} · 판매 시작 시 새 카운트가 시작됩니다.`
+      : '다음 회차 판매 시작 시 새 카운트가 시작됩니다.';
+  } else {
+    const draw = formatKst(state.at);
+    date.textContent = draw
+      ? `${draw}경 추첨 · 동행복권 정규 일정 기준`
+      : '동행복권 정규 일정 기준';
+  }
+}
+
+/* Reuse the existing local-only timer, but move its visible result into the
+   “이번 주의 작은 기대.” hero.  The old standalone countdown is always hidden. */
+const Tools = customElements.get('lotto-panel-tools');
+if (Tools && !Tools.prototype._lottoHeroCountdownPatched) {
+  Tools.prototype._lottoHeroCountdownPatched = true;
+  const previousTickClock = Tools.prototype.tickClock;
+  Tools.prototype.tickClock = function (now = Date.now() + (this._clockOffset || 0)) {
+    previousTickClock.call(this, now);
+    const oldSection = this.shadowRoot?.querySelector('.countdown');
+    if (oldSection) oldSection.hidden = true;
+    renderHeroCountdown(this.panel, countdownState(this.schedule, now), this.schedule);
+  };
+}
 
 Panel.prototype._syncHaHostHeader = function () {
   const narrow = Boolean(this._haNarrow);
@@ -159,18 +253,32 @@ Panel.prototype.render = function (...args) {
     }
     if (!root.querySelector('style[data-lotto-ha-host-header]')) {
       const style = document.createElement('style');
-      style.setAttribute('data-lotto-ha-host-header', '1.11.10');
+      style.setAttribute('data-lotto-ha-host-header', '1.11.11');
       style.textContent = HA_HOST_HEADER_STYLE;
       root.append(style);
     }
   }
+  ensureHeroCountdown(this);
   applyComponentDesign(this);
   applyPanelTools(this);
   if (root && !root.querySelector('style[data-lotto-official-ball-colors]')) {
     const style = document.createElement('style');
-    style.setAttribute('data-lotto-official-ball-colors', '1.11.10');
-    style.textContent = OFFICIAL_BALL_STYLE;
+    style.setAttribute('data-lotto-official-ball-colors', '1.11.11');
+    style.textContent = LOTTO_BALL_AND_COUNTDOWN_STYLE;
     root.append(style);
+  }
+  const tools = root?.querySelector('lotto-panel-tools');
+  if (tools) {
+    tools.style.height = '0';
+    tools.style.minHeight = '0';
+    tools.style.margin = '0';
+    tools.style.overflow = 'visible';
+    const oldSection = tools.shadowRoot?.querySelector('.countdown');
+    if (oldSection) oldSection.hidden = true;
+    if (tools.schedule) {
+      const now = Date.now() + (tools._clockOffset || 0);
+      renderHeroCountdown(this, countdownState(tools.schedule, now), tools.schedule);
+    }
   }
   this._syncHaHostHeader?.();
   return value;
