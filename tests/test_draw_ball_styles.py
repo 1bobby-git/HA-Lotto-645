@@ -26,19 +26,19 @@ def test_recent_draw_geometry_remains_flat_and_readable():
     assert 'gap:18px;' in rule(VIEW, '.draw-numbers')
 
 
-def test_every_number_ball_uses_user_reference_palette():
+def test_every_number_ball_forces_user_reference_palette():
     base = rule(
         SHELL,
         '.draw-numbers .ball[data-band],\n.ticket-balls .ball[data-band]',
     )
-    assert 'color:#fff;' in base
-    assert 'border:0;' in base
-    assert 'background-image:none;' in base
-    assert 'box-shadow:none;' in base
-    assert 'text-shadow:0 1px 1px rgba(0,0,0,.16);' in base
+    assert 'color:#fff!important;' in base
+    assert 'border:0!important;' in base
+    assert 'background-image:none!important;' in base
+    assert 'box-shadow:none!important;' in base
+    assert 'text-shadow:0 1px 1px rgba(0,0,0,.16)!important;' in base
 
-    # 1/10, 10/20, 20/30 and 40/45 bands are sampled from the first supplied
-    # result image.  The 31~40 blue-gray comes from the second supplied image.
+    # Exact dominant fill pixels sampled from the supplied result captures.
+    # 31~40 is sampled from the second image as requested.
     expected = {
         1: '#e08f00',
         2: '#0063cc',
@@ -51,7 +51,16 @@ def test_every_number_ball_uses_user_reference_palette():
             SHELL,
             f'.draw-numbers .ball[data-band="{band}"],.ticket-balls .ball[data-band="{band}"]',
         )
-        assert css == f'background:{color}'
+        assert css == f'background:{color}!important'
+
+
+def test_palette_style_is_refreshed_even_when_an_old_style_node_exists():
+    # v1.11.10/11 inserted the palette once and accepted a stale style node.
+    # The current shell must overwrite its text on every render/hot update.
+    assert "let ballStyle = root.querySelector('style[data-lotto-official-ball-colors]')" in SHELL
+    assert "ballStyle.setAttribute('data-lotto-official-ball-colors', '1.11.12')" in SHELL
+    assert 'ballStyle.textContent = LOTTO_BALL_AND_COUNTDOWN_STYLE;' in SHELL
+    assert "if (root && !root.querySelector('style[data-lotto-official-ball-colors]'))" not in SHELL
 
 
 def test_wallet_and_review_number_sizes_are_preserved():
