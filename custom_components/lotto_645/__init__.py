@@ -85,6 +85,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        await entry.runtime_data.async_flush_consensus()
         async_remove_ticket_panel(hass, entry.entry_id)
         if hass.services.has_service(DOMAIN, SERVICE_REFRESH):
             hass.services.async_remove(DOMAIN, SERVICE_REFRESH)

@@ -77,6 +77,8 @@ async def main():
         rejected=await flow.async_step_saju(submitted)
         assert rejected['errors']['base']=='invalid_saju_profile'
         serialize_form(rejected)
+        from smoke_consensus import verify_consensus
+        await verify_consensus(hass)
         # Test the coordinator's manual/AI parsing contracts without network/store.
         cls=coordinator_module.Lotto645Coordinator
         obj=object.__new__(cls)

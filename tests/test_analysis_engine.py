@@ -177,9 +177,10 @@ def test_selected_median_uses_only_selected_local_methods_and_runs_last():
     assert consensus.details["consensus_source_count"] == 3
     assert consensus.details["consensus_source_method_ids"] == list(selected[:-1])
     assert consensus.details["consensus_rule"].startswith("선택한 다른 로컬 공식")
-    assert set(consensus.details["consensus_number_median_scores"]) == {
-        str(number) for number in consensus.numbers
-    }
+    assert len(consensus.details["consensus_position_medians"]) == 6
+    assert all(abs(number - center) <= 1 for number, center in zip(
+        consensus.numbers, consensus.details["consensus_position_medians"]))
+    assert consensus.score is None
     assert all(
         0 <= value <= 3
         for value in consensus.details["consensus_number_support_votes"].values()
@@ -207,6 +208,17 @@ def test_legacy_bayesian_plus_scoring_formula_median_configuration_survives():
     assert result.recommendations[-1].details["consensus_source_count"] == 2
 
 
-def test_uniform_samplers_do_not_masquerade_as_median_score_contributors():
-    with pytest.raises(ValueError, match="2개 이상"):
-        analysis.build_analysis(_history(40), (*methods.DEFAULT_METHOD_IDS, methods.METHOD_SELECTED_MEDIAN))
+def test_uniform_samplers_contribute_actual_numbers_not_internal_scores():
+    result = analysis.build_analysis(
+        _history(40), (*methods.DEFAULT_METHOD_IDS, methods.METHOD_SELECTED_MEDIAN),
+        rng=random.Random(93),
+    )
+    consensus = result.recommendation_by_method(methods.METHOD_SELECTED_MEDIAN)
+    assert consensus is not None
+    assert consensus.score is None
+    assert consensus.details["consensus_source_count"] == len(methods.DEFAULT_METHOD_IDS)
+    assert consensus.details["consensus_source_numbers"] == {
+        item.method_id: list(item.numbers) for item in result.recommendations
+        if item.method_id != methods.METHOD_SELECTED_MEDIAN
+    }
+    assert "consensus_number_median_scores" not in consensus.details

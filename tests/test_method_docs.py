@@ -54,8 +54,9 @@ def catalog() -> list[dict]:
         features = ast.literal_eval(call.args[4])
         if method_id == 'selected_median_consensus':
             assert features == {}, 'Median is dynamically calculated, not a static feature blend'
-            features = {'selected_method_median': 1.0}
-        weights = {} if params.get('sampling') else {'individual': individual}
+            assert params['formula_version'] == 2
+            features = {}
+        weights = {} if params.get('sampling') or method_id == 'selected_median_consensus' else {'individual': individual}
         weights.update({key.removesuffix('_weight'): value for key, value in params.items()
                         if key.endswith('_weight') and value})
         assert not (features.keys() & weights.keys())

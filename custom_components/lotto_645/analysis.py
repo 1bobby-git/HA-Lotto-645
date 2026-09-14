@@ -41,8 +41,9 @@ from .methods import (
     METHODS_BY_ID,
     MethodDefinition,
     normalize_method_ids,
-    is_score_formula,
+    consensus_source_ids,
 )
+from .consensus import refresh_consensus
 from .sampling import generate_ticket, validate_fixed
 from .models import AnalysisResult, LottoDraw, Recommendation
 from .myungri import build_myungri_context, combo_myungri_details, combo_myungri_score
@@ -320,52 +321,10 @@ def _feature_maps(
 
 
 def _method_number_scores(method: MethodDefinition, ranked: dict[str, dict[int, float]]) -> dict[int, float]:
-    if method.method_id == METHOD_BAYESIAN_SHRINKAGE:
-        # Compatibility input to median consensus, NOT a ticket probability or
-        # the selection rule of the Bayesian sampler. Keep the 5% effect weak.
-        return {n: 0.5 + 0.05 * (ranked["bayesian_60"][n] - 0.5) for n in NUMBERS}
-    if method.method_id == METHOD_SELECTED_MEDIAN:
-        values = ranked.get("_selected_median_consensus")
-        if values is None:
-            raise ValueError("선택 공식 중앙값 계산 정보가 준비되지 않았습니다")
-        return dict(values)
     return {
         number: sum(weight * ranked[feature][number] for feature, weight in method.weights.items())
         / sum(method.weights.values())
         for number in NUMBERS
-    }
-
-
-def _prepare_selected_median(
-    selected_method_ids: Sequence[str],
-    ranked: dict[str, dict[int, float]],
-) -> dict[str, Any]:
-    """Build a robust consensus score from the user's other selected methods."""
-    contributors = tuple(
-        method_id for method_id in selected_method_ids
-        if is_score_formula(method_id)
-    )
-    if len(contributors) < 2:
-        raise ValueError("선택 공식 중앙값은 다른 점수형 추첨 공식을 2개 이상 함께 선택해야 합니다 (균등 샘플링 제외)")
-    source_scores = {
-        method_id: _method_number_scores(METHODS_BY_ID[method_id], ranked)
-        for method_id in contributors
-    }
-    medians: dict[int, float] = {}
-    spreads: dict[int, float] = {}
-    for number in NUMBERS:
-        values = [source_scores[method_id][number] for method_id in contributors]
-        medians[number] = float(median(values))
-        spreads[number] = max(values) - min(values)
-    ranked["_selected_median_consensus"] = medians
-    return {
-        "source_method_ids": list(contributors),
-        "source_method_labels": [METHODS_BY_ID[method_id].label for method_id in contributors],
-        "source_count": len(contributors),
-        "median_scores": medians,
-        "score_spreads": spreads,
-        "vote_counts": {number: 0 for number in NUMBERS},
-        "rule": "선택한 다른 로컬 공식들의 번호별 0~1 적합도 중앙값; AI 제외",
     }
 
 
@@ -558,16 +517,7 @@ def _recommendation_reason(method: MethodDefinition, combo: tuple[int, ...], con
     overdue_leaders = sorted(combo, key=lambda n: (-gap[n], n))[:2]
     pair, pair_value = _strongest_pair(combo, context)
 
-    if method.method_id == METHOD_SELECTED_MEDIAN:
-        meta = context["selected_median_consensus"]
-        votes = meta.get("vote_counts", {})
-        vote_leaders = sorted(combo, key=lambda n: (-votes.get(n, 0), -meta["median_scores"][n], n))[:2]
-        reason = (
-            f"선택한 다른 {meta['source_count']}개 공식의 번호별 적합도 중앙값을 사용; "
-            f"선택결과 중 지지표가 높은 {vote_leaders[0]}·{vote_leaders[1]}, "
-            f"중앙값 상위 조합을 과거 1등·중복 제외 조건으로 확정"
-        )
-    elif method.method_id == METHOD_MYUNGRI_HETU:
+    if method.method_id == METHOD_MYUNGRI_HETU:
         meta = context["myungri"]
         favorable = "·".join(meta.get("favorable_elements_ko", [])) or "보완오행"
         interactions = meta.get("interactions", {})
@@ -612,25 +562,6 @@ def _recommendation_reason(method: MethodDefinition, combo: tuple[int, ...], con
         "low_count_1_22": sum(number <= 22 for number in combo),
         "carryover_count": len(set(combo) & set(context["latest_numbers"])),
     }
-    if method.method_id == METHOD_SELECTED_MEDIAN:
-        meta = context["selected_median_consensus"]
-        details.update(
-            {
-                "consensus_source_method_ids": meta["source_method_ids"],
-                "consensus_source_methods": meta["source_method_labels"],
-                "consensus_source_count": meta["source_count"],
-                "consensus_rule": meta["rule"],
-                "consensus_number_median_scores": {
-                    str(number): round(meta["median_scores"][number], 6) for number in combo
-                },
-                "consensus_number_score_spread": {
-                    str(number): round(meta["score_spreads"][number], 6) for number in combo
-                },
-                "consensus_number_support_votes": {
-                    str(number): int(meta.get("vote_counts", {}).get(number, 0)) for number in combo
-                },
-            }
-        )
     if method.method_id == METHOD_MYUNGRI_HETU:
         details.update(combo_myungri_details(combo, context["myungri"]))
     return reason, details
@@ -670,10 +601,9 @@ def build_analysis(
             raise ValueError("유효하지 않은 당첨 회차 데이터입니다")
     profile = saju_profile if METHOD_MYUNGRI_HETU in selected_method_ids else None
     ranked, context = _feature_maps(history, profile)
-    if METHOD_SELECTED_MEDIAN in selected_method_ids:
-        context["selected_median_consensus"] = _prepare_selected_median(
-            selected_method_ids, ranked
-        )
+    if (METHOD_SELECTED_MEDIAN in selected_method_ids
+            and len(consensus_source_ids(selected_method_ids)) < 2):
+        raise ValueError("선택 공식 중앙값은 다른 로컬 추첨 공식을 2개 이상 함께 선택해야 합니다")
     context["excluded_combinations"] = tuple(tuple(sorted(combo)) for combo in excluded_combinations)
     if (
         METHOD_MYUNGRI_HETU in selected_method_ids
@@ -695,6 +625,10 @@ def build_analysis(
         method = METHODS_BY_ID[method_id]
         if progress_callback:
             progress_callback({"phase": "method_start", "method_id": method_id, "index": index})
+        if method_id == METHOD_SELECTED_MEDIAN:
+            if progress_callback:
+                progress_callback({"phase": "method_complete", "method_id": method_id, "index": index})
+            continue
         if method.sampling:
             blocked = past_combos | set(selected) | set(context["excluded_combinations"])
             # Reserve restored tickets belonging to later formulas as well.
@@ -734,17 +668,6 @@ def build_analysis(
             if progress_callback:
                 progress_callback({"phase": "method_complete", "method_id": method_id, "index": index})
             continue
-        if method_id == METHOD_SELECTED_MEDIAN:
-            contributor_ids = set(context["selected_median_consensus"]["source_method_ids"])
-            votes = Counter(
-                number
-                for recommendation in recommendations
-                if recommendation.method_id in contributor_ids
-                for number in recommendation.numbers
-            )
-            context["selected_median_consensus"]["vote_counts"] = {
-                number: votes[number] for number in NUMBERS
-            }
         combo, score, components = _select_candidate(
             method, history, ranked, context, selected, past_combos | set(restored_tickets.values()), quads, quints, generation_nonce
         )
@@ -759,28 +682,14 @@ def build_analysis(
                 "score_component_weights": {key: round(value, 6) for key, value in _component_weights(method).items()},
                 "score_meaning": "0~1의 후보 적합도이며 당첨 확률이 아닙니다",
                 "validation_scope": "계산 규칙 및 출력 조건 검증; 예측 효과 미입증",
-                "number_feature_weights": (
-                    {"selected_method_median": 1.0}
-                    if method.method_id == METHOD_SELECTED_MEDIAN
-                    else {key: round(value / sum(method.weights.values()), 6)
-                          for key, value in method.weights.items()}
-                ),
-                "number_feature_scores": (
-                    {str(n): {
-                        "selected_method_median": round(
-                            context["selected_median_consensus"]["median_scores"][n], 6
-                        ),
-                        "source_score_spread": round(
-                            context["selected_median_consensus"]["score_spreads"][n], 6
-                        ),
-                        "support_votes": int(
-                            context["selected_median_consensus"].get("vote_counts", {}).get(n, 0)
-                        ),
-                    } for n in combo}
-                    if method.method_id == METHOD_SELECTED_MEDIAN
-                    else {str(n): {key: round(ranked[key][n], 6)
-                                   for key in method.weights} for n in combo}
-                ),
+                "number_feature_weights": {
+                    key: round(value / sum(method.weights.values()), 6)
+                    for key, value in method.weights.items()
+                },
+                "number_feature_scores": {
+                    str(n): {key: round(ranked[key][n], 6) for key in method.weights}
+                    for n in combo
+                },
                 "exact_past_first_prize_match": False,
                 "max_numbers_matching_any_past_first_prize": _max_past_overlap(combo, history),
                 "latest_draw_overlap": len(set(combo) & set(history[-1].numbers)),
@@ -844,9 +753,10 @@ def build_analysis(
         "public_formula_notice": PUBLIC_FORMULA_NOTICE,
         "disclaimer": DISCLAIMER,
     }
-    return AnalysisResult(
+    result = AnalysisResult(
         target_round=history[-1].round + 1,
         based_on_round=history[-1].round,
         recommendations=tuple(recommendations),
         summary=summary,
     )
+    return refresh_consensus(result, selected_method_ids, history)

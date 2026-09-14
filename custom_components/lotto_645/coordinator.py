@@ -12,7 +12,7 @@ import voluptuous as vol
 
 from homeassistant.components.ai_task import async_generate_data
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -21,6 +21,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .methods import METHODS_BY_ID
 from .analysis import build_analysis
+from .consensus import refresh_consensus
 from .ai_formula import (AI_BASE_FORMULA, make_ai_ticket, explanation_prompt,
                          validate_explanation, validate_backend_ticket)
 from .formula_cache import restore_tickets, store_tickets
@@ -45,7 +46,7 @@ from .const import (
     UPDATE_INTERVAL,
 )
 from .history import LottoHistoryError, load_bundled_history
-from .methods import DEFAULT_METHOD_IDS, METHOD_MYUNGRI_HETU, normalize_method_ids
+from .methods import DEFAULT_METHOD_IDS, METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, normalize_method_ids
 from .models import AnalysisResult, Lotto645Data, LottoDraw, Recommendation
 from .myungri import extract_saju_profile, has_complete_saju_profile
 from .fast_result_state import FastResultState, evaluate_saved
@@ -84,6 +85,8 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         self._cached_ai_recommendation: Recommendation | None = None
         self._cached_ai_generated_at: datetime | None = None
         self._sampling_cache: dict[str, Any] = {}
+        self._consensus_save_task: asyncio.Task | None = None
+        self._consensus_dirty = False
         self._local_generation_nonce = 0
         self._local_generated_at: datetime | None = None
         self._suppress_ai_generation_once = False
@@ -105,6 +108,50 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         self._purchase_store: Store[dict[str, Any]] = Store(
             hass, 1, f"{DOMAIN}.purchases.{entry.entry_id}"
         )
+
+    @callback
+    def async_update_listeners(self) -> None:
+        """Publish derived consensus atomically with every source-data change.
+
+        The source sensors and panel share these records. Watching the coordinator
+        instead of re-reading rendered HA states avoids partial batches, entity-ID
+        renames, self-feedback and a second network/AI/regeneration request.
+        """
+        if self.data is not None:
+            analysis = refresh_consensus(
+                self.data.analysis, self.selected_method_ids, self.history,
+                updated_at=datetime.now(UTC).isoformat(),
+            )
+            if analysis is not self.data.analysis:
+                self.data = replace(self.data, analysis=analysis)
+                self._set_prediction_snapshot(
+                    analysis, self.data.ai_recommendation, self.data.ai_generated_at,
+                )
+                self._needs_storage_save = True
+                self._consensus_dirty = True
+                task = getattr(self, "_consensus_save_task", None)
+                if task is None or task.done():
+                    self._consensus_save_task = self.hass.async_create_task(
+                        self._async_save_consensus(), "lotto-consensus-save",
+                    )
+        super().async_update_listeners()
+
+    async def _async_save_consensus(self) -> None:
+        """Coalesce source publications, including updates during a disk write."""
+        while self._consensus_dirty:
+            self._consensus_dirty = False
+            try:
+                await self._save_storage()
+            except (OSError, HomeAssistantError):
+                self._needs_storage_save = True
+                _LOGGER.warning("합의 추천 저장 실패: 다음 데이터 갱신에서 재시도합니다")
+                break
+
+    async def async_flush_consensus(self) -> None:
+        """Finish the pending snapshot write before options reload/unload."""
+        task = getattr(self, "_consensus_save_task", None)
+        if task is not None:
+            await asyncio.shield(task)
 
     @property
     def configured_method_ids(self) -> tuple[str, ...]:
@@ -331,7 +378,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             # The result checker only needs identity + six numbers.  Do not copy
             # large analysis details or derived Saju context into the persistent
             # prediction snapshot.
-            return {
+            result = {
                 "index": item.index,
                 "method_id": item.method_id,
                 "label": item.label,
@@ -342,6 +389,11 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 "details": {},
                 "source": item.source,
             }
+            if item.method_id == METHOD_SELECTED_MEDIAN:
+                # A reactive aggregate can be newer than the source batch. Never
+                # attribute it to an earlier, potentially pre-draw timestamp.
+                result["generated_at"] = item.details.get("consensus_updated_at")
+            return result
 
         recommendations = [minimal_item(item) for item in analysis.recommendations]
         if ai_recommendation is not None:
@@ -438,6 +490,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 self.data.ai_generated_at,
             )
         elif (self._prediction_snapshot is None and self.history
+              and METHOD_SELECTED_MEDIAN not in self.selected_method_ids
               and not any(METHODS_BY_ID[key].sampling for key in self.selected_method_ids)):
             # Upgrade compatibility: v1.7 and older did not persist recommendation
             # snapshots.  Reconstruct the currently displayed target round from
@@ -583,6 +636,10 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         except ValueError as err:
             raise UpdateFailed(f"로또 분석 실패: {err}") from err
 
+        analysis = refresh_consensus(
+            analysis, self.selected_method_ids, self.history,
+            updated_at=datetime.now(UTC).isoformat(),
+        )
         self._sampling_cache = store_tickets(analysis, self.history, self.selected_method_ids,
                                             self._local_generation_nonce)
         if self._local_generated_at is None or not restored:
