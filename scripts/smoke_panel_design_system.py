@@ -27,6 +27,7 @@ async def verify_component_design(page: Page) -> None:
         window.designRequestsBefore = requests.length;
     }""")
     assert await page.locator('style[data-lotto-component-design]').count() == 1
+    assert await page.locator('style[data-lotto-official-ball-colors]').count() == 1
     assert await page.locator('.component-version').count() == 1
     assert await page.locator('.settings-copy').count() == 1
     assert await page.locator('.ha-component-title').count() == 0
@@ -46,6 +47,11 @@ async def verify_component_design(page: Page) -> None:
                 const q=s=>el.shadowRoot.querySelector(s);
                 const style=s=>getComputedStyle(q(s));
                 const rect=s=>q(s).getBoundingClientRect().toJSON();
+                const palette=s=>[...q(s).querySelectorAll('.ball')].map(n=>({
+                    band:n.dataset.band,bg:getComputedStyle(n).backgroundColor,
+                    color:getComputedStyle(n).color,image:getComputedStyle(n).backgroundImage,
+                    textShadow:getComputedStyle(n).textShadow
+                }));
                 return {
                   hostHeader:style('.ha-host-header').display,
                   height:rect('.header-row').height,
@@ -74,10 +80,8 @@ async def verify_component_design(page: Page) -> None:
                   drawBg:style('.draw-stage').backgroundColor,
                   drawOverflow:q('.draw-numbers').scrollWidth>q('.draw-numbers').clientWidth+1,
                   overflow:el.scrollWidth>el.clientWidth+1,
-                  palette:[...q('.draw-numbers').querySelectorAll('.ball')].map(n=>({
-                    band:n.dataset.band,bg:getComputedStyle(n).backgroundColor,
-                    color:getComputedStyle(n).color,image:getComputedStyle(n).backgroundImage
-                  }))
+                  palette:palette('.draw-numbers'),
+                  ticketPalette:palette('#wallet-games')
                 };
             }""")
             label = (viewport, width, narrow, dark)
@@ -107,11 +111,20 @@ async def verify_component_design(page: Page) -> None:
             assert state['logo']['right'] <= state['connectionRect']['left'] + 1, (label, state)
             assert state['connectionRect']['right'] <= state['settings']['left'] + 1, (label, state)
             assert abs(state['logo']['left'] - (state['main']['left'] + float(state['gutter'][:-2]))) < 1, (label, state)
-            expected = {'1':'rgb(205, 146, 52)', '2':'rgb(62, 99, 197)', '3':'rgb(189, 65, 82)',
-                        '4':'rgb(140, 140, 140)', '5':'rgb(90, 155, 80)'}
+            expected = {
+                '1':'rgb(251, 196, 0)',
+                '2':'rgb(105, 200, 242)',
+                '3':'rgb(255, 114, 114)',
+                '4':'rgb(170, 170, 170)',
+                '5':'rgb(176, 216, 64)',
+            }
             assert len(state['palette']) == 7
-            for ball in state['palette']:
-                assert ball['bg'] == expected[ball['band']] and ball['color'] == 'rgb(255, 255, 255)' and ball['image'] == 'none', (label, ball)
+            assert len(state['ticketPalette']) >= 6
+            for collection in (state['palette'], state['ticketPalette']):
+                for ball in collection:
+                    assert ball['bg'] == expected[ball['band']], (label, ball)
+                    assert ball['color'] == 'rgb(255, 255, 255)', (label, ball)
+                    assert ball['image'] == 'none' and ball['textShadow'] != 'none', (label, ball)
             for name in ('home', 'wallet', 'review'):
                 await page.locator(f'#tab-{name}').click()
                 assert await page.evaluate('el.scrollWidth<=el.clientWidth+1'), (label, name)
@@ -128,4 +141,4 @@ async def verify_component_design(page: Page) -> None:
     }""")
     # Design application, theme/width switches and local tabs must not fetch data.
     assert await page.evaluate('requests.length===designRequestsBefore')
-    print(f'PASS: {checked} shared design theme/viewport fixtures, fonts, header/logo/tabs, allocated panel width, palette, card/control radii and unchanged draw balls')
+    print(f'PASS: {checked} shared design fixtures and Donghaeng palette on draw/ticket balls')
