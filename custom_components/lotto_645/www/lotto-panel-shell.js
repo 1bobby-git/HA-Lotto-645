@@ -1,15 +1,14 @@
-/* Production entry: preserve the panel UI and follow Home Assistant's own narrow-state header behavior. */
+/* Production entry: component presentation with HA-owned narrow-state decisions. */
 import './lotto-panel.js?v=1.11.5';
 import { applyComponentDesign } from './lotto-panel-design.js?v=1.11.7';
+import { applyPanelTools } from './lotto-panel-tools.js?v=1.11.8';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const Panel = customElements.get('lotto-ticket-panel');
 if (!Panel) throw new Error('lotto-ticket-panel controller did not register');
 
 const HA_HOST_HEADER_STYLE = `
-/* The custom panel never guesses Home Assistant's breakpoint. The host supplies
-   the narrow property; this row follows the same visibility condition used by
-   Home Assistant's ha-panel-app. */
+/* HA supplies narrow; never infer its breakpoint from the component width. */
 .app-header{padding-top:var(--lotto-safe-top)}
 :host([data-ha-host-header]) .app-header{padding-top:0}
 .ha-host-header{display:none}
@@ -53,8 +52,6 @@ const HA_HOST_HEADER_STYLE = `
   white-space:nowrap;
   text-overflow:ellipsis;
 }
-/* Once the menu moves to the HA host row, the component header is again only
-   brand + component status/actions + its own tabs. */
 .header-row{position:relative}
 @container wallet (max-width:560px){
   .ha-host-title{margin-inline-start:var(--ha-space-2,8px)}
@@ -69,7 +66,6 @@ Panel.prototype._syncHaHostHeader = function () {
   this.toggleAttribute('data-ha-host-header', visible);
 };
 
-// ha-panel-custom supplies `narrow`; do not derive it from window or container width.
 const previousNarrow = Object.getOwnPropertyDescriptor(Panel.prototype, 'narrow');
 Object.defineProperty(Panel.prototype, 'narrow', {
   configurable: true,
@@ -84,7 +80,6 @@ Object.defineProperty(Panel.prototype, 'narrow', {
   },
 });
 
-// Docked-sidebar/kiosk state can change without `narrow` changing.
 const previousHass = Object.getOwnPropertyDescriptor(Panel.prototype, 'hass');
 if (previousHass?.set) {
   Object.defineProperty(Panel.prototype, 'hass', {
@@ -104,9 +99,6 @@ Panel.prototype.render = function (...args) {
   const root = this.shadowRoot;
   const appHeader = root?.querySelector('.app-header');
   const componentRow = root?.querySelector('.header-row');
-
-  // v1.11.4/1.11.5 inserted a permanent imitation first row. Remove it on
-  // every render before establishing the host-driven narrow row.
   root?.querySelector('style[data-lotto-two-tier-header]')?.remove();
   root?.querySelector('.ha-component-title')?.remove();
 
@@ -117,26 +109,23 @@ Panel.prototype.render = function (...args) {
       hostHeader.className = 'ha-host-header';
       hostHeader.setAttribute('role', 'banner');
       hostHeader.setAttribute('aria-label', `${PANEL_NAME} Home Assistant 헤더`);
-
       const menu = this.node?.('menu');
       if (menu) hostHeader.append(menu);
-
       const title = document.createElement('div');
       title.className = 'ha-host-title';
       title.textContent = PANEL_NAME;
       hostHeader.append(title);
       appHeader.insertBefore(hostHeader, appHeader.firstChild);
     }
-
     if (!root.querySelector('style[data-lotto-ha-host-header]')) {
       const style = document.createElement('style');
-      style.setAttribute('data-lotto-ha-host-header', '1.11.7');
+      style.setAttribute('data-lotto-ha-host-header', '1.11.8');
       style.textContent = HA_HOST_HEADER_STYLE;
       root.append(style);
     }
   }
-
   applyComponentDesign(this);
+  applyPanelTools(this);
   this._syncHaHostHeader?.();
   return value;
 };

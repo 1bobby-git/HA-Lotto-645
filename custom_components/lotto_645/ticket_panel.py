@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN, VERSION
+from .panel_metadata import panel_metadata
 from .purchased_tickets import PurchaseInputError, parse_round
 from .ticket_qr import parse_ticket_qr
 
@@ -68,7 +69,8 @@ def _view(coordinator: Any, round_no: int | None = None) -> dict:
     round_no = round_no or book.selected_round or (coordinator.data.analysis.target_round if coordinator.data else None)
     record = book.records.get(str(round_no), {})
     metadata = coordinator.result_metadata
-    return {'reviews': _review_rows(coordinator),
+    return {**panel_metadata(coordinator.result_round, metadata.get('status', 'waiting')),
+            'reviews': _review_rows(coordinator),
             'review_round': coordinator.review_for_round(coordinator.result_round) if hasattr(coordinator, 'review_for_round') else {},
             'review_storage_error': getattr(coordinator, 'review_storage_error', False),
             'review_save_pending': getattr(coordinator, '_review_save_error', False),
