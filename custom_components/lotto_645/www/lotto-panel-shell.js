@@ -58,6 +58,46 @@ const HA_HOST_HEADER_STYLE = `
 }
 `;
 
+/* Donghaeng Lottery Lotto 6/45 number-band palette.
+   Apply it to every rendered lottery ball: recent draw, saved tickets and review rows. */
+const OFFICIAL_BALL_STYLE = `
+.draw-numbers .ball[data-band],
+.ticket-balls .ball[data-band]{
+  color:#fff;
+  border:0;
+  background-image:none;
+  box-shadow:none;
+}
+.draw-numbers .ball[data-band="1"],.ticket-balls .ball[data-band="1"]{
+  background:#fbc400;
+  text-shadow:0 0 3px rgba(73,57,0,.8);
+}
+.draw-numbers .ball[data-band="2"],.ticket-balls .ball[data-band="2"]{
+  background:#69c8f2;
+  text-shadow:0 0 3px rgba(0,49,70,.8);
+}
+.draw-numbers .ball[data-band="3"],.ticket-balls .ball[data-band="3"]{
+  background:#ff7272;
+  text-shadow:0 0 3px rgba(64,0,0,.8);
+}
+.draw-numbers .ball[data-band="4"],.ticket-balls .ball[data-band="4"]{
+  background:#aaa;
+  text-shadow:0 0 3px rgba(61,61,61,.8);
+}
+.draw-numbers .ball[data-band="5"],.ticket-balls .ball[data-band="5"]{
+  background:#b0d840;
+  text-shadow:0 0 3px rgba(41,56,0,.8);
+}
+@media(forced-colors:active){
+  .draw-numbers .ball[data-band],.ticket-balls .ball[data-band]{
+    background:Canvas;
+    color:CanvasText;
+    border:1px solid CanvasText;
+    text-shadow:none;
+  }
+}
+`;
+
 Panel.prototype._syncHaHostHeader = function () {
   const narrow = Boolean(this._haNarrow);
   const visible = !this._hass?.kioskMode
@@ -119,13 +159,19 @@ Panel.prototype.render = function (...args) {
     }
     if (!root.querySelector('style[data-lotto-ha-host-header]')) {
       const style = document.createElement('style');
-      style.setAttribute('data-lotto-ha-host-header', '1.11.9');
+      style.setAttribute('data-lotto-ha-host-header', '1.11.10');
       style.textContent = HA_HOST_HEADER_STYLE;
       root.append(style);
     }
   }
   applyComponentDesign(this);
   applyPanelTools(this);
+  if (root && !root.querySelector('style[data-lotto-official-ball-colors]')) {
+    const style = document.createElement('style');
+    style.setAttribute('data-lotto-official-ball-colors', '1.11.10');
+    style.textContent = OFFICIAL_BALL_STYLE;
+    root.append(style);
+  }
   this._syncHaHostHeader?.();
   return value;
 };
