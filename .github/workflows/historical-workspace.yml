@@ -55,21 +55,48 @@ jobs:
               target.parent.mkdir(parents=True, exist_ok=True)
               target.write_text(content)
           print(f'Applied {len(prepared)} hash-verified files')
-          response = json.loads(subprocess.check_output(['gh','api','repos/1bobby-git/HA-Lotto-645/git/blobs/fd2fa03102a4642545c8483c6b050f4cc1f3edf7']))
-          integration = base64.b64decode(response['content'])
-          assert hashlib.sha256(integration).hexdigest() == '4e68cec8951c8bf3efa18a946dc57b6aec525476dcbc8e7b2806bdf12a397709'
-          Path('/tmp/integrate_historical.py').write_bytes(integration)
-          subprocess.run(['python','/tmp/integrate_historical.py'],check=True)
+          for sha in ['fd2fa03102a4642545c8483c6b050f4cc1f3edf7','314b3726197b2c37e42c5f58a94a9ae6fd5ecab8']:
+              response = json.loads(subprocess.check_output(['gh','api',f'repos/1bobby-git/HA-Lotto-645/git/blobs/{sha}']))
+              code = base64.b64decode(response['content'])
+              assert hashlib.sha1(b'blob '+str(len(code)).encode()+b'\0'+code).hexdigest() == sha
+              script = Path('/tmp') / f'{sha}.py'
+              script.write_bytes(code)
+              subprocess.run(['python',str(script)],check=True)
           PY
       - name: Install regression dependencies
         run: python -m pip install -q pytest 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0' playwright 'qrcode[pil]'
-      - name: Full Python regression suite
+      - name: Focused replay and style regression suite
         shell: bash
         run: |
           set -euo pipefail
           python -m compileall -q custom_components/lotto_645 scripts
+          git diff --check
           git diff --cached --check
-          python -m pytest -q 2>&1 | tee /tmp/historical-python.log
+          python -m pytest -q tests/test_historical_validation.py tests/test_draw_ball_styles.py 2>&1 | tee /tmp/historical-python.log
+      - name: Install actual HA baseline and required integrations
+        run: |
+          python -m pip install -q 'homeassistant==2026.9.0'
+          python - <<'PY'
+          import importlib.util,json,subprocess,sys
+          from pathlib import Path
+          root=Path(next(iter(importlib.util.find_spec('homeassistant').submodule_search_locations)))/'components'
+          pending=['ai_task','camera','stream','image','panel_custom','websocket_api']
+          visited=set(); requirements=set()
+          while pending:
+              domain=pending.pop()
+              if domain in visited: continue
+              visited.add(domain)
+              manifest=json.loads((root/domain/'manifest.json').read_text())
+              requirements.update(manifest.get('requirements',[]))
+              pending.extend(manifest.get('dependencies',[]))
+          if requirements: subprocess.run([sys.executable,'-m','pip','install','-q',*sorted(requirements)],check=True)
+          PY
+      - name: Verify real HA endpoint and unchanged storage bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/smoke_ha_options.py 2>&1 | tee /tmp/historical-ha.log
+          python scripts/smoke_panel_lifecycle.py
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
       - name: Test actual browser modules and isolated simulation workflow
@@ -98,6 +125,7 @@ jobs:
           name: historical-validation-tests
           path: |
             /tmp/historical-python.log
+            /tmp/historical-ha.log
             /tmp/historical-browser.log
             /tmp/historical-validation-source.tar
             /tmp/historical-validation-screens
