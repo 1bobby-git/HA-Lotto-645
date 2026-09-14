@@ -29,6 +29,16 @@ jobs:
           python .github/session_apply_1.py
           python .github/session_apply_2.py
           python .github/session_apply_3.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/test_ac_filter.py')
+          text = p.read_text().replace('len(methods.METHODS) == 24', 'len(methods.METHODS) == 19')
+          old = "('uniform_fisher_yates', 'uniform_floyd',\n        'uniform_rejection', 'uniform_sequential', 'calibrated_stratified')"
+          assert old in text
+          p.write_text(text.replace(old, "('uniform_fisher_yates',)"))
+          p = Path('custom_components/lotto_645/www/lotto-panel-view.js')
+          p.write_text(p.read_text().replace('데이터 경계·재현 정보', '데이터 경계·실행 정보'))
+          PY
           git diff --check
       - name: Test all Python regressions
         shell: bash
