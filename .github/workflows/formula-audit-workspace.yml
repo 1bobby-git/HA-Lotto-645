@@ -19,4 +19,4 @@ jobs:
         with:
           name: formula-audit-source
           path: /tmp/lotto-source.tar
-          retention-days: 1
+          retention-days: 2
