@@ -1,6 +1,6 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows } from './lotto-panel-view.js?v=1.11.3';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows } from './lotto-panel-view.js?v=1.12.2';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
@@ -271,7 +271,7 @@ class LottoTicketPanel extends HTMLElement {
     this.node('verification').dataset.state=meta.status==='conflict'?'conflict':meta.status?.startsWith('official')?'verified':'pending';
     const w=data.winning;
     this.node('result').textContent=w?.status==='evaluated'?`${w.round}회 · 당첨 ${w.winning_game_count}게임${Number(w.winning_game_count)>0?` · 최고 ${w.highest_prize}`:' · 당첨 없음'}`:w?.status==='conflict'?'출처 확인 후 다시 대조해요.':'대조할 추첨 전 추천 또는 구매번호가 아직 없어요.';
-    this.rows('predictions',(w?.results||[]).filter(g=>g.source!=='purchased').map(g=>[g.sensor_name,(g.recommended_numbers||[]).join(', '),g.prize]));
+    renderPredictionRows(this.node('predictions'),(w?.results||[]).filter(g=>g.source!=='purchased'),['대조할 추천번호를 기다리고 있어요.','추첨 전에 저장한 추천이 있으면 결과 발표 후 표시됩니다.']);
     const rr=data.review_round||{},current=new Map((rr.methods||[]).map(r=>[r.method_id,r]));
     this.rows('reviews',(data.reviews||[]).map(r=>{const now=current.get(r.method_id);return [r.display_name||r.label,r.reviewed_rounds||0,now&&Number.isFinite(now.review_score)?`${rr.status==='provisional'?'잠정 ':''}${now.review_score.toFixed(1)}점`:r.unrated_result?`${r.unrated_result.round}회 ${r.unrated_result.comparison?.prize||'판정 대기'} · 누적 제외`:'평가 대기',now?`${now.exact_match_count}개 / ${now.near_match_count}개`:'—',now?`${now.rank_this_round} / ${rr.peer_count}`:'—'];}));
     this.node('method-count').textContent=`${(data.reviews||[]).length}개 공식`;
