@@ -3,6 +3,7 @@ import { numberBalls, renderPredictionRows } from './lotto-panel-view.js?v=1.15.
 
 const SAJU = 'myungri_hetu_day_pillar';
 const AI = 'home_assistant_ai';
+const RESTORE_POLL_MS = 1200;
 const STYLE = `
 .main-tabs{overflow-x:auto;scrollbar-width:none;max-width:100%}
 .main-tabs::-webkit-scrollbar{display:none}
@@ -50,10 +51,10 @@ const STYLE = `
 }
 `;
 
-
 class HistoricalValidationView {
   constructor(panel) {
     this.panel = panel; this.form = panel.node('validation-form'); this.sequence = 0; this.busy = false; this.entry = null;
+    this.restoreToken = 0; this.restoreTimer = null;
     this.node('validation-form').onsubmit = event => { event.preventDefault(); void this.run(); };
     for (const id of ['validation-round']) this.node(id).oninput = () => this.changed();
     this.node('validation-choices').onchange = () => this.changed();
@@ -73,11 +74,52 @@ class HistoricalValidationView {
     const selected = new Set(this.options?.default_method_ids || []);
     for (const input of this.node('validation-choices').querySelectorAll('input')) input.checked = !input.disabled && selected.has(input.value);
   }
+  applyRequestState(state) {
+    if (Number.isInteger(Number(state?.round))) this.node('validation-round').value = String(state.round);
+    const selected = new Set(Array.isArray(state?.method_ids) ? state.method_ids : []);
+    if (selected.size) {
+      for (const input of this.node('validation-choices').querySelectorAll('input')) input.checked = !input.disabled && selected.has(input.value);
+    }
+  }
+  scheduleRestore() {
+    clearTimeout(this.restoreTimer);
+    this.restoreTimer = setTimeout(() => {
+      if (this.panel.isConnected) void this.restoreLatest(true);
+    }, RESTORE_POLL_MS);
+  }
+  async restoreLatest(polling = false) {
+    const entry = this.node('entry')?.value;
+    if (!entry) return;
+    const token = ++this.restoreToken;
+    try {
+      const state = await this.panel.request('historical_validation_state');
+      if (token !== this.restoreToken || entry !== this.node('entry')?.value || !this.panel.isConnected) return;
+      if (state.status === 'running') {
+        this.applyRequestState(state); this.busy = true; this.node('validation-output').hidden = true;
+        this.message(`${state.round}회 검증을 계산 중입니다. 다른 페이지로 이동해도 계산은 계속됩니다.`);
+        this.renderConditions(); this.scheduleRestore(); return;
+      }
+      clearTimeout(this.restoreTimer); this.restoreTimer = null; this.busy = false;
+      if (state.status === 'completed' && state.result) {
+        this.applyRequestState(state); this.render(state.result);
+        this.message(`${state.round}회 검증 완료. 페이지를 이동해도 이 결과를 다시 표시합니다.`);
+      } else if (state.status === 'error') {
+        this.applyRequestState(state); this.node('validation-output').hidden = true;
+        this.message(state.error || '과거 검증에 실패했습니다. 기존 기록은 변경되지 않았습니다.', true);
+      } else if (!polling) {
+        this.message('');
+      }
+      this.renderConditions();
+    } catch (error) {
+      if (token === this.restoreToken && polling && this.panel.isConnected) this.scheduleRestore();
+    }
+  }
   setData(data) {
     const entry = this.node('entry')?.value;
     const switched = entry !== this.entry;
     if (switched) {
-      this.entry = entry; this.sequence++; this.busy = false; this.catalogSignature = null; this.initialized = false;
+      this.entry = entry; this.sequence++; this.restoreToken++; clearTimeout(this.restoreTimer); this.restoreTimer = null;
+      this.busy = false; this.catalogSignature = null; this.initialized = false;
       this.node('validation-output').hidden = true; this.message('');
       this.node('validation-round').value = '';
     }
@@ -111,6 +153,7 @@ class HistoricalValidationView {
     if (max >= min && catalog.length && Array.isArray(this.options.default_method_ids)) this.initialized = true;
     this.node('validation-range').textContent = max >= min ? `${min}~${max}회 선택 가능 · 공식 이력 기준` : '검증 가능한 공식 이력이 아직 없습니다. 최소 31회 결과가 필요합니다.';
     this.renderConditions();
+    if (switched && max >= min && catalog.length) void this.restoreLatest();
   }
   renderConditions() {
     const round = Number(this.node('validation-round').value), ids = this.ids();
@@ -130,7 +173,7 @@ class HistoricalValidationView {
     if (!method_ids.length) { this.message('검증할 추첨 공식을 선택하세요.', true); return; }
     const sequence = ++this.sequence, entry = this.entry;
     this.busy = true; this.node('validation-output').hidden = true; this.renderConditions();
-    this.message(`${round}회 직전까지의 이력으로 번호를 생성하고 있습니다. 실제 추천번호와 리뷰는 변경하지 않습니다.`);
+    this.message(`${round}회 직전까지의 이력으로 번호를 생성하고 있습니다. 다른 페이지로 이동해도 계산은 계속됩니다.`);
     try {
       const result = await this.panel.request('historical_validate', {round, method_ids});
       if (sequence !== this.sequence || entry !== this.node('entry')?.value || !this.panel.isConnected) return;
@@ -148,7 +191,7 @@ class HistoricalValidationView {
     this.node('validation-title').textContent = `${data.target_round}회 검증 결과 · 실제 추천과 별도`;
     this.node('validation-meta').textContent = `사용 이력 1~${data.based_on_round}회 (${data.training_draw_count}회) · 현재 공식 v${data.component_version}`;
     numberBalls(this.node('validation-draw'), data.draw?.numbers || [], data.draw?.bonus);
-    this.node('validation-summary').textContent = `검증 ${data.checked_game_count}게임 · 당첨 ${data.winning_game_count}게임${data.highest_prize ? ` · 최고 ${data.highest_prize}` : ''}${data.unavailable_game_count ? ` · 생성 불가 ${data.unavailable_game_count}개` : ''} · 실선: 본번호 일치 / 점선: 보너스 일치`;
+    this.node('validation-summary').textContent = `검증 ${data.checked_game_count}게임 · 당첨 ${data.winning_game_count}게임${data.highest_prize ? ` · 최고 ${data.highest_prize}` : ''}${data.unavailable_game_count ? ` · 생성 불가 ${data.unavailable_game_count}개` : ''} · 회색 번호: 당첨번호와 불일치`;
     const root = this.node('validation-results');
     renderPredictionRows(root, data.results, ['검증번호가 없습니다.', '다른 추첨 공식을 선택해 다시 실행하세요.']);
     data.results.forEach((row, i) => {
@@ -171,9 +214,12 @@ class HistoricalValidationView {
 export function applyHistoricalValidation(panel) {
   if (!panel.node('screen-validation')) return;
   if (!panel.shadowRoot.querySelector('style[data-lotto-validation]')) {
-    const style = document.createElement('style'); style.dataset.lottoValidation = '1.15.0'; style.textContent = STYLE; panel.shadowRoot.append(style);
+    const style = document.createElement('style'); style.dataset.lottoValidation = '1.15.1'; style.textContent = STYLE; panel.shadowRoot.append(style);
   }
-  if (panel._historicalValidation && panel._historicalValidation.form !== panel.node('validation-form')) { panel._historicalValidation.sequence++; panel._historicalValidation = null; }
+  if (panel._historicalValidation && panel._historicalValidation.form !== panel.node('validation-form')) {
+    panel._historicalValidation.sequence++; panel._historicalValidation.restoreToken++;
+    clearTimeout(panel._historicalValidation.restoreTimer); panel._historicalValidation = null;
+  }
   if (!panel._historicalValidation) panel._historicalValidation = new HistoricalValidationView(panel);
   if (panel._latestToolsData) panel._historicalValidation.setData(panel._latestToolsData);
   if (!panel._historicalValidationHook) {

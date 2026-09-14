@@ -69,6 +69,7 @@ async def run():
                     return {round:1241,game_count:1,values:{game_a:'1, 7, 15, 24, 33, 45'},revision:'',will_replace:false};
                 }
                 if(msg.type==='lotto_645/purchases_save'){saved=msg.values;revision='saved-1';}
+                if(msg.type==='lotto_645/historical_validation_state')return {status:'idle'};
                 return {round:msg.round||1241,revision,values:saved,stored_rounds:revision?[1241]:[],purchased:{games:Object.entries(saved).filter(([,v])=>v.trim()).map(([k,v])=>({slot:k.at(-1).toUpperCase(),numbers:v.split(', ').map(Number),prize:'추첨 대기'}))},draw:{numbers:[11,13,19,20,31,44],bonus:27},result_round:1240,result_verification:{status:'official_history'},winning:null,recommendation_target:1241};
             }};
         }""")
@@ -170,11 +171,11 @@ async def run():
         assert await first.locator('.ball[data-hit="miss"]').count()==3
         label=await first.locator('.result-balls').get_attribute('aria-label')
         assert '당첨번호 일치 7, 24, 42' in label and '미일치 13, 15, 38' in label
-        assert float(await first.locator('.ball[data-hit="miss"]').first.evaluate('n=>getComputedStyle(n).opacity')) < 0.5
-        assert await first.locator('.ball[data-hit="main"]').first.evaluate("n=>getComputedStyle(n).outlineStyle==='solid'")
+        assert await first.locator('.ball[data-hit="miss"]').first.evaluate("n=>{const s=getComputedStyle(n);return s.opacity==='1'&&s.filter==='none'&&s.backgroundColor==='rgb(229, 231, 235)'&&s.color==='rgb(75, 85, 99)'&&s.outlineStyle==='none'}")
+        assert await first.locator('.ball[data-hit="main"]').first.evaluate("n=>{const s=getComputedStyle(n);return s.opacity==='1'&&s.filter==='none'&&s.outlineStyle==='none'}")
         second=winning_rows.nth(1)
         assert await second.locator('.ball[data-hit="bonus"]').count()==1
-        assert await second.locator('.ball[data-hit="bonus"]').evaluate("n=>getComputedStyle(n).outlineStyle==='dashed'")
+        assert await second.locator('.ball[data-hit="bonus"]').evaluate("n=>getComputedStyle(n).outlineStyle==='none'")
         assert '보너스 9' in await second.locator('.result-detail').text_content()
         assert await page.get_by_role('link', name='로또 통합 및 센서 설정').get_attribute('href') == '/config/integrations/integration/lotto_645'
         await page.evaluate("window.menuCount=0;el.addEventListener('hass-toggle-menu',()=>menuCount++);el.narrow=true")
@@ -197,7 +198,7 @@ async def run():
         await verify_panel_validation(page)
         assert not errors, errors
         await browser.close()
-        print('PASS: smart sync, HA-driven narrow host header, real ES modules, canonical logo, PNG QR, explicit save, draft preservation, safe areas, responsive views and panel tools')
+        print('PASS: smart sync, HA-driven narrow host header, real ES modules, canonical logo, PNG QR, explicit save, draft preservation, inactive-only match colors, safe areas, responsive views and panel tools')
 
 
 if __name__ == '__main__':

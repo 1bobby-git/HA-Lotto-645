@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -169,6 +170,48 @@ def _strict_int(value):
     return value
 
 
+def _validation_states(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
+    shared = hass.data.setdefault(KEY, {'entries': {}, 'registered': False})
+    return shared.setdefault('validation_states', {})
+
+
+def _validation_snapshot(state: dict[str, Any] | None) -> dict[str, Any]:
+    if not state:
+        return {'status': 'idle'}
+    return {key: value for key, value in state.items() if key != 'task'}
+
+
+async def _validation_worker(
+    hass: HomeAssistant,
+    coordinator: Any,
+    entry_id: str,
+    round_no: int,
+    method_ids: list[str],
+    state: dict[str, Any],
+) -> None:
+    try:
+        result = await async_validate_history(hass, coordinator, round_no, method_ids)
+        entry = hass.config_entries.async_get_entry(entry_id)
+        if entry is None or getattr(entry, 'runtime_data', None) is not coordinator:
+            raise HomeAssistantError('Integration reloaded during validation')
+    except HistoricalValidationError as err:
+        state.update(
+            status='error', error_code=err.code, error=str(err),
+            finished_at=datetime.now(UTC).isoformat(),
+        )
+    except (HomeAssistantError, ValueError, OSError):
+        state.update(
+            status='error', error_code='validation_failed',
+            error='과거 검증을 완료하지 못했습니다. 실제 추천번호와 리뷰는 변경되지 않았습니다.',
+            finished_at=datetime.now(UTC).isoformat(),
+        )
+    else:
+        state.update(
+            status='completed', result=result, error=None, error_code=None,
+            finished_at=datetime.now(UTC).isoformat(),
+        )
+
+
 @websocket_api.websocket_command({
     'type': 'lotto_645/historical_validate', vol.Required('entry_id'): str,
     vol.Required('round'): vol.All(_strict_int, vol.Range(min=MIN_TARGET_ROUND, max=999999)),
@@ -178,18 +221,63 @@ def _strict_int(value):
 @websocket_api.require_admin
 @websocket_api.async_response
 async def historical_validate(hass, connection, msg):
-    """A read-only simulation response; deliberately never passed into _view."""
-    try:
-        coordinator = _coordinator(hass, msg)
-        result = await async_validate_history(hass, coordinator, msg['round'], msg['method_ids'])
-        if _coordinator(hass, msg) is not coordinator:
-            raise HomeAssistantError('Integration reloaded during validation')
-    except HistoricalValidationError as err:
-        connection.send_error(msg['id'], err.code, str(err))
-    except (HomeAssistantError, ValueError, OSError):
-        connection.send_error(msg['id'], 'validation_failed', '과거 검증을 완료하지 못했습니다. 실제 추천번호와 리뷰는 변경되지 않았습니다.')
+    """Run a read-only simulation in an HA-owned task and retain its latest state."""
+    # `_validation_worker` owns async_validate_history(...) so page/WebSocket
+    # cancellation cannot abort the Home Assistant-owned calculation.
+    coordinator = _coordinator(hass, msg)
+    states = _validation_states(hass)
+    state = states.get(msg['entry_id'])
+    requested_ids = list(msg['method_ids'])
+
+    if state and state.get('status') == 'running':
+        if state.get('round') != msg['round'] or state.get('method_ids') != requested_ids:
+            connection.send_error(
+                msg['id'], 'validation_busy',
+                '다른 과거 회차 검증이 계산 중입니다. 완료 후 다시 실행하세요.',
+            )
+            return
+        task = state.get('task')
     else:
-        connection.send_result(msg['id'], result)
+        run_id = int(state.get('run_id', 0) if state else 0) + 1
+        state = {
+            'status': 'running', 'run_id': run_id, 'round': msg['round'],
+            'method_ids': requested_ids, 'started_at': datetime.now(UTC).isoformat(),
+            'finished_at': None, 'result': None, 'error': None, 'error_code': None,
+        }
+        states[msg['entry_id']] = state
+        task = hass.async_create_task(
+            _validation_worker(
+                hass, coordinator, msg['entry_id'], msg['round'], requested_ids, state,
+            ),
+            f'{DOMAIN} historical validation {msg["entry_id"]}',
+        )
+        state['task'] = task
+
+    if task is None:
+        connection.send_error(msg['id'], 'validation_failed', '과거 검증 작업 상태를 확인하지 못했습니다.')
+        return
+
+    await asyncio.shield(task)
+    snapshot = _validation_snapshot(state)
+    if snapshot.get('status') == 'completed':
+        connection.send_result(msg['id'], snapshot['result'])
+    else:
+        connection.send_error(
+            msg['id'], snapshot.get('error_code') or 'validation_failed',
+            snapshot.get('error') or '과거 검증을 완료하지 못했습니다.',
+        )
+
+
+@websocket_api.websocket_command({
+    'type': 'lotto_645/historical_validation_state', vol.Required('entry_id'): str,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def historical_validation_state(hass, connection, msg):
+    """Return the latest in-memory validation job/result for panel restoration."""
+    _coordinator(hass, msg)
+    state = _validation_states(hass).get(msg['entry_id'])
+    connection.send_result(msg['id'], _validation_snapshot(state))
 
 
 def _publish_panel(hass: HomeAssistant, shared: dict) -> None:
@@ -228,7 +316,10 @@ async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
                 StaticPathConfig('/lotto_645_brand', str(Path(__file__).parent / 'brand'), False)])
             shared['brand_registered'] = True
         if not shared.get('commands_registered', shared.get('registered', False)):
-            for handler in (purchases_get, qr_preview, purchases_save, result_check, historical_validate):
+            for handler in (
+                purchases_get, qr_preview, purchases_save, result_check,
+                historical_validate, historical_validation_state,
+            ):
                 websocket_api.async_register_command(hass, handler)
             shared['commands_registered'] = True
         shared['source_logo_verified'] = await hass.async_add_executor_job(_source_logo_available)
@@ -254,6 +345,7 @@ def async_remove_ticket_panel(hass: HomeAssistant, entry_id: str, *, permanent: 
         # 'integration unavailable' instead of disappearing from the sidebar.
         return
     shared['entries'].pop(entry_id, None)
+    shared.get('validation_states', {}).pop(entry_id, None)
     if shared['entries']:
         _publish_panel(hass, shared)
     else:

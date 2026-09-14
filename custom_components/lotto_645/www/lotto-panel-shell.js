@@ -1,9 +1,9 @@
 /* Production entry: component presentation with HA-owned narrow-state decisions. */
-import './lotto-panel.js?v=1.15.0';
+import './lotto-panel.js?v=1.15.1';
 import { applyComponentDesign } from './lotto-panel-design.js?v=1.14.0';
 import { applyPanelTools, countdownState } from './lotto-panel-tools.js?v=1.15.0';
 
-import { applyHistoricalValidation } from './lotto-panel-validation.js?v=1.15.0';
+import { applyHistoricalValidation } from './lotto-panel-validation.js?v=1.15.1';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const Panel = customElements.get('lotto-ticket-panel');
@@ -77,6 +77,30 @@ const LOTTO_BALL_AND_COUNTDOWN_STYLE = `
 .draw-numbers .ball[data-band="3"],.ticket-balls .ball[data-band="3"]{background:#d8314f!important}
 .draw-numbers .ball[data-band="4"],.ticket-balls .ball[data-band="4"]{background:#6d7381!important}
 .draw-numbers .ball[data-band="5"],.ticket-balls .ball[data-band="5"]{background:#2c9e44!important}
+.ticket-balls.result-balls[data-evaluated="true"] .ball[data-hit="main"],
+.ticket-balls.result-balls[data-evaluated="true"] .ball[data-hit="bonus"]{
+  outline:none!important;
+  box-shadow:none!important;
+  transform:none!important;
+  filter:none!important;
+  opacity:1!important;
+}
+.ticket-balls.result-balls[data-evaluated="true"] .ball[data-hit="miss"]{
+  background:#e5e7eb!important;
+  color:#4b5563!important;
+  border:1px solid #d1d5db!important;
+  text-shadow:none!important;
+  outline:none!important;
+  box-shadow:none!important;
+  transform:none!important;
+  filter:none!important;
+  opacity:1!important;
+}
+:host([data-theme="dark"]) .ticket-balls.result-balls[data-evaluated="true"] .ball[data-hit="miss"]{
+  background:#374151!important;
+  color:#d1d5db!important;
+  border-color:#4b5563!important;
+}
 .hero-draw-countdown{
   display:flex;
   align-items:baseline;
@@ -259,7 +283,7 @@ Panel.prototype.render = function (...args) {
       hostStyle = document.createElement('style');
       root.append(hostStyle);
     }
-    hostStyle.setAttribute('data-lotto-ha-host-header', '1.15.0');
+    hostStyle.setAttribute('data-lotto-ha-host-header', '1.15.1');
     hostStyle.textContent = HA_HOST_HEADER_STYLE;
   }
   ensureHeroCountdown(this);
@@ -272,8 +296,8 @@ Panel.prototype.render = function (...args) {
       ballStyle = document.createElement('style');
       root.append(ballStyle);
     }
-    /* Refresh stale v1.11.10/11 style nodes instead of accepting their old text. */
-    ballStyle.setAttribute('data-lotto-official-ball-colors', '1.15.0');
+    /* Refresh stale style nodes instead of accepting their old text. */
+    ballStyle.setAttribute('data-lotto-official-ball-colors', '1.15.1');
     ballStyle.textContent = LOTTO_BALL_AND_COUNTDOWN_STYLE;
   }
   const tools = root?.querySelector('lotto-panel-tools');
