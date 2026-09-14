@@ -211,7 +211,7 @@ export function applyComponentDesign(panel) {
   // One synchronous module: no remote fonts, delayed stylesheet or extra data calls.
   if (!root.querySelector('style[data-lotto-component-design]')) {
     const style = document.createElement('style');
-    style.dataset.lottoComponentDesign = '1.11.7';
+    style.dataset.lottoComponentDesign = '1.14.0';
     style.textContent = COMPONENT_STYLE;
     root.append(style);
   }
@@ -223,7 +223,7 @@ export function applyComponentDesign(panel) {
     version.className = 'component-version';
     tools.insertBefore(version, tools.querySelector('.entry-field'));
   }
-  const value = String(panel._panel?.config?.version || '1.11.7');
+  const value = String(panel._panel?.config?.version || '1.14.0');
   version.textContent = `v${value}`;
   version.setAttribute('aria-label', `컴포넌트 버전 ${value}`);
   const settings = tools.querySelector('.settings');

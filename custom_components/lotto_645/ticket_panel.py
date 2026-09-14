@@ -15,6 +15,10 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN, VERSION
 from .panel_metadata import panel_metadata
+from .historical_validation import MIN_TARGET_ROUND, MAX_SEED, HistoricalValidationError
+from .historical_validation_runtime import async_validate_history
+from .const import AI_METHOD_ID
+from .methods import METHODS_BY_ID
 from .purchased_tickets import PurchaseInputError, parse_round
 from .ticket_qr import parse_ticket_qr
 
@@ -70,6 +74,14 @@ def _view(coordinator: Any, round_no: int | None = None) -> dict:
     record = book.records.get(str(round_no), {})
     metadata = coordinator.result_metadata
     return {**panel_metadata(coordinator.result_round, metadata.get('status', 'waiting')),
+            'historical_validation': {
+                'min_round': MIN_TARGET_ROUND,
+                'max_round': coordinator.history[-1].round if getattr(coordinator, 'history', None) else 0,
+                'default_method_ids': list(getattr(coordinator, 'selected_method_ids', ()))
+                    + ([AI_METHOD_ID] if getattr(coordinator, 'ai_enabled', False) else []),
+                'saju_profile_ready': getattr(coordinator, 'saju_profile_ready', False),
+                'default_seed': 0,
+            },
             'reviews': _review_rows(coordinator),
             'review_round': coordinator.review_for_round(coordinator.result_round) if hasattr(coordinator, 'review_for_round') else {},
             'review_storage_error': getattr(coordinator, 'review_storage_error', False),
@@ -152,6 +164,36 @@ async def result_check(hass, connection, msg):
         connection.send_result(msg['id'], result)
 
 
+def _strict_int(value):
+    if type(value) is not int:
+        raise vol.Invalid('integer required')
+    return value
+
+
+@websocket_api.websocket_command({
+    'type': 'lotto_645/historical_validate', vol.Required('entry_id'): str,
+    vol.Required('round'): vol.All(_strict_int, vol.Range(min=MIN_TARGET_ROUND, max=999999)),
+    vol.Required('method_ids'): vol.All([vol.In((*METHODS_BY_ID, AI_METHOD_ID))],
+                                      vol.Length(min=1, max=len(METHODS_BY_ID) + 1)),
+    vol.Optional('seed', default=0): vol.All(_strict_int, vol.Range(min=0, max=MAX_SEED)),
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def historical_validate(hass, connection, msg):
+    """A read-only simulation response; deliberately never passed into _view."""
+    try:
+        coordinator = _coordinator(hass, msg)
+        result = await async_validate_history(hass, coordinator, msg['round'], msg['method_ids'], msg['seed'])
+        if _coordinator(hass, msg) is not coordinator:
+            raise HomeAssistantError('Integration reloaded during validation')
+    except HistoricalValidationError as err:
+        connection.send_error(msg['id'], err.code, str(err))
+    except (HomeAssistantError, ValueError, OSError):
+        connection.send_error(msg['id'], 'validation_failed', '과거 검증을 완료하지 못했습니다. 실제 추천번호와 리뷰는 변경되지 않았습니다.')
+    else:
+        connection.send_result(msg['id'], result)
+
+
 def _publish_panel(hass: HomeAssistant, shared: dict) -> None:
     """Replace our panel atomically; never remove the route during a reload."""
     existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
@@ -188,7 +230,7 @@ async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
                 StaticPathConfig('/lotto_645_brand', str(Path(__file__).parent / 'brand'), False)])
             shared['brand_registered'] = True
         if not shared.get('commands_registered', shared.get('registered', False)):
-            for handler in (purchases_get, qr_preview, purchases_save, result_check):
+            for handler in (purchases_get, qr_preview, purchases_save, result_check, historical_validate):
                 websocket_api.async_register_command(hass, handler)
             shared['commands_registered'] = True
         shared['source_logo_verified'] = await hass.async_add_executor_job(_source_logo_available)

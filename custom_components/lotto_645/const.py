@@ -4,7 +4,7 @@ from datetime import timedelta
 
 DOMAIN = "lotto_645"
 NAME = "Lotto 6/45 Analysis"
-VERSION = "1.13.0"
+VERSION = "1.14.0"
 
 PLATFORMS = ["sensor", "button", "binary_sensor"]
 UPDATE_INTERVAL = timedelta(hours=6)
