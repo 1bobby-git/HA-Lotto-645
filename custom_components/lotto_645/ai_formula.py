@@ -9,8 +9,9 @@ from .sampling import FORMULA_VERSION, generate_ticket, validate_fixed
 AI_BASE_FORMULA = "calibrated_stratified"
 
 
-def make_ai_ticket(history, local_recommendations, previous=None, *, rng=None):
+def make_ai_ticket(history, local_recommendations, previous=None, *, rng=None, excluded_combinations=()):
     blocked = {d.numbers for d in history} | {r.numbers for r in local_recommendations}
+    blocked.update(excluded_combinations)
     if previous is not None:
         blocked.add(previous.numbers)
     return generate_ticket(AI_BASE_FORMULA, excluded_combinations=blocked, rng=rng)

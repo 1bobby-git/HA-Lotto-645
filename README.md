@@ -8,7 +8,7 @@ Home Assistant용 **로또 6/45 전체 회차 분석 · 선택형 번호 추천 
 
 > 공정하고 독립적인 추첨에서 모든 6개 조합의 1등 확률은 **1 / 8,145,060**입니다. 이 통합의 통계·명리 공식은 조합 선택용 휴리스틱이며, 당첨을 보장하거나 실제 당첨 확률을 높인다고 주장하지 않습니다. 추천 적합도와 과거 리뷰 별점은 당첨 확률이 아닙니다.
 
-## 추첨 공식 24종
+## 추첨 공식 19종
 
 **추가 공식은 AC값 7 이상 1종만 선택했습니다.** 모든 번호쌍의 차이 다양성을 조건으로 사용해 기존 델타·균형 공식과 구별됩니다. 기본 선택과 기존 공식은 그대로 유지하며, [신규 후보 비교·기존 공식 정리 권고](docs/FORMULA_SELECTION_REVIEW.md)에 추가하지 않은 이유와 제거·통합 후보를 기록했습니다. 신규 공식은 자동 활성화되지 않습니다.
 
@@ -24,26 +24,21 @@ Home Assistant용 **로또 6/45 전체 회차 분석 · 선택형 번호 추천 
 4. [균등 공식 · 순차 포함](docs/methods/uniform_sequential.md)
 5. [균등 공식 · 조합보정 층화 CCSS](docs/methods/calibrated_stratified.md)
 6. [균등 공식 · 조합 인덱스](docs/methods/uniform_combination_rank.md)
-7. [독창 패턴 · 위상잔차 그래프](docs/methods/phase_residual_graph.md)
-8. [독창 패턴 · 전이·간격 위상](docs/methods/transition_gap_phase.md)
-9. [독창 패턴 · 다중시간대 공명](docs/methods/multiscale_resonance.md)
-10. [공개 공식 · 가중 빈도](docs/methods/weighted_frequency.md)
-11. [공개 공식 · 핫넘버](docs/methods/hot_numbers.md)
-12. [공개 공식 · 콜드·미출현](docs/methods/overdue_gap.md)
-13. [공개 공식 · 동반출현쌍](docs/methods/pair_cooccurrence.md)
-14. [공개 공식 · 삼중 동반출현](docs/methods/triplet_cooccurrence.md)
-15. [공개 공식 · 지수감쇠 최근성](docs/methods/recency_decay.md)
-16. [실험 공식 · 베이지안 수축](docs/methods/bayesian_shrinkage.md)
-17. [공개 공식 · 재등장 주기](docs/methods/cycle_rhythm.md)
-18. [공개 공식 · 균형 필터](docs/methods/balance_formula.md)
-19. [공개 공식 · 델타 시스템](docs/methods/delta_system.md)
-20. [공개 공식 · 이월수](docs/methods/carryover_formula.md)
-21. [공개 공식 · 종합 앙상블](docs/methods/public_ensemble.md)
-22. [명리 권장 · 개인 사주 원국·대운·추첨일](docs/methods/myungri_hetu_day_pillar.md)
-23. [형태 공식 · AC값 7 이상](docs/methods/ac_range_filter.md)
-24. [합의 추천 · 선택 공식 중앙값](docs/methods/selected_median_consensus.md)
+7. [공개 공식 · 가중 빈도](docs/methods/weighted_frequency.md)
+8. [빈도 프리셋 · 핫넘버](docs/methods/hot_numbers.md)
+9. [공개 공식 · 콜드·미출현](docs/methods/overdue_gap.md)
+10. [공개 공식 · 동반출현쌍](docs/methods/pair_cooccurrence.md)
+11. [빈도 프리셋 · 지수감쇠 최근성](docs/methods/recency_decay.md)
+12. [실험 공식 · 베이지안 수축](docs/methods/bayesian_shrinkage.md)
+13. [공개 공식 · 균형 필터](docs/methods/balance_formula.md)
+14. [공개 공식 · 델타 시스템](docs/methods/delta_system.md)
+15. [공개 공식 · 이월수](docs/methods/carryover_formula.md)
+16. [복합 공식 · 공개 지표 종합](docs/methods/public_ensemble.md)
+17. [명리 권장 · 개인 사주 원국·대운·추첨일](docs/methods/myungri_hetu_day_pillar.md)
+18. [형태 공식 · AC값 7 이상](docs/methods/ac_range_filter.md)
+19. [합의 추천 · 선택 공식 중앙값](docs/methods/selected_median_consensus.md)
 
-먼저 [공통 계산 원리·점수 읽는 법](docs/FORMULAS.md)을 확인하면 각 공식의 차이를 비교하기 쉽습니다. 위 24개는 **로컬 추첨 공식**이며 Home Assistant AI 추천은 별도 기능입니다.
+먼저 [공통 계산 원리·점수 읽는 법](docs/FORMULAS.md)을 확인하면 각 공식의 차이를 비교하기 쉽습니다. 위 19개는 **로컬 추첨 공식**이며 Home Assistant AI 추천은 별도 기능입니다.
 
 ## 추첨 공식 선택과 상세 정보
 
@@ -85,7 +80,7 @@ action: lotto_645.refresh
 action: lotto_645.generate_ai_recommendation
 ```
 
-번호는 백엔드 CCSS 공식과 OS CSPRNG가 확정하고, 설정 → AI의 기본 데이터 생성 AI 또는 선택한 `ai_task.*` 엔티티는 근거만 설명합니다. AI가 번호를 반환하거나 추첨 공식을 바꾸면 거절합니다. AI는 위 24개 로컬 공식이나 중앙값 집계에 포함되지 않습니다.
+번호는 백엔드 CCSS 공식과 OS CSPRNG가 확정하고, 설정 → AI의 기본 데이터 생성 AI 또는 선택한 `ai_task.*` 엔티티는 근거만 설명합니다. AI가 번호를 반환하거나 추첨 공식을 바꾸면 거절합니다. AI는 위 19개 로컬 공식이나 중앙값 집계에 포함되지 않습니다.
 
 ## 데이터 수집 안전 구조
 
@@ -117,6 +112,6 @@ HACS 사용자 저장소: `https://github.com/1bobby-git/HA-Lotto-645`
 
 ## 과거 회차 검증
 
-패널의 **과거 검증** 탭에서 회차를 선택하고 **검증번호 생성·당첨 확인**을 누릅니다. 예를 들어 1200회 검증은 **1~1199회 데이터만으로 새 번호를 생성한 뒤** 1200회 당첨번호와 대조합니다. 검증용 공식 선택과 시드는 실제 통합 설정을 바꾸지 않습니다.
+패널의 **과거 검증** 탭에서 회차를 선택하고 **검증번호 생성·당첨 확인**을 누릅니다. 예를 들어 1200회 검증은 **1~1199회 데이터만으로 새 번호를 생성한 뒤** 1200회 당첨번호와 대조합니다. 버튼을 누를 때마다 새 번호를 생성하며 별도의 난수 설정은 없습니다. 검증용 공식 선택은 실제 통합 설정을 바꾸지 않습니다.
 
-**실제 추천번호·당첨 기록·리뷰 점수는 원래 기록으로 유지됩니다.** 검증 결과는 저장·누적하지 않고 화면에만 표시합니다. 현재 버전의 과거 재실행이지 당시 실제 추천의 복원이나 예측력의 입증이 아닙니다. 최소 이력 때문에 31회부터 지원합니다. [계산 경계·시드·합의·AI 처리 상세 안내](docs/HISTORICAL_VALIDATION.md).
+**실제 추천번호·당첨 기록·리뷰 점수는 원래 기록으로 유지됩니다.** 검증 결과는 저장·누적하지 않고 화면에만 표시합니다. 현재 버전의 과거 재실행이지 당시 실제 추천의 복원이나 예측력의 입증이 아닙니다. 최소 이력 때문에 31회부터 지원합니다. [계산 경계·새 번호 생성·합의·AI 처리 상세 안내](docs/HISTORICAL_VALIDATION.md).

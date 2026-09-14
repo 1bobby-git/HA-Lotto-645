@@ -55,7 +55,7 @@ def refresh_consensus(
     analysis: AnalysisResult,
     selected_ids: Sequence[str],
     history: Iterable[LottoDraw],
-    *, updated_at: str | None = None,
+    *, updated_at: str | None = None, excluded_combinations: Iterable[tuple[int, ...]] = (),
 ) -> AnalysisResult:
     """Derive from current selected local outputs and atomically replace only it.
 
@@ -85,10 +85,11 @@ def refresh_consensus(
         if ticket is not None:
             sources[key] = ticket
     past = {tuple(d.numbers) for d in history if d.round <= analysis.based_on_round}
+    extra_blocked = set(excluded_combinations)
     signature = sha256(json.dumps({
         'version': CONSENSUS_VERSION, 'target': analysis.target_round,
         'based_on': analysis.based_on_round, 'selected': sorted(requested),
-        'sources': sorted(sources.items()), 'past': sorted(past),
+        'sources': sorted(sources.items()), 'past': sorted(past | extra_blocked),
     }, separators=(',', ':')).encode()).hexdigest()
     previous = analysis.recommendation_by_method(METHOD_SELECTED_MEDIAN)
     old_meta = analysis.summary.get('selected_median_consensus', {})
@@ -109,9 +110,9 @@ def refresh_consensus(
     recommendation = None
     if len(sources) >= MIN_SOURCES:
         # Current source duplicates and past winning tickets are hard exclusions.
-        # Previous consensus tickets are NOT excluded: this is a derived value,
-        # not an independently regenerated random game.
-        combo, centers = select_near_medians(tuple(sources.values()), past | set(sources.values()))
+        # Live consensus keeps identical inputs stable. An isolated historical
+        # rerun may explicitly exclude its prior simulation, never live records.
+        combo, centers = select_near_medians(tuple(sources.values()), past | set(sources.values()) | extra_blocked)
         meta['position_medians'] = list(centers)
         meta['status'] = 'ready' if combo else 'no_candidate_within_tolerance'
         if combo:

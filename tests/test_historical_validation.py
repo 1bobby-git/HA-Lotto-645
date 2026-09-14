@@ -1,4 +1,4 @@
-"""Holdout isolation, repeatability, and absolutely no live-state side effects."""
+"""Holdout isolation, fresh regeneration, and absolutely no live-state side effects."""
 from __future__ import annotations
 
 import asyncio
@@ -44,10 +44,10 @@ def numbers(result):
 ])
 def test_target_and_future_results_cannot_influence_generated_numbers(ids):
     rows=history();before=deepcopy(rows)
-    baseline=v.run_historical_validation(rows,61,ids,17)
+    baseline=v.run_historical_validation(rows,61,ids,rng=random.Random(17))
     changed=[r if r.round<61 else replace(r,numbers=(1,2,3,4,5,6),bonus=7,
                                         first_prize_amount=999999999) for r in rows]
-    altered=v.run_historical_validation(changed,61,ids,17)
+    altered=v.run_historical_validation(changed,61,ids,rng=random.Random(17))
     assert numbers(baseline)==numbers(altered)
     assert baseline['training_sha256']==altered['training_sha256']
     assert baseline['draw']['numbers']!=altered['draw']['numbers']
@@ -79,8 +79,8 @@ def test_exact_target_jackpot_is_not_excluded_as_a_known_winning_combination(mon
     assert result['winning_game_count']==1
     assert len(captured['prefix'])==60
     assert 'restored_tickets' not in captured['options']
-    assert 'excluded_combinations' not in captured['options']
-    assert captured['nonce']==0
+    assert captured['options']['excluded_combinations']==()
+    assert captured['nonce']>0
 
 
 @pytest.mark.parametrize('target,code', [(1,'invalid_round'),(30,'invalid_round'),(True,'invalid_round'),
@@ -91,21 +91,41 @@ def test_invalid_or_unpublished_targets_are_rejected(target,code):
     assert err.value.code==code
 
 
-def test_minimum_valid_round_and_seed_replay():
+def test_minimum_valid_round_and_test_only_rng_injection():
     rows=history();ids=('uniform_floyd',)
-    a=v.run_historical_validation(rows,31,ids,5)
-    b=v.run_historical_validation(rows,31,ids,5)
-    c=v.run_historical_validation(rows,31,ids,6)
+    a=v.run_historical_validation(rows,31,ids,rng=random.Random(5))
+    b=v.run_historical_validation(rows,31,ids,rng=random.Random(5))
+    c=v.run_historical_validation(rows,31,ids,rng=random.Random(6))
     assert a['training_last_round']==30 and numbers(a)==numbers(b)
     assert numbers(a)!=numbers(c)
-    assert a['rng']=='seeded_simulation_prng'
+    assert a['rng']=='injected_test_rng' and 'seed' not in a
     assert a['generated_at']>a['draw']['draw_date']
 
 
-@pytest.mark.parametrize('seed', [True,-1,1.2,'1',2**32])
-def test_seed_is_bounded_integer(seed):
-    with pytest.raises(v.HistoricalValidationError, match='시드'):
-        v.run_historical_validation(history(),61,('uniform_floyd',),seed)
+def test_fresh_rng_and_previous_simulation_exclusion():
+    rows=history();ids=('uniform_fisher_yates','ac_range_filter','selected_median_consensus','home_assistant_ai')
+    prior=()
+    for _ in range(5):
+        result=v.run_historical_validation(rows,61,ids,previous_tickets=prior)
+        current=tuple(tuple(r['recommended_numbers']) for r in result['results'] if r['generation_status']=='generated')
+        assert set(current).isdisjoint(prior)
+        assert len(current)==len(set(current))
+        assert result['rng']=='system_csprng' and 'seed' not in result
+        prior=current
+
+
+def test_previous_exclusion_changes_even_identical_test_rng():
+    rows=history();ids=('weighted_frequency', 'uniform_floyd')
+    a=v.run_historical_validation(rows,61,ids,rng=random.Random(15))
+    prior=tuple(tuple(r['recommended_numbers']) for r in a['results'])
+    b=v.run_historical_validation(rows,61,ids,previous_tickets=prior,rng=random.Random(15))
+    assert set(tuple(r['recommended_numbers']) for r in b['results']).isdisjoint(prior)
+
+
+@pytest.mark.parametrize('bad', [(1,2,3), (1,1,2,3,4,5), (True,2,3,4,5,6)])
+def test_malformed_prior_simulations_fail_closed(bad):
+    with pytest.raises(v.HistoricalValidationError):
+        v.run_historical_validation(history(),61,('uniform_floyd',),previous_tickets=(bad,))
 
 
 @pytest.mark.parametrize('ids', [(),('unknown',),('uniform_floyd','uniform_floyd'),
@@ -160,7 +180,7 @@ def test_runtime_calls_no_live_write_or_refresh_and_snapshots_inputs():
         def executor(fn):
             calls.append(fn);return loop.run_in_executor(None,fn)
         hass=SimpleNamespace(data={},async_add_executor_job=executor)
-        result=await rt.async_validate_history(hass,obj,61,('uniform_floyd',),9)
+        result=await rt.async_validate_history(hass,obj,61,('uniform_floyd',))
         await asyncio.sleep(0)
         assert result['based_on_round']==60 and not hass.data[rt.KEY]
         assert before=={k:val for k,val in vars(obj).items() if not isinstance(val,Mock)}
@@ -205,4 +225,23 @@ def test_ui_and_websocket_separation_is_explicit():
     assert "request('historical_validate'" in js
     assert "node('predictions')" not in js and "node('reviews')" not in js
     assert 'sequence !== this.sequence' in js
+    assert 'validation-seed' not in js and 'data.seed' not in js
+    assert "vol.Optional('seed'" not in endpoint
     assert "localStorage" not in js and "setInterval" not in js
+
+
+def test_runtime_two_clicks_exclude_previous_and_keep_one_bounded_batch():
+    async def run():
+        loop=asyncio.get_running_loop()
+        hass=SimpleNamespace(data={},async_add_executor_job=lambda fn:loop.run_in_executor(None,fn))
+        obj=SimpleNamespace(entry=SimpleNamespace(entry_id='one'),history=history(),saju_profile_ready=False)
+        a=await rt.async_validate_history(hass,obj,61,('uniform_floyd',))
+        b=await rt.async_validate_history(hass,obj,61,('uniform_floyd',))
+        assert numbers(a)!=numbers(b) and b['previous_simulation_excluded']
+        c=await rt.async_validate_history(hass,obj,62,('uniform_floyd',))
+        assert not c['previous_simulation_excluded']
+        assert len(hass.data[rt.LAST_KEY])==1
+        replacement=SimpleNamespace(entry=obj.entry,history=obj.history,saju_profile_ready=False)
+        d=await rt.async_validate_history(hass,replacement,62,('uniform_floyd',))
+        assert not d['previous_simulation_excluded']
+    asyncio.run(run())

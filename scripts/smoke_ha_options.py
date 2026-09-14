@@ -50,6 +50,9 @@ async def main():
         assert menu['menu_options']==['recommendations','saju','purchases']
         serialize_form(await flow.async_step_recommendations())
         serialize_form(await flow.async_step_saju())
+        advanced_result=await flow.async_step_recommendations({const.CONF_SELECTED_METHODS:['weighted_frequency'], 'advanced_methods':['uniform_floyd']})
+        assert advanced_result['data'][const.CONF_SELECTED_METHODS]==['weighted_frequency','uniform_floyd']
+        assert 'advanced_methods' not in advanced_result['data']
         result=await flow.async_step_recommendations({const.CONF_SELECTED_METHODS:['weighted_frequency']})
         assert result['type']==FlowResultType.CREATE_ENTRY
         invalid=await flow.async_step_recommendations({const.CONF_SELECTED_METHODS:['myungri_hetu_day_pillar']})

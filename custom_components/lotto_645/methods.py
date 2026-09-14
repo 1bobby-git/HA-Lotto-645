@@ -104,34 +104,6 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
     ),
 
     MethodDefinition(
-        METHOD_PHASE_RESIDUAL,
-        "독창 패턴 · 위상잔차 그래프",
-        "독창 분석",
-        "전체 장기 빈도와 최근 변화 방향이 서로 엇갈리는 번호를 찾고, 변화 속도·다음 회차 전이·번호쌍 연결을 함께 평가합니다. 단순 핫/콜드 빈도 추종보다 여러 시간축의 방향 차이를 중시합니다.",
-        {"counter_phase": 0.34, "phase_velocity": 0.23, "transition": 0.20, "curvature": 0.13, "gap_surprise": 0.10},
-        pair_weight=0.20,
-        diversity_weight=0.10,
-    ),
-    MethodDefinition(
-        METHOD_TRANSITION_GAP,
-        "독창 패턴 · 전이·간격 위상",
-        "독창 분석",
-        "직전 당첨번호가 과거에 나온 뒤 다음 회차에서 어떤 번호가 뒤따랐는지와 현재 미출현 간격의 위치를 결합합니다. 최근 변화의 굴곡과 장기 극단값도 함께 보정합니다.",
-        {"transition": 0.31, "curvature": 0.24, "gap_surprise": 0.18, "counter_phase": 0.17, "long_neutral": 0.10},
-        pair_weight=0.17,
-        diversity_weight=0.12,
-    ),
-    MethodDefinition(
-        METHOD_MULTISCALE_RESONANCE,
-        "독창 패턴 · 다중시간대 공명",
-        "독창 분석",
-        "최근 30·120·260회와 전체 구간의 잔차·곡률·전이를 결합합니다. 전이·그래프·간격을 보조로 사용해 한 구간의 일시적 급등에만 끌려가지 않도록 구성했습니다.",
-        {"phase_velocity": 0.22, "curvature": 0.19, "counter_phase": 0.18, "transition": 0.16, "graph_strength": 0.15, "gap_balance": 0.10},
-        pair_weight=0.16,
-        diversity_weight=0.13,
-        balance_weight=0.08,
-    ),
-    MethodDefinition(
         METHOD_WEIGHTED_FREQUENCY,
         "공개 공식 · 가중 빈도",
         "공개 분석식",
@@ -143,7 +115,7 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
     ),
     MethodDefinition(
         METHOD_HOT_NUMBERS,
-        "공개 공식 · 핫넘버",
+        "빈도 프리셋 · 핫넘버",
         "공개 분석식",
         "최근 10·30회에서 출현이 늘고 있는 번호를 우선하는 전형적인 핫넘버 공식입니다. 번호대와 조합 내부 연결을 함께 보정해 최근 번호만 과도하게 몰리는 현상을 줄입니다.",
         {"frequency_10": 0.44, "frequency_30": 0.34, "phase_velocity_positive": 0.22},
@@ -171,19 +143,8 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         balance_weight=0.06,
     ),
     MethodDefinition(
-        METHOD_TRIPLET_COOCCURRENCE,
-        "공개 공식 · 삼중 동반출현",
-        "공개 분석식",
-        "세 번호가 같은 회차에 함께 등장한 조합을 전체 및 최근 구간에서 평가합니다. 두 번호짜리 동반출현보다 더 강한 묶음 구조를 찾되 빈도 부족으로 인한 과대평가를 막기 위해 최근성과 장기 중립성을 함께 사용합니다.",
-        {"triplet_strength": 0.46, "graph_strength": 0.20, "frequency_100": 0.14, "gap_balance": 0.10, "long_neutral": 0.10},
-        triplet_weight=0.28,
-        pair_weight=0.08,
-        balance_weight=0.06,
-        pool_size=23,
-    ),
-    MethodDefinition(
         METHOD_RECENCY_DECAY,
-        "공개 공식 · 지수감쇠 최근성",
+        "빈도 프리셋 · 지수감쇠 최근성",
         "공개 분석식",
         "가장 최근 회차에 큰 가중치를 주고 과거로 갈수록 반감기 공식으로 영향력을 줄입니다. 고정 10·30회 경계 대신 연속적인 최근성 가중치를 사용합니다.",
         {"frequency_decay": 0.58, "frequency_30": 0.16, "frequency_100": 0.10, "graph_strength": 0.08, "gap_balance": 0.08},
@@ -197,16 +158,6 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         "공개 분석식",
         "최근 최대 300회 빈도를 균등 사전분포(강도 500)로 수축하고 5%만 반영합니다. 순위 재확대 없이 가중 비복원추출하며 당첨 예측 근거는 없습니다.",
         {}, pool_size=45, sampling="bayesian_shrinkage", formula_version=2,
-    ),
-    MethodDefinition(
-        METHOD_CYCLE_RHYTHM,
-        "공개 공식 · 재등장 주기",
-        "공개 분석식",
-        "각 번호의 과거 등장 간격 분포에서 중앙 재등장 주기를 구하고 현재 미출현 간격이 그 주기에 얼마나 가까운지 평가합니다. 로또가 기억을 가진다는 의미는 아니며 주기형 휴리스틱으로만 사용합니다.",
-        {"cycle_fit": 0.46, "gap_balance": 0.18, "frequency_100": 0.14, "transition": 0.12, "long_neutral": 0.10},
-        pair_weight=0.08,
-        balance_weight=0.10,
-        diversity_weight=0.08,
     ),
     MethodDefinition(
         METHOD_BALANCE,
@@ -244,9 +195,9 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
     ),
     MethodDefinition(
         METHOD_PUBLIC_ENSEMBLE,
-        "공개 공식 · 종합 앙상블",
-        "추천 공개 분석식",
-        "가중 빈도·최근성·미출현·동반출현·균형·델타·이월수 등 성격이 다른 공개형 휴리스틱을 합의 점수로 결합한 권장안입니다. 단일 지표 의존을 줄이는 설계이며 실제 예측력 향상이 입증된 것은 아닙니다.",
+        "복합 공식 · 공개 지표 종합",
+        "공개 분석식",
+        "가중 빈도·최근성·미출현·동반출현·균형·델타·이월수 등 성격이 다른 공개형 휴리스틱을 복합 선호 점수로 결합합니다. 단일 지표 의존을 줄이는 설계이며 실제 예측력 향상이 입증된 것은 아닙니다.",
         {"frequency_10": 0.08, "frequency_30": 0.10, "frequency_100": 0.10, "frequency_decay": 0.08, "bayesian_60": 0.08, "overdue_capped": 0.08, "transition": 0.10, "graph_strength": 0.12, "triplet_strength": 0.08, "long_neutral": 0.04, "gap_balance": 0.04},
         pair_weight=0.14,
         triplet_weight=0.07,
@@ -296,16 +247,14 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
     ),
 )
 
+RETIRED_METHOD_LABELS: Final = {'cycle_rhythm': '공개 공식 · 재등장 주기', 'triplet_cooccurrence': '공개 공식 · 삼중 동반출현', 'multiscale_resonance': '독창 패턴 · 다중시간대 공명', 'transition_gap_phase': '독창 패턴 · 전이·간격 위상', 'phase_residual_graph': '독창 패턴 · 위상잔차 그래프'}
+
 METHODS_BY_ID: Final = {method.method_id: method for method in METHODS}
 
 # Personal Saju is intentionally not selected by default. A user must explicitly
 # select it and complete the birth-profile step before the integration may use it.
 DEFAULT_METHOD_IDS: Final[tuple[str, ...]] = (
     METHOD_UNIFORM_FISHER_YATES,
-    METHOD_UNIFORM_FLOYD,
-    METHOD_UNIFORM_REJECTION,
-    METHOD_UNIFORM_SEQUENTIAL,
-    METHOD_CALIBRATED_STRATIFIED,
 )
 
 PUBLIC_METHOD_IDS: Final[tuple[str, ...]] = tuple(
@@ -326,7 +275,17 @@ def normalize_method_ids(value: object) -> tuple[str, ...]:
     return tuple(result) or DEFAULT_METHOD_IDS
 
 
-def method_selector_options() -> list[dict[str, str]]:
+# Same-distribution implementations and frequency variants belong in advanced
+# settings. Saved IDs remain stable; existing selections are not silently merged.
+ADVANCED_METHOD_IDS: Final = (
+    METHOD_UNIFORM_FLOYD, METHOD_UNIFORM_REJECTION, METHOD_UNIFORM_SEQUENTIAL,
+    METHOD_CALIBRATED_STRATIFIED, METHOD_UNIFORM_COMBINATION_RANK,
+    METHOD_HOT_NUMBERS, METHOD_RECENCY_DECAY,
+)
+BASIC_METHOD_IDS: Final = tuple(key for key in METHODS_BY_ID if key not in ADVANCED_METHOD_IDS)
+
+
+def method_selector_options(*, advanced: bool = False) -> list[dict[str, str]]:
     """Return concise labels with enough context for the HA selector."""
     return [
         {
@@ -338,6 +297,7 @@ def method_selector_options() -> list[dict[str, str]]:
             ),
         }
         for method in METHODS
+        if (method.method_id in ADVANCED_METHOD_IDS) == advanced
     ]
 
 
@@ -348,6 +308,7 @@ def method_catalog() -> list[dict[str, str]]:
             "method_id": method.method_id,
             "name": method.label,
             "category": method.category,
+            "selection_group": "advanced" if method.method_id in ADVANCED_METHOD_IDS else "basic",
             "description": method.description,
             "requirements": (
                 "생년월일, 출생시간, 양력/음력, 성별, 출생지, 시간대"

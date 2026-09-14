@@ -22,7 +22,7 @@ export const validationTemplate = `
  <div class="page-heading"><div><div class="kicker">HISTORICAL VALIDATION</div><h1>과거 회차 검증</h1><p>그 회차의 결과를 모르는 조건으로 다시 생성하고 대조합니다.</p></div></div>
  <div class="validation-notice"><strong>검증용 결과입니다. 실제 추천과 리뷰는 그대로 유지됩니다.</strong>선택한 회차와 이후 회차의 당첨번호는 생성에 사용하지 않습니다. 현재 버전 공식을 다시 실행하는 시뮬레이션이며, 그때 실제로 저장한 추천을 바꾸지 않습니다.</div>
  <form id="validation-form" class="validation-form">
-  <div class="validation-fields"><div><label for="validation-round">검증할 과거 회차</label><input id="validation-round" type="number" inputmode="numeric" min="31" max="31" step="1" required aria-describedby="validation-range validation-cutoff"><p id="validation-range" class="validation-help">공식 이력을 확인하고 있습니다.</p></div><div><label for="validation-seed">검증 시드</label><input id="validation-seed" type="number" inputmode="numeric" min="0" max="4294967295" step="1" value="0" required aria-describedby="validation-seed-help"><p id="validation-seed-help" class="validation-help">기본값 0. 같은 버전·이력·공식 순서·사주 설정·시드에서는 같은 결과를 재현합니다.</p></div></div>
+  <div class="validation-fields"><div><label for="validation-round">검증할 과거 회차</label><input id="validation-round" type="number" inputmode="numeric" min="31" max="31" step="1" required aria-describedby="validation-range validation-cutoff"><p id="validation-range" class="validation-help">공식 이력을 확인하고 있습니다.</p></div></div>
   <p id="validation-cutoff" class="validation-help"></p>
   <details class="validation-settings"><summary>검증할 추첨 공식 <span id="validation-method-count"></span></summary><button id="validation-defaults" class="validation-defaults" type="button">현재 통합 설정으로 선택</button><p class="validation-help">이곳의 선택은 검증에만 적용됩니다. 합의 추천은 여기서 선택한 다른 로컬 공식 2개 이상으로 계산합니다. AI는 CCSS 번호만 검증하며 AI를 호출하지 않습니다.</p><div id="validation-choices" class="validation-choices"></div></details>
   <button id="validation-run" class="primary" type="submit" disabled>검증번호 생성·당첨 확인</button>
@@ -33,7 +33,7 @@ export const validationTemplate = `
   <div class="validation-draw"><span class="validation-help">해당 회차 당첨번호</span><span id="validation-draw" class="draw-numbers"></span></div>
   <p id="validation-summary" class="review-note"></p>
   <div class="table-scroll"><table class="mobile-table" role="table"><caption class="sr-only">과거 검증용 추첨 공식, 새로 생성한 번호와 당첨 비교. 실제 추천 및 리뷰와 별도입니다.</caption><thead role="rowgroup"><tr role="row"><th scope="col">추첨 공식</th><th scope="col">검증번호</th><th scope="col">검증 결과</th></tr></thead><tbody id="validation-results" role="rowgroup"></tbody></table></div>
-  <details class="validation-audit"><summary>데이터 경계·재현 정보</summary><p id="validation-audit-text"></p><code id="validation-hash"></code></details>
+  <details class="validation-audit"><summary>데이터 경계·실행 정보</summary><p id="validation-audit-text"></p><code id="validation-hash"></code></details>
   <p id="validation-notice" class="validation-help"></p>
  </section>
 </section>`;
@@ -159,11 +159,11 @@ main{padding-top:40px!important} .screen{outline:0}.page-heading{display:flex;al
 .wallet-actions{display:flex;gap:8px}.wallet-actions button{font-size:13px}.wallet-description{font-size:12px;color:var(--muted);margin:18px 2px 0}
 .review-grid{display:grid;gap:24px}.review-block{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:26px}
 .review-block .section-heading{margin-bottom:10px}.review-note{font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.9}
-.result-balls[data-winning="true"] .ball[data-hit="main"]{outline:3px solid var(--green);outline-offset:2px;transform:scale(1.06);z-index:1}
-.result-balls[data-winning="true"] .ball[data-hit="bonus"]{outline:3px dashed var(--blue);outline-offset:2px;transform:scale(1.06);z-index:1}
-.result-balls[data-winning="true"] .ball[data-hit="miss"]{opacity:.38;filter:saturate(.35) brightness(1.06)}
+.result-balls[data-evaluated="true"] .ball[data-hit="main"]{outline:3px solid var(--green);outline-offset:-3px;transform:none;z-index:1}
+.result-balls[data-evaluated="true"] .ball[data-hit="bonus"]{outline:3px dashed var(--blue);outline-offset:-3px;transform:none;z-index:1}
+.result-balls[data-evaluated="true"] .ball[data-hit="miss"]{opacity:.38;filter:saturate(.35) brightness(1.06)}
 .result-detail{display:block;margin-top:6px;color:var(--green);font-size:11px;font-weight:650;line-height:1.55}
-@media(forced-colors:active){.result-balls[data-winning="true"] .ball[data-hit="main"],.result-balls[data-winning="true"] .ball[data-hit="bonus"]{outline:3px solid Highlight;outline-offset:2px}.result-balls[data-winning="true"] .ball[data-hit="miss"]{opacity:1;filter:none}}
+@media(forced-colors:active){.result-balls[data-evaluated="true"] .ball[data-hit="main"],.result-balls[data-evaluated="true"] .ball[data-hit="bonus"]{outline:3px solid Highlight;outline-offset:2px}.result-balls[data-evaluated="true"] .ball[data-hit="miss"]{opacity:1;filter:none}}
 .review-count{padding:4px 8px;background:var(--soft);font-size:11px;color:var(--muted);border-radius:6px}
 .table-scroll{overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px;text-align:left}caption{text-align:left;color:var(--muted);font-size:12px;padding-bottom:16px}
 th{font-size:11px;font-weight:500;color:var(--muted);background:var(--soft)}th,td{padding:16px 12px;border-bottom:1px solid var(--line);vertical-align:middle}th:first-child{border-radius:8px 0 0 8px}th:last-child{border-radius:0 8px 8px 0}tbody tr:last-child td{border:0}td:first-child{font-weight:600;max-width:300px}td .ticket-balls{gap:6px;--ball-size:29px}.empty-cell{text-align:center!important;color:var(--muted);padding:36px!important;font-weight:400!important;font-size:12px}.empty-cell strong{display:block;color:var(--ink);font-size:14px;margin-bottom:8px}
@@ -194,6 +194,13 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
 @container wallet (max-width:560px){.header-row{flex-wrap:wrap}.header-tools{display:contents}.header-tools .settings{margin-left:auto}.entry-field{order:5;flex-basis:100%;max-width:none;width:100%;padding:0 0 12px}.entry-field select{max-width:none;width:100%;font-size:13px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 @media(forced-colors:active){button,.ticket-paper,.draw-stage,.ball{border:1px solid CanvasText}.main-tabs button[aria-selected="true"]{outline:2px solid Highlight}.verification{color:CanvasText}}
+/* Match marks stay inside their ball. Gaps survive narrow-table overrides. */
+.ticket-balls.result-balls,.mobile-table td .ticket-balls.result-balls{gap:8px;row-gap:8px;flex-wrap:wrap;min-width:0;max-width:100%;box-sizing:border-box}
+.ticket-balls.result-balls .ball[data-hit="main"]{outline:3px solid var(--green);outline-offset:-3px;box-shadow:none}
+.ticket-balls.result-balls .ball[data-hit="bonus"]{outline:3px dashed var(--blue);outline-offset:-3px;box-shadow:none}
+.ticket-balls.result-balls[data-has-matches="false"] .ball{opacity:1;filter:none}
+.mobile-table .result-detail{grid-column:2;white-space:normal;overflow-wrap:anywhere}
+@media(forced-colors:active){.ticket-balls.result-balls .ball[data-hit="main"],.ticket-balls.result-balls .ball[data-hit="bonus"]{outline-color:Highlight}.ticket-balls.result-balls .ball{opacity:1;filter:none}}
 </style>
 <div class="shell">
   <header class="app-header">
@@ -261,19 +268,20 @@ export function numberBalls(root, numbers, bonus=null, outcome=null) {
   const valid=(numbers||[]).filter(n=>Number.isInteger(n)&&n>=1&&n<=45);
   const hasBonus=Number.isInteger(bonus)&&bonus>=1&&bonus<=45;
   const winning=Number.isInteger(outcome?.prize_rank)&&outcome.prize_rank>=1&&outcome.prize_rank<=5;
-  const matchedMain=new Set((outcome?.matched_main_numbers||[]).filter(n=>Number.isInteger(n)&&n>=1&&n<=45));
-  const matchedBonus=winning&&Number.isInteger(outcome?.matched_bonus_number)?outcome.matched_bonus_number:null;
-  root.dataset.winning=String(winning);
-  const missed=winning?valid.filter(n=>!matchedMain.has(n)&&n!==matchedBonus):[];
+  const evaluated=Number.isInteger(outcome?.main_match_count)&&outcome.main_match_count>=0&&outcome.main_match_count<=6&&Array.isArray(outcome?.matched_main_numbers)&&outcome.generation_status!=='unavailable';
+  const matchedMain=new Set((outcome?.matched_main_numbers||[]).filter(n=>valid.includes(n)));
+  const matchedBonus=evaluated&&outcome?.bonus_match===true&&valid.includes(outcome?.matched_bonus_number)?outcome.matched_bonus_number:null;
+  root.dataset.winning=String(winning);root.dataset.evaluated=String(evaluated);root.dataset.hasMatches=String(matchedMain.size>0||matchedBonus!==null);
+  const missed=evaluated?valid.filter(n=>!matchedMain.has(n)&&n!==matchedBonus):[];
   const aria=[`번호 ${valid.join(', ')}`];
   if(hasBonus)aria.push(`보너스 ${bonus}`);
-  if(winning){
+  if(evaluated){
     if(matchedMain.size)aria.push(`당첨번호 일치 ${[...matchedMain].sort((a,b)=>a-b).join(', ')}`);
     if(matchedBonus!==null)aria.push(`보너스 일치 ${matchedBonus}`);
     if(missed.length)aria.push(`미일치 ${missed.join(', ')}`);
   }
   root.setAttribute('role','img');root.setAttribute('aria-label',aria.join('; '));
-  const ball=n=>{const el=document.createElement('span');el.className='ball';el.dataset.band=String(Math.ceil(n/10));if(winning)el.dataset.hit=matchedMain.has(n)?'main':n===matchedBonus?'bonus':'miss';el.textContent=n;el.setAttribute('aria-hidden','true');return el;};
+  const ball=n=>{const el=document.createElement('span');el.className='ball';el.dataset.band=String(Math.ceil(n/10));if(evaluated)el.dataset.hit=matchedMain.has(n)?'main':n===matchedBonus?'bonus':'miss';el.textContent=n;el.setAttribute('aria-hidden','true');return el;};
   valid.forEach(n=>root.append(ball(n)));
   if(hasBonus){const group=document.createElement('span');group.className='bonus-group';group.setAttribute('aria-hidden','true');const plus=document.createElement('span');plus.className='plus';plus.textContent='+';const wrap=document.createElement('span');wrap.className='bonus-label';const text=document.createElement('span');text.className='bonus-caption';text.textContent='보너스';wrap.append(ball(bonus),text);group.append(plus,wrap);root.append(group);}
 }
@@ -281,7 +289,7 @@ export function numberBalls(root, numbers, bonus=null, outcome=null) {
 export function ticketRows(root, games, limit=Infinity) {
   root.replaceChildren();root.setAttribute('role','list');
   if(!games?.length){root.removeAttribute('role');const empty=document.createElement('div');empty.className='empty';empty.innerHTML=`${icons.ticket}<strong>아직 보관한 복권이 없어요.</strong><p>복권 등록을 눌러 QR이나 사진으로 가져오세요.<br>번호를 직접 입력해도 좋아요.</p>`;root.append(empty);return;}
-  for(const g of games.slice(0,limit)) {const row=document.createElement('div');row.className='ticket-row';row.setAttribute('role','listitem');const slot=document.createElement('span');slot.className='game-label';slot.textContent=g.slot||'';slot.setAttribute('aria-label',`${g.slot||''} 게임`);const nums=document.createElement('span');nums.className='ticket-balls result-balls';const isWinner=Number.isInteger(g.prize_rank)&&g.prize_rank>=1&&g.prize_rank<=5;numberBalls(nums,g.numbers||g.recommended_numbers||[],null,isWinner?g:null);const prize=document.createElement('span');prize.className='prize';prize.textContent=g.prize||'추첨 대기';prize.dataset.winning=String(isWinner);row.append(slot,nums,prize);root.append(row);}
+  for(const g of games.slice(0,limit)) {const row=document.createElement('div');row.className='ticket-row';row.setAttribute('role','listitem');const slot=document.createElement('span');slot.className='game-label';slot.textContent=g.slot||'';slot.setAttribute('aria-label',`${g.slot||''} 게임`);const nums=document.createElement('span');nums.className='ticket-balls result-balls';const isWinner=Number.isInteger(g.prize_rank)&&g.prize_rank>=1&&g.prize_rank<=5;numberBalls(nums,g.numbers||g.recommended_numbers||[],null,g);const prize=document.createElement('span');prize.className='prize';prize.textContent=g.prize||'추첨 대기';prize.dataset.winning=String(isWinner);row.append(slot,nums,prize);root.append(row);}
 }
 
 export function renderPredictionRows(root, rows, empty) {
@@ -291,8 +299,8 @@ export function renderPredictionRows(root, rows, empty) {
     const tr=document.createElement('tr');tr.setAttribute('role','row');
     const isWinner=Number.isInteger(row.prize_rank)&&row.prize_rank>=1&&row.prize_rank<=5;tr.dataset.winning=String(isWinner);tr.className='prediction-row';
     const method=document.createElement('td');method.setAttribute('role','cell');method.dataset.label='추첨 공식';method.textContent=row.sensor_name||row.method_id||'—';
-    const numberCell=document.createElement('td');numberCell.setAttribute('role','cell');numberCell.dataset.label='번호';const balls=document.createElement('span');balls.className='ticket-balls result-balls';numberBalls(balls,row.recommended_numbers||[],null,isWinner?row:null);numberCell.append(balls);
-    if(isWinner){const detail=document.createElement('span');detail.className='result-detail';const main=(row.matched_main_numbers||[]).join(', ');detail.textContent=`일치 ${row.main_match_count}개${main?` · ${main}`:''}${row.bonus_match?` · 보너스 ${row.matched_bonus_number}`:''}`;numberCell.append(detail);}
+    const numberCell=document.createElement('td');numberCell.setAttribute('role','cell');numberCell.dataset.label='번호';const balls=document.createElement('span');balls.className='ticket-balls result-balls';numberBalls(balls,row.recommended_numbers||[],null,row);numberCell.append(balls);
+    if(balls.dataset.evaluated==='true'){const detail=document.createElement('span');detail.className='result-detail';const main=(row.matched_main_numbers||[]).join(', ');detail.textContent=`일치 ${row.main_match_count}개${main?` · ${main}`:''}${row.bonus_match?` · 보너스 ${row.matched_bonus_number}`:''}`;numberCell.append(detail);}
     const result=document.createElement('td');result.setAttribute('role','cell');result.dataset.label='결과';const prize=document.createElement('span');prize.className='prize';prize.dataset.winning=String(isWinner);prize.textContent=row.prize||'판정 대기';result.append(prize);
     tr.append(method,numberCell,result);root.append(tr);
   }

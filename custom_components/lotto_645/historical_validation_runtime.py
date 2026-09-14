@@ -9,9 +9,10 @@ from .historical_validation import HistoricalValidationError, run_historical_val
 
 KEY = 'lotto_645_historical_validation_workers'
 TIMEOUT_SECONDS = 180
+LAST_KEY = 'lotto_645_last_historical_validation'
 
 
-async def async_validate_history(hass, coordinator, target_round, method_ids, seed=0):
+async def async_validate_history(hass, coordinator, target_round, method_ids):
     """Do not call the live coordinator's build/refresh/review/save methods.
 
     Keep the busy lease until the executor really finishes, even if the caller
@@ -26,16 +27,26 @@ async def async_validate_history(hass, coordinator, target_round, method_ids, se
         raise HistoricalValidationError('generation_busy', '현재 추천번호를 생성 중입니다. 완료 후 과거 검증을 실행하세요.')
     history = tuple(coordinator.history)  # LottoDraw records are frozen.
     profile = deepcopy(coordinator.saju_profile) if coordinator.saju_profile_ready else None
+    # One bounded prior batch per entry, held only in memory. A reload or target
+    # change discards it. This is not a live recommendation/review cache.
+    previous = hass.data.get(LAST_KEY, {}).get(key)
+    blocked = previous[2] if previous and previous[0] is coordinator and previous[1] == target_round else ()
     worker = hass.async_add_executor_job(partial(
-        run_historical_validation, history, target_round, tuple(method_ids), seed, profile,
+        run_historical_validation, history, target_round, tuple(method_ids), profile, previous_tickets=blocked,
     ))
     workers[key] = worker
 
     def finished(future):
+        if not future.cancelled() and future.exception() is None:
+            result = future.result()
+            if (result.get('mode') == 'historical_validation'
+                    and getattr(coordinator.entry, 'runtime_data', coordinator) is coordinator):
+                hass.data.setdefault(LAST_KEY, {})[key] = (coordinator, target_round, tuple(
+                    tuple(row['recommended_numbers']) for row in result['results']
+                    if row.get('generation_status') == 'generated'
+                ))
         if workers.get(key) is future:
             workers.pop(key, None)
-        if not future.cancelled():
-            future.exception()  # Consume an error after a disconnected/timed-out caller.
 
     worker.add_done_callback(finished)
     try:

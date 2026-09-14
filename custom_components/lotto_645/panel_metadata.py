@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from .const import AI_METHOD_ID
-from .methods import method_catalog
+from .methods import method_catalog, RETIRED_METHOD_LABELS
 
 KST = ZoneInfo("Asia/Seoul")
 FIRST_DRAW_DATE = date(2002, 12, 7)
@@ -74,4 +74,4 @@ def panel_metadata(result_round: int | None, result_status: str) -> dict:
         "description": "번호는 백엔드 CCSS 공식으로 추첨하고 Home Assistant AI는 실행 근거만 설명합니다. AI가 번호를 만들거나 당첨을 예측하지 않습니다.",
         "requirements": "AI 추천 활성화 및 데이터 생성 AI 설정",
     })
-    return {"method_catalog": catalog, "draw_schedule": draw_schedule(result_round, result_status)}
+    return {"archived_method_catalog": [{"method_id": key, "name": label + " · 종료된 공식"} for key, label in RETIRED_METHOD_LABELS.items()], "method_catalog": catalog, "draw_schedule": draw_schedule(result_round, result_status)}

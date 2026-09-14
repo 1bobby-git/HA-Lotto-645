@@ -9,11 +9,11 @@ async def verify_panel_validation(page):
       if(!el.isConnected)(document.querySelector('#allocated ha-panel-custom')||document.body).append(el);
       window.validationCalls=[];const oldWS=el._hass.callWS;
       window.validationBase={...el._latestToolsData,method_catalog:catalog,
-        historical_validation:{min_round:31,max_round:1241,default_seed:0,saju_profile_ready:false,
+        historical_validation:{min_round:31,max_round:1241,saju_profile_ready:false,
         default_method_ids:['weighted_frequency','uniform_floyd','selected_median_consensus']}};
       window.validationResponse={mode:'historical_validation',simulation:true,counts_toward_reviews:false,persisted:false,
         target_round:1200,based_on_round:1199,training_last_round:1199,training_draw_count:1199,
-        component_version:'1.14.0',seed:0,generated_at:'2026-09-14T10:00:00Z',training_sha256:'a'.repeat(64),
+        component_version:'1.15.0',generated_at:'2026-09-14T10:00:00Z',training_sha256:'a'.repeat(64),
         checked_game_count:3,unavailable_game_count:0,winning_game_count:2,highest_prize:'2등',
         draw:{round:1200,draw_date:'2025-11-29',numbers:[7,24,30,31,32,42],bonus:9},
         results:[
@@ -35,6 +35,7 @@ async def verify_panel_validation(page):
     assert await page.locator('#screen-validation').is_visible()
     assert await page.evaluate('validationCalls.length')==0
     assert await page.locator('#validation-round').input_value()=='1241'
+    assert await page.locator('#validation-seed').count()==0
     assert '3개' in await page.locator('#validation-method-count').text_content()
     await page.locator('#validation-round').fill('1200')
     assert '1~1199회' in await page.locator('#validation-cutoff').text_content()
@@ -42,7 +43,7 @@ async def verify_panel_validation(page):
     await page.wait_for_function("el.node('validation-output').hidden===false")
     assert await page.evaluate('validationCalls.length')==1
     req=await page.evaluate('validationCalls[0]')
-    assert req['round']==1200 and req['seed']==0 and len(req['method_ids'])==3
+    assert req['round']==1200 and 'seed' not in req and len(req['method_ids'])==3
     assert await page.locator('#validation-results tr').count()==3
     assert '실제 추천과 별도' in await page.locator('#validation-title').text_content()
     assert '1~1199회' in await page.locator('#validation-meta').text_content()
@@ -56,6 +57,7 @@ async def verify_panel_validation(page):
     assert await page.evaluate('validationCalls.length')==1
     await page.locator('#validation-run').click()
     await page.wait_for_function('validationCalls.length===2 && !el._historicalValidation.busy')
+    assert 'seed' not in await page.evaluate('validationCalls[1]')
     await page.evaluate('el.updateResults(validationBase);el._clearSmartSync()')
     assert not await page.locator('#validation-output').evaluate('n=>n.hidden')
     for dark in (False,True):

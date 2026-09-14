@@ -43,6 +43,7 @@ from .methods import (
     METHOD_SELECTED_MEDIAN,
     consensus_source_ids,
     METHODS_BY_ID,
+    ADVANCED_METHOD_IDS,
     method_selector_options,
     normalize_method_ids,
 )
@@ -58,11 +59,11 @@ from .purchased_tickets import SLOTS, PurchaseInputError, parse_round
 _LOGGER = logging.getLogger(__name__)
 
 
-def _method_selector() -> selector.SelectSelector:
+def _method_selector(*, advanced: bool = False) -> selector.SelectSelector:
     """Return the multiple recommendation-method selector."""
     return selector.SelectSelector(
         selector.SelectSelectorConfig(
-            options=method_selector_options(),
+            options=method_selector_options(advanced=advanced),
             multiple=True,
             mode=selector.SelectSelectorMode.DROPDOWN,
         )
@@ -92,12 +93,13 @@ def _required_text_marker(key: str, options: dict[str, Any]) -> vol.Marker:
 def _recommendation_schema(options: dict[str, Any]) -> vol.Schema:
     """Build the small, stable recommendation/AI/source options form."""
     selected = list(
-        normalize_method_ids(options.get(CONF_SELECTED_METHODS, DEFAULT_METHOD_IDS))
+        normalize_method_ids(list(options.get(CONF_SELECTED_METHODS, DEFAULT_METHOD_IDS)) + list(options.get("advanced_methods", [])))
     )
     ai_entity_marker = _optional_text_marker(CONF_AI_TASK_ENTITY_ID, options)
     return vol.Schema(
         {
-            vol.Required(CONF_SELECTED_METHODS, default=selected): _method_selector(),
+            vol.Required(CONF_SELECTED_METHODS, default=[key for key in selected if key not in ADVANCED_METHOD_IDS]): _method_selector(),
+            vol.Optional("advanced_methods", default=[key for key in selected if key in ADVANCED_METHOD_IDS]): _method_selector(advanced=True),
             vol.Optional(
                 CONF_ENABLE_AI,
                 default=bool(options.get(CONF_ENABLE_AI, DEFAULT_ENABLE_AI)),
@@ -250,9 +252,10 @@ class Lotto645OptionsFlow(OptionsFlow):
         if user_input is not None:
             form_values.update(user_input)
             try:
-                normalized = _normalize_submitted_methods(
-                    user_input.get(CONF_SELECTED_METHODS)
-                )
+                main = user_input.get(CONF_SELECTED_METHODS, [])
+                advanced = user_input.get("advanced_methods", [])
+                combined = list(main) + list(advanced) if isinstance(main, (list, tuple)) and isinstance(advanced, (list, tuple)) else None
+                normalized = _normalize_submitted_methods(combined)
                 if not normalized:
                     errors[CONF_SELECTED_METHODS] = "select_at_least_one"
                 elif (
@@ -264,6 +267,7 @@ class Lotto645OptionsFlow(OptionsFlow):
                     pending = dict(self._options)
                     pending.update(user_input)
                     pending[CONF_SELECTED_METHODS] = list(normalized)
+                    pending.pop("advanced_methods", None)
                     if not pending.get(CONF_AI_TASK_ENTITY_ID):
                         pending.pop(CONF_AI_TASK_ENTITY_ID, None)
 

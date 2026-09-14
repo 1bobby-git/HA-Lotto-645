@@ -1,6 +1,6 @@
 # 명리 권장 · 개인 사주 원국·대운·추첨일
 
-[24개 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md) · [명리 규칙 상세](../SAJU_RULES.md)
+[추첨 공식 목록](../../README.md#추첨-공식-19종) · [공통 계산 원리](../FORMULAS.md) · [명리 규칙 상세](../SAJU_RULES.md)
 
 `method_id: myungri_hetu_day_pillar` · 분류: 개인 사주 명리 권장 · 후보 풀: **22개**
 

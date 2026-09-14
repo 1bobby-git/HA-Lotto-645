@@ -69,18 +69,18 @@ def test_anchor_and_date_validation():
 def test_all_local_guides_are_packaged_verbatim_and_ai_is_separate():
     result = metadata.panel_metadata(1241, 'official_history')
     catalog = result['method_catalog']
-    assert len(methods.METHODS) == 24
-    assert len(catalog) == 25
-    assert len({m['method_id'] for m in catalog}) == 25
+    assert len(methods.METHODS) == 19
+    assert len(catalog) == 20
+    assert len({m['method_id'] for m in catalog}) == 20
     for method in methods.METHODS:
         source = ROOT / 'docs/methods' / (method.method_id + '.md')
         bundled = COMPONENT / 'www/methods' / source.name
         assert bundled.read_bytes() == source.read_bytes(), method.method_id
     assert (COMPONENT / 'www/methods/home_assistant_ai.md').read_bytes() == (ROOT / 'docs/AI_RECOMMENDATION.md').read_bytes()
     # Only public metadata, not profiles, prompts, tokens or dynamic AI calls.
-    assert set(result) == {'method_catalog', 'draw_schedule'}
+    assert set(result) == {'method_catalog', 'archived_method_catalog', 'draw_schedule'}
     for item in catalog:
-        assert set(item) == {'method_id','name','category','description','requirements'}
+        assert {'method_id','name','category','description','requirements'} <= set(item)
     assert '생년월일' not in json.dumps(result, ensure_ascii=False).split('requirements')[0]
 
 

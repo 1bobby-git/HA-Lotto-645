@@ -1,6 +1,6 @@
 # 추첨 공식: 공통 계산 원리와 상세 안내
 
-[README의 추첨 공식 24종으로 돌아가기](../README.md#추첨-공식-24종)
+[README의 추첨 공식 19종으로 돌아가기](../README.md#추첨-공식-19종)
 
 이 문서는 **현재 구현의 공통 계산 과정**을 설명합니다. 각 공식의 별도 안내는 아래에서 엽니다. 공식 이름에 쓰인 ‘독창’, ‘공개 공식’, ‘권장’은 분류·설계 의도를 나타내며, 독창성의 외부 인증이나 당첨 예측력 검증을 의미하지 않습니다.
 
@@ -14,24 +14,19 @@
 4. [균등 공식 · 순차 포함](methods/uniform_sequential.md)
 5. [균등 공식 · 조합보정 층화 CCSS](methods/calibrated_stratified.md)
 6. [균등 공식 · 조합 인덱스](methods/uniform_combination_rank.md)
-7. [독창 패턴 · 위상잔차 그래프](methods/phase_residual_graph.md)
-8. [독창 패턴 · 전이·간격 위상](methods/transition_gap_phase.md)
-9. [독창 패턴 · 다중시간대 공명](methods/multiscale_resonance.md)
-10. [공개 공식 · 가중 빈도](methods/weighted_frequency.md)
-11. [공개 공식 · 핫넘버](methods/hot_numbers.md)
-12. [공개 공식 · 콜드·미출현](methods/overdue_gap.md)
-13. [공개 공식 · 동반출현쌍](methods/pair_cooccurrence.md)
-14. [공개 공식 · 삼중 동반출현](methods/triplet_cooccurrence.md)
-15. [공개 공식 · 지수감쇠 최근성](methods/recency_decay.md)
-16. [실험 공식 · 베이지안 수축](methods/bayesian_shrinkage.md)
-17. [공개 공식 · 재등장 주기](methods/cycle_rhythm.md)
-18. [공개 공식 · 균형 필터](methods/balance_formula.md)
-19. [공개 공식 · 델타 시스템](methods/delta_system.md)
-20. [공개 공식 · 이월수](methods/carryover_formula.md)
-21. [공개 공식 · 종합 앙상블](methods/public_ensemble.md)
-22. [명리 권장 · 개인 사주 원국·대운·추첨일](methods/myungri_hetu_day_pillar.md)
-23. [형태 공식 · AC값 7 이상](methods/ac_range_filter.md)
-24. [합의 추천 · 선택 공식 중앙값](methods/selected_median_consensus.md)
+7. [공개 공식 · 가중 빈도](methods/weighted_frequency.md)
+8. [빈도 프리셋 · 핫넘버](methods/hot_numbers.md)
+9. [공개 공식 · 콜드·미출현](methods/overdue_gap.md)
+10. [공개 공식 · 동반출현쌍](methods/pair_cooccurrence.md)
+11. [빈도 프리셋 · 지수감쇠 최근성](methods/recency_decay.md)
+12. [실험 공식 · 베이지안 수축](methods/bayesian_shrinkage.md)
+13. [공개 공식 · 균형 필터](methods/balance_formula.md)
+14. [공개 공식 · 델타 시스템](methods/delta_system.md)
+15. [공개 공식 · 이월수](methods/carryover_formula.md)
+16. [복합 공식 · 공개 지표 종합](methods/public_ensemble.md)
+17. [명리 권장 · 개인 사주 원국·대운·추첨일](methods/myungri_hetu_day_pillar.md)
+18. [형태 공식 · AC값 7 이상](methods/ac_range_filter.md)
+19. [합의 추천 · 선택 공식 중앙값](methods/selected_median_consensus.md)
 
 ## 균등 추첨과 점수형 공식의 구분
 
@@ -132,7 +127,7 @@ a = 이월 조합 가중치가 있는 공식은 0.007, 나머지는 0.023
 
 **설정 → 기기 및 서비스 → Lotto 6/45 Analysis → 구성**의 추천 설정에서 공식을 복수 선택합니다. 개인 사주 공식은 별도 사주정보 입력·수정을 먼저 완료하고, 중앙값 공식은 다른 로컬 공식 2개 이상 (균등·실험 포함, AI 제외)과 함께 선택합니다. 기간·반감기·가중치는 현재 코드의 고정값이며 일반 설정 화면에서 개별 편집하는 옵션은 없습니다.
 
-[기본 선택값](../custom_components/lotto_645/methods.py)은 부분 Fisher–Yates, Floyd, 중복거부, 순차 포함, CCSS입니다. 기존 사용자가 저장한 공식 선택은 자동으로 바꾸지 않습니다. 이는 제품의 초기 구성이지 성능 순위가 아닙니다. AI 추천은 24개 로컬 공식과 별개이며 중앙값에도 포함되지 않습니다.
+[기본 선택값](../custom_components/lotto_645/methods.py)은 부분 Fisher–Yates 한 개입니다. 기본 메뉴는 12개이며 대체 균등 알고리즘 5개와 빈도 프리셋 2개는 고급 선택으로 모았습니다. 종료된 5개 공식은 새 생성에서 제외하며, 나머지 기존 선택·저장 ID·과거 결과는 유지합니다. 이는 제품의 초기 구성이지 성능 순위가 아닙니다. AI 추천은 19개 로컬 공식과 별개이며 중앙값에도 포함되지 않습니다.
 
 ```yaml
 action: lotto_645.refresh
@@ -157,7 +152,7 @@ action: lotto_645.refresh
 
 개별 문서의 숫자 예시는 **계산을 설명하기 위한 가상 입력 또는 수학적으로 도출한 값**입니다. 실제 특정 회차의 통계, 추천번호, 백테스트 결과가 아닙니다. 최종 번호는 모든 후보의 순위·조합 점수·제외 조건이 함께 결정하므로 단일 예시만으로 재현할 수 없습니다.
 
-[검증 안내](VALIDATION.md)는 출력 조건과 계산 규칙 검증을, [로컬 리뷰 안내](LOCAL_REVIEWS.md)는 추첨 전 저장 추천의 사후 평가를 설명합니다. 표본 수·평가 시점·공식 확인 여부를 함께 읽어야 합니다. 같은 이력으로 여러 공식을 만들어 비교한다고 독립적인 증거가 24개 생기는 것은 아닙니다.
+[검증 안내](VALIDATION.md)는 출력 조건과 계산 규칙 검증을, [로컬 리뷰 안내](LOCAL_REVIEWS.md)는 추첨 전 저장 추천의 사후 평가를 설명합니다. 표본 수·평가 시점·공식 확인 여부를 함께 읽어야 합니다. 같은 이력으로 여러 공식을 만들어 비교한다고 독립적인 증거가 19개 생기는 것은 아닙니다.
 
 ## 구현 근거
 

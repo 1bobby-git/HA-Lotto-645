@@ -72,8 +72,8 @@ def _profile():
 
 
 def test_catalog_and_default_gating():
-    assert len(methods.METHODS) == 24
-    assert len(methods.PUBLIC_METHOD_IDS) == 12
+    assert len(methods.METHODS) == 19
+    assert len(methods.PUBLIC_METHOD_IDS) == 10
     assert methods.METHOD_MYUNGRI_HETU not in methods.DEFAULT_METHOD_IDS
     myungri_method = methods.METHODS_BY_ID[methods.METHOD_MYUNGRI_HETU]
     assert "개인 사주" in myungri_method.description
@@ -99,7 +99,7 @@ def test_myungri_requires_profile():
 
 def test_personal_myungri_recommendation_details():
     history = _history()
-    selected = (methods.METHOD_PHASE_RESIDUAL, methods.METHOD_MYUNGRI_HETU)
+    selected = (methods.METHOD_WEIGHTED_FREQUENCY, methods.METHOD_MYUNGRI_HETU)
     result = analysis.build_analysis(history, selected, 0, _profile())
     traditional = result.recommendation_by_method(methods.METHOD_MYUNGRI_HETU)
     assert traditional is not None
@@ -141,7 +141,7 @@ def test_all_selectable_methods_run_together_with_valid_saju_profile():
 def test_manual_generation_nonce_rotates_local_candidates():
     history = _history(120)
     selected = (
-        methods.METHOD_PHASE_RESIDUAL,
+        methods.METHOD_BALANCE,
         methods.METHOD_WEIGHTED_FREQUENCY,
         methods.METHOD_PUBLIC_ENSEMBLE,
     )
@@ -153,19 +153,17 @@ def test_manual_generation_nonce_rotates_local_candidates():
 
 
 
-def test_selected_median_requires_two_other_methods():
+def test_selected_median_waits_when_retirement_leaves_one_source():
     history = _history(120)
-    with pytest.raises(ValueError, match="2개 이상"):
-        analysis.build_analysis(
-            history,
-            (methods.METHOD_WEIGHTED_FREQUENCY, methods.METHOD_SELECTED_MEDIAN),
-        )
+    result = analysis.build_analysis(history, (methods.METHOD_WEIGHTED_FREQUENCY, methods.METHOD_SELECTED_MEDIAN))
+    assert len(result.recommendations) == 1
+    assert result.summary['selected_median_consensus']['status'] == 'waiting_for_sources'
 
 
 def test_selected_median_uses_only_selected_local_methods_and_runs_last():
     history = _history(120)
     selected = (
-        methods.METHOD_PHASE_RESIDUAL,
+        methods.METHOD_BALANCE,
         methods.METHOD_WEIGHTED_FREQUENCY,
         methods.METHOD_PAIR_COOCCURRENCE,
         methods.METHOD_SELECTED_MEDIAN,
@@ -210,13 +208,13 @@ def test_legacy_bayesian_plus_scoring_formula_median_configuration_survives():
 
 def test_uniform_samplers_contribute_actual_numbers_not_internal_scores():
     result = analysis.build_analysis(
-        _history(40), (*methods.DEFAULT_METHOD_IDS, methods.METHOD_SELECTED_MEDIAN),
+        _history(40), (methods.METHOD_UNIFORM_FISHER_YATES, methods.METHOD_UNIFORM_FLOYD, methods.METHOD_SELECTED_MEDIAN),
         rng=random.Random(93),
     )
     consensus = result.recommendation_by_method(methods.METHOD_SELECTED_MEDIAN)
     assert consensus is not None
     assert consensus.score is None
-    assert consensus.details["consensus_source_count"] == len(methods.DEFAULT_METHOD_IDS)
+    assert consensus.details["consensus_source_count"] == 2
     assert consensus.details["consensus_source_numbers"] == {
         item.method_id: list(item.numbers) for item in result.recommendations
         if item.method_id != methods.METHOD_SELECTED_MEDIAN

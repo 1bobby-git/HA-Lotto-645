@@ -1,5 +1,5 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '1.14.0';
+const VERSION = '1.15.0';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
 const REPO = `https://github.com/1bobby-git/HA-Lotto-645/blob/v${VERSION}/`;
@@ -227,7 +227,7 @@ class LottoPanelTools extends HTMLElement {
     const entry = this.panel.node('entry')?.value;
     if (this._entry && entry !== this._entry) this.closeGuide(false);
     this._entry = entry;
-    this.catalog = new Map((data.method_catalog || []).filter(m => validId(m.method_id)).map(m => [m.method_id, m]));
+    this.catalog = new Map([...(data.method_catalog || []), ...(data.archived_method_catalog || [])].filter(m => validId(m.method_id)).map(m => [m.method_id, m]));
     this.schedule = data.draw_schedule;
     const serverNow = Date.parse(this.schedule?.server_now);
     this._clockOffset = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;

@@ -13,10 +13,18 @@ def test_winning_review_uses_exact_result_metadata_and_accessible_states():
     assert "renderPredictionRows(this.node('predictions')" in CORE
 
 
-def test_only_winning_games_are_dimmed_or_outlined():
+def test_all_evaluated_games_are_marked_without_awarding_losing_games():
     assert 'Number.isInteger(outcome?.prize_rank)' in VIEW
-    assert '.result-balls[data-winning="true"] .ball[data-hit="main"]' in VIEW
-    assert '.result-balls[data-winning="true"] .ball[data-hit="bonus"]' in VIEW
-    assert '.result-balls[data-winning="true"] .ball[data-hit="miss"]' in VIEW
+    assert '.result-balls[data-evaluated="true"] .ball[data-hit="main"]' in VIEW
+    assert '.result-balls[data-evaluated="true"] .ball[data-hit="bonus"]' in VIEW
+    assert '.result-balls[data-evaluated="true"] .ball[data-hit="miss"]' in VIEW
     assert 'opacity:.38' in VIEW
     assert '@media(forced-colors:active)' in VIEW
+
+
+def test_marks_do_not_expand_into_neighbor_cells():
+    assert 'transform:scale(1.06)' not in VIEW
+    assert 'outline-offset:-3px' in VIEW
+    assert '.mobile-table td .ticket-balls.result-balls{gap:8px' in VIEW
+    assert "null,isWinner?row:null" not in VIEW
+    assert "null,isWinner?g:null" not in VIEW
