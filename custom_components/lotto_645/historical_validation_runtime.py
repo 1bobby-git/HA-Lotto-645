@@ -1,4 +1,4 @@
-"""Single-flight executor for ephemeral historical validation, no stores/listeners."""
+"""Single-flight executor for isolated historical validation."""
 from __future__ import annotations
 
 import asyncio
@@ -6,6 +6,7 @@ from copy import deepcopy
 from functools import partial
 
 from .historical_validation import HistoricalValidationError, run_historical_validation
+from .historical_validation_scores import async_record as async_record_validation_score
 
 KEY = 'lotto_645_historical_validation_workers'
 TIMEOUT_SECONDS = 180
@@ -13,10 +14,10 @@ LAST_KEY = 'lotto_645_last_historical_validation'
 
 
 async def async_validate_history(hass, coordinator, target_round, method_ids):
-    """Do not call the live coordinator's build/refresh/review/save methods.
+    """Run one bounded historical simulation and persist only its score metadata.
 
-    Keep the busy lease until the executor really finishes, even if the caller
-    is cancelled or times out. Otherwise retries could create unbounded workers.
+    Live recommendations, tickets and the pre-draw review ledger remain isolated.
+    The cumulative validation scoreboard is a separate user-requested ledger.
     """
     workers = hass.data.setdefault(KEY, {})
     key = coordinator.entry.entry_id
@@ -51,6 +52,15 @@ async def async_validate_history(hass, coordinator, target_round, method_ids):
     worker.add_done_callback(finished)
     try:
         async with asyncio.timeout(TIMEOUT_SECONDS):
-            return await asyncio.shield(worker)
+            result = await asyncio.shield(worker)
     except TimeoutError as err:
         raise HistoricalValidationError('validation_timeout', '검증 제한시간을 초과했습니다. 실행 중인 작업이 정리된 후 공식을 줄여 다시 시도하세요.') from err
+
+    # Score storage is intentionally separate from recommendation reviews. A
+    # storage failure never changes the historical simulation result itself.
+    scoreboard = await async_record_validation_score(hass, key, result)
+    return {
+        **result,
+        'validation_scoreboard': scoreboard,
+        'validation_scoreboard_persisted': not scoreboard.get('storage_error', False),
+    }
