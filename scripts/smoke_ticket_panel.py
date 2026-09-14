@@ -34,14 +34,16 @@ async def run():
         assets = set()
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.on('dialog', lambda dialog: dialog.accept())
-        resources = {f'/lotto_645_static/{name}': WWW / name for name in ('jsQR.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js')}
+        resources = {f'/lotto_645_static/{name}': WWW / name for name in (
+            'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js'
+        )}
         resources['/lotto_645_brand/logo.png'] = logo
 
         async def serve(route):
             url = urlparse(route.request.url)
             assert url.hostname == 'lotto.test', f'Unexpected external request: {url.hostname}'
             if url.path == '/':
-                await route.fulfill(content_type='text/html', body='''<!doctype html><html lang="ko"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{height:100%;margin:0}</style><script type="module" src="/lotto_645_static/lotto-panel.js"></script></head><body></body></html>''')
+                await route.fulfill(content_type='text/html', body='''<!doctype html><html lang="ko"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{height:100%;margin:0}</style><script type="module" src="/lotto_645_static/lotto-panel-shell.js"></script></head><body></body></html>''')
             elif url.path in resources:
                 assets.add(url.path)
                 await route.fulfill(path=str(resources[url.path]), content_type='image/png' if url.path.endswith('.png') else 'text/javascript')
@@ -69,7 +71,13 @@ async def run():
         await page.evaluate('(qr)=>window.expectedQR=qr', QR)
         await page.wait_for_function('el._walletData && !el._busy')
         await page.wait_for_function("el.node('brand').complete && el.node('brand').naturalWidth===expectedLogoSize[0] && el.node('brand').naturalHeight===expectedLogoSize[1]")
-        assert await page.locator('.ha-component-title').text_content() == 'Lotto 6/45 Analysis'
+        assert await page.locator('.ha-component-title').count() == 0
+        assert await page.locator('.ha-host-title').text_content() == 'Lotto 6/45 Analysis'
+        assert await page.locator('.ha-host-header').evaluate("n=>getComputedStyle(n).display==='none'")
+        await page.evaluate('el.narrow=true')
+        assert await page.locator('.ha-host-header').evaluate("n=>getComputedStyle(n).display==='flex'")
+        await page.evaluate('el.narrow=false')
+        assert await page.locator('.ha-host-header').evaluate("n=>getComputedStyle(n).display==='none'")
         assert await page.locator('#drawtitle').text_content() == '제 1,240회'
         assert await page.locator('#numbers .ball').count() == 7
         assert resources.keys() <= assets
@@ -141,11 +149,13 @@ async def run():
         assert await page.locator('#game_a').input_value() == '2, 3, 4, 5, 6, 7'
         await page.locator('#close-editor').click()
         assert await page.get_by_role('link', name='로또 통합 및 센서 설정').get_attribute('href') == '/config/integrations/integration/lotto_645'
-        await page.evaluate("window.menuCount=0;el.addEventListener('hass-toggle-menu',()=>menuCount++)")
+        await page.evaluate("window.menuCount=0;el.addEventListener('hass-toggle-menu',()=>menuCount++);el.narrow=true")
         await page.locator('#menu').click()
         assert await page.evaluate('menuCount') == 1
-        for width in (320, 390, 768, 1440):
+        await page.evaluate('el.narrow=false')
+        for width in (320, 390, 768, 870, 871, 1440):
             await page.set_viewport_size({'width': width, 'height': 900})
+            await page.evaluate('(narrow)=>el.narrow=narrow', width <= 870)
             for name in ('home', 'wallet', 'review'):
                 await page.locator(f'#tab-{name}').click()
                 assert await page.evaluate('el.scrollWidth<=el.clientWidth+1'), (width, name)
@@ -155,7 +165,7 @@ async def run():
         await verify_safe_area(page)
         assert not errors, errors
         await browser.close()
-        print('PASS: smart sync, two-tier header, real ES modules, canonical logo, PNG QR, explicit save, draft preservation, safe areas and responsive views')
+        print('PASS: smart sync, HA-driven narrow host header, real ES modules, canonical logo, PNG QR, explicit save, draft preservation, safe areas and responsive views')
 
 
 if __name__ == '__main__':
