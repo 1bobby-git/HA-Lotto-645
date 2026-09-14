@@ -88,7 +88,9 @@ async def verify_component_design(page: Page) -> None:
             assert state['logoFit'] == 'contain' and state['logo']['width'] > 0, (label, state)
             assert state['tabs']['height'] == 48 and state['tabFont'] == '14px', (label, state)
             assert state['gap'] == ('24px' if mobile else '30px'), (label, state)
-            assert state['connection'] == 'inline-flex', (label, state)
+            # A grid item blockifies inline-flex to flex in computed style.
+            assert state['connection'] == 'flex', (label, state)
+            assert state['connectionRect']['height'] >= 44, (label, state)
             assert state['version'] == ('none' if mobile else 'block'), (label, state)
             assert state['headerBg'] == 'rgb(255, 255, 255)', (label, state)
             assert state['tabColor'] == 'rgb(25, 31, 40)', (label, state)
