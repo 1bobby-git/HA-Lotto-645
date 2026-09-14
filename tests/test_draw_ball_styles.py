@@ -1,4 +1,4 @@
-"""Lock the Donghaeng Lotto 6/45 palette across every rendered number ball."""
+"""Lock the screenshot-matched Lotto 6/45 palette across every number ball."""
 from pathlib import Path
 import json
 import re
@@ -26,7 +26,7 @@ def test_recent_draw_geometry_remains_flat_and_readable():
     assert 'gap:18px;' in rule(VIEW, '.draw-numbers')
 
 
-def test_every_number_ball_uses_donghaeng_palette():
+def test_every_number_ball_uses_user_reference_palette():
     base = rule(
         SHELL,
         '.draw-numbers .ball[data-band],\n.ticket-balls .ball[data-band]',
@@ -35,21 +35,23 @@ def test_every_number_ball_uses_donghaeng_palette():
     assert 'border:0;' in base
     assert 'background-image:none;' in base
     assert 'box-shadow:none;' in base
+    assert 'text-shadow:0 1px 1px rgba(0,0,0,.16);' in base
 
+    # 1/10, 10/20, 20/30 and 40/45 bands are sampled from the first supplied
+    # result image.  The 31~40 blue-gray comes from the second supplied image.
     expected = {
-        1: ('#fbc400', 'rgba(73,57,0,.8)'),
-        2: ('#69c8f2', 'rgba(0,49,70,.8)'),
-        3: ('#ff7272', 'rgba(64,0,0,.8)'),
-        4: ('#aaa', 'rgba(61,61,61,.8)'),
-        5: ('#b0d840', 'rgba(41,56,0,.8)'),
+        1: '#e08f00',
+        2: '#0063cc',
+        3: '#d8314f',
+        4: '#6d7381',
+        5: '#2c9e44',
     }
-    for band, (color, shadow) in expected.items():
+    for band, color in expected.items():
         css = rule(
             SHELL,
             f'.draw-numbers .ball[data-band="{band}"],.ticket-balls .ball[data-band="{band}"]',
         )
-        assert f'background:{color};' in css
-        assert f'text-shadow:0 0 3px {shadow};' in css
+        assert css == f'background:{color}'
 
 
 def test_wallet_and_review_number_sizes_are_preserved():
@@ -67,6 +69,13 @@ def test_panel_shell_is_the_versioned_production_entry():
     assert f"module_url': f'/lotto_645_static/lotto-panel-shell.js?v={{VERSION}}'" in ticket_panel
     assert f"data-lotto-ha-host-header', '{version}'" in SHELL
     assert f"data-lotto-official-ball-colors', '{version}'" in SHELL
-    assert "import './lotto-panel.js?v=1.11.5';" in SHELL
+    assert f"import './lotto-panel.js?v={version}';" in SHELL
     assert (WWW / 'lotto-panel.js').exists()
     assert (WWW / 'lotto-panel-core.js').exists()
+
+
+def test_countdown_is_rendered_in_home_hero_not_as_standalone_card():
+    assert 'hero-draw-countdown' in SHELL
+    assert "oldSection.hidden = true" in SHELL
+    assert "0일 00시간 00분 00초" in SHELL
+    assert 'sales_reopen_at' in SHELL

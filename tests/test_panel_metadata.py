@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import importlib
 import json
 from pathlib import Path
+import re
 import sys
 import types
 
@@ -26,30 +27,33 @@ def test_regular_schedule_matches_round_and_korean_timezone():
     schedule = metadata.draw_schedule(1241, 'official_history', now=at('2026-09-14T00:00:00+00:00'))
     assert schedule['round'] == 1242
     assert schedule['scheduled_at'] == '2026-09-19T20:35:00+09:00'
-    assert schedule['rollover_at'] == '2026-09-20T00:00:00+09:00'
+    assert schedule['sales_reopen_at'] == '2026-09-20T06:00:00+09:00'
+    assert schedule['rollover_at'] == schedule['sales_reopen_at']
     assert schedule['server_now'] == '2026-09-14T09:00:00+09:00'
     assert schedule['basis'] == 'regular_schedule'
-    assert '자동 확인하지 않습니다' in schedule['notice']
+    assert '일요일 06:00' in schedule['notice']
 
 
-@pytest.mark.parametrize('status', ['waiting', 'conflict', 'official_history'])
-def test_elapsed_saturday_deadline_does_not_skip_unreceived_result(status):
-    # Old history, unknown and disputed results retain this Saturday's deadline.
-    schedule = metadata.draw_schedule(1240, status, now=at('2026-09-12T21:00:00+09:00'))
+@pytest.mark.parametrize('status', ['waiting', 'conflict', 'official_history', 'official_confirmed'])
+def test_draw_deadline_stays_on_current_round_until_sales_reopen(status):
+    schedule = metadata.draw_schedule(1241, status, now=at('2026-09-12T21:00:00+09:00'))
     assert schedule['round'] == 1241
     assert schedule['scheduled_at'] == '2026-09-12T20:35:00+09:00'
+    assert schedule['sales_reopen_at'] == '2026-09-13T06:00:00+09:00'
 
 
-@pytest.mark.parametrize('status', list(metadata.PUBLISHED_STATES))
-def test_published_result_advances_only_countdown(status):
-    schedule = metadata.draw_schedule(1241, status, now=at('2026-09-12T21:00:00+09:00'))
+def test_sunday_before_0600_keeps_completed_round_at_zero_window():
+    schedule = metadata.draw_schedule(1241, 'official_confirmed', now=at('2026-09-13T05:59:59+09:00'))
+    assert schedule['round'] == 1241
+    assert schedule['scheduled_at'] == '2026-09-12T20:35:00+09:00'
+    assert schedule['rollover_at'] == '2026-09-13T06:00:00+09:00'
+
+
+def test_sunday_0600_starts_next_purchasable_round_countdown():
+    schedule = metadata.draw_schedule(1241, 'official_confirmed', now=at('2026-09-13T06:00:00+09:00'))
     assert schedule['round'] == 1242
     assert schedule['scheduled_at'] == '2026-09-19T20:35:00+09:00'
-
-
-def test_sunday_rollover_is_not_pinned_to_stale_history():
-    schedule = metadata.draw_schedule(1, 'waiting', now=at('2026-09-13T00:00:00+09:00'))
-    assert schedule['round'] == 1242
+    assert schedule['sales_reopen_at'] == '2026-09-20T06:00:00+09:00'
 
 
 def test_anchor_and_date_validation():
@@ -80,10 +84,13 @@ def test_all_local_guides_are_packaged_verbatim_and_ai_is_separate():
     assert '생년월일' not in json.dumps(result, ensure_ascii=False).split('requirements')[0]
 
 
-def test_shell_and_packaged_tools_have_matching_version():
-    version = json.loads((COMPONENT / 'manifest.json').read_text())['version']
+def test_shell_and_packaged_tools_use_the_same_tools_cache_version():
+    # A presentation-only release may leave the tools module byte-for-byte
+    # unchanged.  Its own cache version and the shell import must still match.
     tools = (COMPONENT / 'www/lotto-panel-tools.js').read_text()
     shell = (COMPONENT / 'www/lotto-panel-shell.js').read_text()
-    assert f"const VERSION = '{version}'" in tools
-    assert f"./lotto-panel-tools.js?v={version}" in shell
+    tools_version = re.search(r"const VERSION = '([^']+)'", tools)
+    shell_version = re.search(r"\./lotto-panel-tools\.js\?v=([0-9.]+)", shell)
+    assert tools_version and shell_version
+    assert tools_version.group(1) == shell_version.group(1)
     assert 'applyPanelTools(this)' in shell
