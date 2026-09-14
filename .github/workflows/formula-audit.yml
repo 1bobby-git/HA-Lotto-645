@@ -1,0 +1,27 @@
+name: Formula audit
+on:
+  push:
+    branches: [work/research-formula-verification]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reproducible-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Compile formula engine
+        run: python -m compileall -q custom_components/lotto_645/sampling.py
+      - name: Build exact-source review bundle
+        run: git archive --format=zip HEAD -o formula-review-source.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: formula-review-source
+          path: formula-review-source.zip
+          retention-days: 1
