@@ -40,6 +40,21 @@ jobs:
           subprocess.run(['git', 'apply', str(patch)], check=True)
           root = Path('.')
           component = root / 'custom_components/lotto_645'
+          catalog = component / 'methods.py'
+          text = catalog.read_text()
+          start = text.index('    MethodDefinition(\n        METHOD_AC_FILTER,')
+          end = text.index('\n    ),\n', start) + len('\n    ),\n')
+          block = text[start:end]
+          text = text[:start] + text[end:]
+          anchor = '    MethodDefinition(\n        METHOD_SELECTED_MEDIAN,'
+          assert text.count(anchor) == 1
+          catalog.write_text(text.replace(anchor, block + anchor, 1))
+          for index_path in (root / 'README.md', root / 'docs/FORMULAS.md'):
+              lines = index_path.read_text().splitlines(keepends=True)
+              i = next(i for i, line in enumerate(lines) if line.startswith('23. [') and 'selected_median_consensus.md' in line)
+              assert lines[i + 1].startswith('24. [') and 'ac_range_filter.md' in lines[i + 1]
+              lines[i:i + 2] = ['23.' + lines[i + 1][3:], '24.' + lines[i][3:]]
+              index_path.write_text(''.join(lines))
           manifest_path = component / 'manifest.json'
           manifest = json.loads(manifest_path.read_text())
           previous = manifest['version']
