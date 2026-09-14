@@ -50,8 +50,8 @@ async def verify_panel_tools(page):
         el.updateResults(toolsFixture);el._clearSmartSync();el.showScreen('home');
         window.wsBeforeTools=requests.length;
     }""", catalog)
-    assert await page.locator('#predictions .method-info-trigger').count() == 24
-    assert await page.locator('#reviews .method-info-trigger').count() == 24
+    assert await page.locator('#predictions .method-info-trigger').count() == len(catalog)
+    assert await page.locator('#reviews .method-info-trigger').count() == len(catalog)
     assert await page.locator('lotto-panel-tools').count() == 1
     assert await page.locator('.hero-draw-countdown').is_visible()
     assert '제 1,242회 추첨까지' in await page.locator('.hero-clock-label').text_content()
@@ -192,4 +192,4 @@ async def verify_panel_tools(page):
     assert await page.evaluate('tools._clockTimer===null')
     await page.evaluate("delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));el.remove()")
     assert await page.evaluate('tools._clockTimer===null && !tools.dialog.open && !el.hasAttribute("data-method-open")')
-    print('PASS: 24 guides, single scroll, hero countdown zero-hold/restart, modal safe areas and no timer network')
+    print(f'PASS: {len(catalog)} guides, single scroll, hero countdown zero-hold/restart, modal safe areas and no timer network')
