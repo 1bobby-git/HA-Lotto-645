@@ -1,7 +1,7 @@
 /* Production entry: component presentation with HA-owned narrow-state decisions. */
 import './lotto-panel.js?v=1.11.5';
 import { applyComponentDesign } from './lotto-panel-design.js?v=1.11.7';
-import { applyPanelTools } from './lotto-panel-tools.js?v=1.11.8';
+import { applyPanelTools } from './lotto-panel-tools.js?v=1.11.9';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const Panel = customElements.get('lotto-ticket-panel');
@@ -119,7 +119,7 @@ Panel.prototype.render = function (...args) {
     }
     if (!root.querySelector('style[data-lotto-ha-host-header]')) {
       const style = document.createElement('style');
-      style.setAttribute('data-lotto-ha-host-header', '1.11.8');
+      style.setAttribute('data-lotto-ha-host-header', '1.11.9');
       style.textContent = HA_HOST_HEADER_STYLE;
       root.append(style);
     }

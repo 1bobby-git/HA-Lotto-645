@@ -1,5 +1,5 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '1.11.8';
+const VERSION = '1.11.9';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
 const REPO = `https://github.com/1bobby-git/HA-Lotto-645/blob/v${VERSION}/`;
@@ -12,11 +12,12 @@ const element = (tag, text, className) => {
   return node;
 };
 
-// Fill the positioned panel viewport supplied by HA. An inline custom-panel
-// wrapper must not add a baseline/line box or expand to the content's height.
-// No parent/HA shadow DOM or global document styles are read or changed.
+// Stay in normal flow: HA reserves sidebar space with padding/margins, not
+// necessarily a positioned ancestor. Absolute inset:0 would escape that space.
+// Keep height/size containment and one panel scrollport without reading or
+// changing parent/HA shadow DOM, sidebar widths, or global document styles.
 const PANEL_STYLE = `
-:host{position:absolute;inset:0;display:block;box-sizing:border-box;width:100%;height:100%;min-height:0;max-height:100%;min-width:0;overflow:auto;contain:layout size;overscroll-behavior-y:contain}
+:host{position:relative;inset:auto;display:block;box-sizing:border-box;width:100%;height:100%;min-height:0;max-height:100%;min-width:0;overflow:auto;contain:layout size;overscroll-behavior-y:contain}
 :host([data-editor-open]),:host([data-method-open]){overflow:hidden}
 .shell{min-height:100%;box-sizing:border-box}
 .table-scroll{max-height:none;overflow:visible}
@@ -186,7 +187,7 @@ class LottoPanelTools extends HTMLElement {
       if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) this.closeGuide();
     });
     this.shadowRoot.addEventListener('click', event => {
-      const a = event.target.closest?.('a'); if (!a || a.classList.contains('method-source')) return;
+      const a = event.target.closest?.('a'); if (!a) return;
       const url = new URL(a.href);
       const match = /\/docs\/methods\/([a-z0-9_]+)\.md$/.exec(url.pathname);
       if (url.href.startsWith(REPO) && match && this.catalog.has(match[1])) { event.preventDefault(); void this.openGuide(match[1]); }
