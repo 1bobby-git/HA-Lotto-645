@@ -1,6 +1,6 @@
 # 공개 공식 · 삼중 동반출현
 
-[23개 공식 목록](../../README.md#추첨-공식-23종) · [공통 계산 원리](../FORMULAS.md)
+[24개 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: triplet_cooccurrence` · 분류: 공개 분석식 · 후보 풀: **23개**
 

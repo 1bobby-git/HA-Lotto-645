@@ -57,6 +57,7 @@ METHOD_UNIFORM_REJECTION: Final = "uniform_rejection"
 METHOD_UNIFORM_SEQUENTIAL: Final = "uniform_sequential"
 METHOD_CALIBRATED_STRATIFIED: Final = "calibrated_stratified"
 METHOD_UNIFORM_COMBINATION_RANK: Final = "uniform_combination_rank"
+METHOD_AC_FILTER: Final = "ac_range_filter"
 
 METHODS: Final[tuple[MethodDefinition, ...]] = (
     MethodDefinition(
@@ -272,6 +273,13 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         diversity_weight=0.05,
         myungri_weight=0.52,
         pool_size=22,
+    ),
+    MethodDefinition(
+        METHOD_AC_FILTER,
+        "형태 공식 · AC값 7 이상",
+        "조합 형태 필터",
+        "15개 번호쌍의 서로 다른 양의 차이 개수에서 5를 뺀 AC값이 7 이상인 조합을 조건부 균등 추출합니다. 인접 간격을 평가하는 델타와 다르며 빈도·합계·홀짝 점수를 섞지 않습니다. 전체 조합의 약 85.24%가 해당하고, 이 비율은 적중률이 아닙니다. 당첨확률은 높아지지 않습니다.",
+        {}, pool_size=45, sampling="ac_range_filter",
     ),
     MethodDefinition(
         METHOD_SELECTED_MEDIAN,

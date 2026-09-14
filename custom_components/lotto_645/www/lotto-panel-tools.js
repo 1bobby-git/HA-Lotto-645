@@ -1,5 +1,5 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '1.12.2';
+const VERSION = '1.13.0';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
 const REPO = `https://github.com/1bobby-git/HA-Lotto-645/blob/v${VERSION}/`;

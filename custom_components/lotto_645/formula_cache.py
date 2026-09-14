@@ -5,7 +5,7 @@ from hashlib import sha256
 import json
 
 from .methods import METHODS_BY_ID
-from .sampling import FORMULA_VERSION, validate_fixed
+from .sampling import FORMULA_VERSION, validate_sampled_ticket
 
 
 def cache_key(history, method_ids, nonce):
@@ -23,7 +23,10 @@ def restore_tickets(cache, history, method_ids, nonce):
     if not isinstance(raw, dict) or set(raw) != expected:
         return {}
     try:
-        tickets = {key: validate_fixed(values) for key, values in raw.items()}
+        tickets = {
+            key: validate_sampled_ticket(METHODS_BY_ID[key].sampling, values)
+            for key, values in raw.items()
+        }
         if any(len(t) != 6 for t in tickets.values()) or len(set(tickets.values())) != len(tickets):
             return {}
         if set(tickets.values()) & {d.numbers for d in history}:

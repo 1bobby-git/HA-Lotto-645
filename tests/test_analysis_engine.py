@@ -72,7 +72,7 @@ def _profile():
 
 
 def test_catalog_and_default_gating():
-    assert len(methods.METHODS) == 23
+    assert len(methods.METHODS) == 24
     assert len(methods.PUBLIC_METHOD_IDS) == 12
     assert methods.METHOD_MYUNGRI_HETU not in methods.DEFAULT_METHOD_IDS
     myungri_method = methods.METHODS_BY_ID[methods.METHOD_MYUNGRI_HETU]
