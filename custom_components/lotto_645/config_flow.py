@@ -38,7 +38,8 @@ from .const import (
     NAME,
 )
 from .methods import (
-    DEFAULT_METHOD_IDS,
+    DEFAULT_METHOD_IDS, ACTIVE_METHOD_IDS, UNIFORM_ENGINES, FREQUENCY_PRESETS,
+    CONF_UNIFORM_ENGINE, CONF_FREQUENCY_PRESET, consolidate_options,
     METHOD_MYUNGRI_HETU,
     METHOD_SELECTED_MEDIAN,
     consensus_source_ids,
@@ -91,13 +92,20 @@ def _required_text_marker(key: str, options: dict[str, Any]) -> vol.Marker:
 
 def _recommendation_schema(options: dict[str, Any]) -> vol.Schema:
     """Build the small, stable recommendation/AI/source options form."""
-    selected = list(
-        normalize_method_ids(options.get(CONF_SELECTED_METHODS, DEFAULT_METHOD_IDS))
-    )
+    options = consolidate_options(options)
+    selected = options[CONF_SELECTED_METHODS]
     ai_entity_marker = _optional_text_marker(CONF_AI_TASK_ENTITY_ID, options)
     return vol.Schema(
         {
             vol.Required(CONF_SELECTED_METHODS, default=selected): _method_selector(),
+            vol.Optional(CONF_UNIFORM_ENGINE, default=options[CONF_UNIFORM_ENGINE]): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=[{"value": key, "label": METHODS_BY_ID[key].label}
+                                                       for key in UNIFORM_ENGINES],
+                                              mode=selector.SelectSelectorMode.DROPDOWN)),
+            vol.Optional(CONF_FREQUENCY_PRESET, default=options[CONF_FREQUENCY_PRESET]): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=[{"value": key, "label": METHODS_BY_ID[key].label}
+                                                       for key in FREQUENCY_PRESETS],
+                                              mode=selector.SelectSelectorMode.DROPDOWN)),
             vol.Optional(
                 CONF_ENABLE_AI,
                 default=bool(options.get(CONF_ENABLE_AI, DEFAULT_ENABLE_AI)),
@@ -194,7 +202,7 @@ def _normalize_submitted_methods(raw_methods: object) -> tuple[str, ...]:
     if not isinstance(raw_methods, (list, tuple)) or not raw_methods:
         return ()
     submitted = [str(value) for value in raw_methods]
-    if any(value not in METHODS_BY_ID for value in submitted):
+    if any(value not in ACTIVE_METHOD_IDS for value in submitted):
         return ()
     normalized = normalize_method_ids(submitted)
     if len(normalized) != len(dict.fromkeys(submitted)):
@@ -206,6 +214,7 @@ class Lotto645ConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Lotto 6/45 Analysis."""
 
     VERSION = 2
+    MINOR_VERSION = 2
 
     @staticmethod
     @callback
@@ -261,8 +270,12 @@ class Lotto645OptionsFlow(OptionsFlow):
                 ):
                     errors["base"] = "consensus_sources_required"
                 else:
-                    pending = dict(self._options)
+                    pending = consolidate_options(self._options)
                     pending.update(user_input)
+                    if any(pending.get(key) not in allowed for key, allowed in (
+                        (CONF_UNIFORM_ENGINE, UNIFORM_ENGINES), (CONF_FREQUENCY_PRESET, FREQUENCY_PRESETS)
+                    )):
+                        raise ValueError("지원하지 않는 공식 옵션입니다")
                     pending[CONF_SELECTED_METHODS] = list(normalized)
                     if not pending.get(CONF_AI_TASK_ENTITY_ID):
                         pending.pop(CONF_AI_TASK_ENTITY_ID, None)

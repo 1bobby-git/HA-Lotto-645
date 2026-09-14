@@ -1,6 +1,6 @@
 # 공개 공식 · 이월수
 
-[24개 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
+[12개 대표 공식 목록](../../README.md#추첨-공식-12종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: carryover_formula` · 분류: 공개 분석식 · 후보 풀: **22개**
 

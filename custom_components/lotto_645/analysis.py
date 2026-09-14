@@ -20,7 +20,7 @@ from typing import Any
 
 from .const import DISCLAIMER, FIRST_PRIZE_ODDS, PUBLIC_FORMULA_NOTICE
 from .methods import (
-    DEFAULT_METHOD_IDS,
+    DEFAULT_METHOD_IDS, resolve_method_definition, formula_settings,
     METHOD_AC_FILTER,
     METHOD_BALANCE,
     METHOD_BAYESIAN_SHRINKAGE,
@@ -581,6 +581,7 @@ def build_analysis(
     saju_profile: dict[str, Any] | None = None,
     excluded_combinations: Sequence[tuple[int, ...]] = (),
     restored_tickets: dict[str, tuple[int, ...]] | None = None,
+    formula_options: dict[str, str] | None = None,
     *, rng=None, progress_callback=None,
 ) -> AnalysisResult:
     """Build one recommendation per selected method.
@@ -629,7 +630,7 @@ def build_analysis(
         if method_id != METHOD_SELECTED_MEDIAN
     ) + ((METHOD_SELECTED_MEDIAN,) if METHOD_SELECTED_MEDIAN in selected_method_ids else ())
     for index, method_id in enumerate(execution_method_ids, start=1):
-        method = METHODS_BY_ID[method_id]
+        method = resolve_method_definition(method_id, formula_options)
         if progress_callback:
             progress_callback({"phase": "method_start", "method_id": method_id, "index": index})
         if method_id == METHOD_SELECTED_MEDIAN:
@@ -651,6 +652,7 @@ def build_analysis(
             experimental = method_id == METHOD_BAYESIAN_SHRINKAGE
             details = {
                 "formula_id": method_id, "formula_version": method.formula_version,
+                "generator_settings": formula_settings(formula_options),
                 "method_description": method.description, "method_category": method.category,
                 "restored_from_cache": method_id in restored_tickets,
                 "generation_sequence": generation_nonce, "rng": "injected_test_rng" if rng is not None else "system_csprng",
@@ -695,14 +697,20 @@ def build_analysis(
             if progress_callback:
                 progress_callback({"phase": "method_complete", "method_id": method_id, "index": index})
             continue
+        # The public family ID is stable; legacy preset ID also determines the
+        # deterministic refresh offset and the accurate explanatory template.
+        calculation_method = (METHODS_BY_ID[formula_settings(formula_options)["frequency_preset"]]
+                              if method_id == METHOD_WEIGHTED_FREQUENCY else method)
         combo, score, components = _select_candidate(
-            method, history, ranked, context, selected, past_combos | set(restored_tickets.values()), quads, quints, generation_nonce
+            calculation_method, history, ranked, context, selected, past_combos | set(restored_tickets.values()), quads, quints, generation_nonce
         )
         selected.append(combo)
-        reason, details = _recommendation_reason(method, combo, context)
+        reason, details = _recommendation_reason(calculation_method, combo, context)
+        details["implementation_id"] = calculation_method.method_id
         details.update(
             {
                 "formula_id": method_id, "formula_version": method.formula_version,
+                "generator_settings": formula_settings(formula_options),
                 "uniformity": "nonuniform_personalization", "predictive_evidence": "not_established",
                 "generation_sequence": generation_nonce,
                 "score_components": {key: round(value, 4) for key, value in components.items()},
@@ -753,9 +761,9 @@ def build_analysis(
         "selected_methods": [
             {
                 "method_id": method_id,
-                "label": METHODS_BY_ID[method_id].label,
-                "category": METHODS_BY_ID[method_id].category,
-                "description": METHODS_BY_ID[method_id].description,
+                "label": resolve_method_definition(method_id, formula_options).label,
+                "category": resolve_method_definition(method_id, formula_options).category,
+                "description": resolve_method_definition(method_id, formula_options).description,
             }
             for method_id in selected_method_ids
         ],

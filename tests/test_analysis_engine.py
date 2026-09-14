@@ -73,7 +73,7 @@ def _profile():
 
 def test_catalog_and_default_gating():
     assert len(methods.METHODS) == 24
-    assert len(methods.PUBLIC_METHOD_IDS) == 12
+    assert len(methods.PUBLIC_METHOD_IDS) == 8
     assert methods.METHOD_MYUNGRI_HETU not in methods.DEFAULT_METHOD_IDS
     myungri_method = methods.METHODS_BY_ID[methods.METHOD_MYUNGRI_HETU]
     assert "개인 사주" in myungri_method.description
@@ -210,15 +210,45 @@ def test_legacy_bayesian_plus_scoring_formula_median_configuration_survives():
 
 def test_uniform_samplers_contribute_actual_numbers_not_internal_scores():
     result = analysis.build_analysis(
-        _history(40), (*methods.DEFAULT_METHOD_IDS, methods.METHOD_SELECTED_MEDIAN),
+        _history(40), (methods.METHOD_UNIFORM_FISHER_YATES, methods.METHOD_AC_FILTER, methods.METHOD_SELECTED_MEDIAN),
         rng=random.Random(93),
     )
     consensus = result.recommendation_by_method(methods.METHOD_SELECTED_MEDIAN)
     assert consensus is not None
     assert consensus.score is None
-    assert consensus.details["consensus_source_count"] == len(methods.DEFAULT_METHOD_IDS)
+    assert consensus.details["consensus_source_count"] == 2
     assert consensus.details["consensus_source_numbers"] == {
         item.method_id: list(item.numbers) for item in result.recommendations
         if item.method_id != methods.METHOD_SELECTED_MEDIAN
     }
     assert "consensus_number_median_scores" not in consensus.details
+
+
+@pytest.mark.parametrize('engine', methods.UNIFORM_ENGINES)
+def test_family_dispatches_selected_uniform_algorithm(engine, monkeypatch):
+    calls=[]
+    original=analysis.generate_ticket
+    def observed(formula, *args, **kwargs):
+        calls.append(formula)
+        return original(formula,*args,**kwargs)
+    monkeypatch.setattr(analysis,'generate_ticket',observed)
+    options={'uniform_engine':engine}
+    result=analysis.build_analysis(_history(30), ('uniform_fisher_yates',), formula_options=options, rng=random.Random(44))
+    assert calls==[engine]
+    assert len(result.recommendations)==1
+    row=result.recommendations[0]
+    assert row.method_id=='uniform_fisher_yates'
+    assert row.details['generator_settings']['uniform_engine']==engine
+
+
+@pytest.mark.parametrize('preset', methods.FREQUENCY_PRESETS)
+def test_frequency_family_preserves_preset_calculation_and_stable_identity(preset):
+    options={'frequency_preset':preset}
+    history=_history(30)
+    standalone=analysis.build_analysis(history,(preset,)).recommendations[0]
+    family=analysis.build_analysis(history,('weighted_frequency',),formula_options=options).recommendations[0]
+    assert family.method_id=='weighted_frequency'
+    assert family.numbers==standalone.numbers
+    assert family.score==standalone.score
+    assert family.details['generator_settings']['frequency_preset']==preset
+    assert family.details['number_feature_weights']==standalone.details['number_feature_weights']

@@ -19,7 +19,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .methods import METHODS_BY_ID
+from .methods import METHODS_BY_ID, active_method_ids, formula_settings
 from .analysis import build_analysis
 from .consensus import refresh_consensus
 from .ai_formula import (AI_BASE_FORMULA, make_ai_ticket, explanation_prompt,
@@ -156,9 +156,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
     @property
     def configured_method_ids(self) -> tuple[str, ...]:
         """Return methods selected in options, including Saju if it awaits a profile."""
-        return normalize_method_ids(
-            self.entry.options.get(CONF_SELECTED_METHODS, DEFAULT_METHOD_IDS)
-        )
+        return active_method_ids(dict(self.entry.options))
 
     @property
     def saju_profile(self) -> dict[str, Any]:
@@ -491,7 +489,8 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             )
         elif (self._prediction_snapshot is None and self.history
               and METHOD_SELECTED_MEDIAN not in self.selected_method_ids
-              and not any(METHODS_BY_ID[key].sampling for key in self.selected_method_ids)):
+              and not any(METHODS_BY_ID[key].sampling for key in self.selected_method_ids)
+              and not self.entry.options.get("formula_catalog_revision")):
             # Upgrade compatibility: v1.7 and older did not persist recommendation
             # snapshots.  Reconstruct the currently displayed target round from
             # the cached pre-draw history before accepting a newer mirror round.
@@ -621,7 +620,8 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         if cached_ai is not None and cached_ai.details.get("target_round") == self.history[-1].round + 1:
             excluded = (*excluded, cached_ai.numbers)
         restored = restore_tickets(getattr(self, "_sampling_cache", {}), self.history,
-                                   self.selected_method_ids, self._local_generation_nonce)
+                                   self.selected_method_ids, self._local_generation_nonce,
+                                   formula_settings(dict(self.entry.options)))
         try:
             profile = self.saju_profile if self.saju_profile_ready else None
             analysis = await self.hass.async_add_executor_job(
@@ -632,6 +632,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 profile,
                 excluded,
                 restored,
+                formula_settings(dict(self.entry.options)),
             )
         except ValueError as err:
             raise UpdateFailed(f"로또 분석 실패: {err}") from err
@@ -641,7 +642,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             updated_at=datetime.now(UTC).isoformat(),
         )
         self._sampling_cache = store_tickets(analysis, self.history, self.selected_method_ids,
-                                            self._local_generation_nonce)
+                                            self._local_generation_nonce, formula_settings(dict(self.entry.options)))
         if self._local_generated_at is None or not restored:
             self._local_generated_at = datetime.now(UTC)
             self._needs_storage_save = True

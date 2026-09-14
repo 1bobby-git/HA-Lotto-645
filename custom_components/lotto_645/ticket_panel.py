@@ -49,7 +49,7 @@ def _coordinator(hass: HomeAssistant, message: dict) -> Any:
 
 def _review_rows(coordinator) -> list[dict]:
     from .const import AI_METHOD_ID
-    from .methods import METHODS_BY_ID
+    from .methods import METHODS_BY_ID, ACTIVE_METHOD_IDS
     from .review import review_name
     ids = list(getattr(coordinator, 'configured_method_ids', ()))
     ids.extend(key for key in getattr(coordinator, '_review_summaries', {}) if key not in ids)
@@ -59,6 +59,8 @@ def _review_rows(coordinator) -> list[dict]:
     for method_id in ids:
         summary = coordinator.review_for_method(method_id) if hasattr(coordinator, 'review_for_method') else {}
         label = METHODS_BY_ID[method_id].label if method_id in METHODS_BY_ID else 'Home Assistant AI 추천' if method_id == AI_METHOD_ID else method_id
+        if method_id in METHODS_BY_ID and method_id not in ACTIVE_METHOD_IDS:
+            label = '[이전 공식] ' + label
         rows.append({'method_id': method_id, 'label': label, 'display_name': review_name(label, summary), **summary})
     return rows
 
@@ -69,7 +71,8 @@ def _view(coordinator: Any, round_no: int | None = None) -> dict:
     round_no = round_no or book.selected_round or (coordinator.data.analysis.target_round if coordinator.data else None)
     record = book.records.get(str(round_no), {})
     metadata = coordinator.result_metadata
-    return {**panel_metadata(coordinator.result_round, metadata.get('status', 'waiting')),
+    return {**panel_metadata(coordinator.result_round, metadata.get('status', 'waiting'),
+                             archived_ids=getattr(coordinator, '_review_summaries', {})),
             'reviews': _review_rows(coordinator),
             'review_round': coordinator.review_for_round(coordinator.result_round) if hasattr(coordinator, 'review_for_round') else {},
             'review_storage_error': getattr(coordinator, 'review_storage_error', False),

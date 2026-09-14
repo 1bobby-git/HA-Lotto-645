@@ -24,19 +24,23 @@
       },
       "recommendations": {
         "title": "Draw formulas, AI, and data source",
-        "description": "Select one or more formulas. To enable Personal Four Pillars, first save the birth profile from the previous menu. Detailed explanations are available on the Recommendation Method Guide sensor.",
+        "description": "Select from 12 formula families. Uniform and frequency variants are presets, not extra games. Legacy selections migrate automatically; historical records remain unchanged. Retarget automations referencing consolidated or retired sensors to a retained sensor.",
         "data": {
           "selected_methods": "Draw formulas (multiple selection)",
           "enable_ai_recommendation": "Enable Home Assistant AI recommendation",
           "ai_task_entity_id": "AI Task entity (optional; blank uses the preferred data AI Task)",
           "ai_auto_generate": "Automatically generate AI recommendation for a new draw",
-          "allow_official_direct_fallback": "Allow limited direct Donghaeng Lottery fallback"
+          "allow_official_direct_fallback": "Allow limited direct Donghaeng Lottery fallback",
+          "uniform_engine": "Uniform generator algorithm",
+          "frequency_preset": "Frequency formula preset"
         },
         "data_description": {
           "selected_methods": "Multiple formulas can be selected. Personal Four Pillars can only be enabled after the personal profile has been saved. None of these formulas changes the mathematical winning probability. The selected-formula median consensus requires at least two other local formulas and excludes AI.",
           "enable_ai_recommendation": "AI is independent from local formulas. Manual Refresh / Regenerate does not regenerate the AI recommendation.",
           "ai_auto_generate": "Only generates AI automatically when a new official draw is detected. Manual local regeneration suppresses AI generation.",
-          "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed."
+          "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed.",
+          "uniform_engine": "Used only when the uniform family is selected. All six algorithms target the same distribution; no extra games are created.",
+          "frequency_preset": "Used only for the frequency family. Choose weighted frequency, hot numbers, or exponential decay for one game. Predictive benefit is not established."
         }
       },
       "saju": {

@@ -64,9 +64,13 @@ def draw_schedule(result_round: int | None = None, result_status: str = "waiting
     }
 
 
-def panel_metadata(result_round: int | None, result_status: str) -> dict:
+def panel_metadata(result_round: int | None, result_status: str, *, archived_ids=()) -> dict:
     """Share only public method descriptions, never personal/AI profile data."""
     catalog = method_catalog()
+    active = {item["method_id"] for item in catalog}
+    catalog.extend({**item, "name": "[이전 공식] " + item["name"]}
+                   for item in method_catalog(include_legacy=True)
+                   if item["method_id"] in archived_ids and item["method_id"] not in active)
     catalog.append({
         "method_id": AI_METHOD_ID,
         "name": "Home Assistant AI 추천",

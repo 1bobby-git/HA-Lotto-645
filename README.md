@@ -8,42 +8,47 @@ Home Assistant용 **로또 6/45 전체 회차 분석 · 선택형 번호 추천 
 
 > 공정하고 독립적인 추첨에서 모든 6개 조합의 1등 확률은 **1 / 8,145,060**입니다. 이 통합의 통계·명리 공식은 조합 선택용 휴리스틱이며, 당첨을 보장하거나 실제 당첨 확률을 높인다고 주장하지 않습니다. 추천 적합도와 과거 리뷰 별점은 당첨 확률이 아닙니다.
 
-## 추첨 공식 24종
+## 추첨 공식 12종
 
-**추가 공식은 AC값 7 이상 1종만 선택했습니다.** 모든 번호쌍의 차이 다양성을 조건으로 사용해 기존 델타·균형 공식과 구별됩니다. 기본 선택과 기존 공식은 그대로 유지하며, [신규 후보 비교·기존 공식 정리 권고](docs/FORMULA_SELECTION_REVIEW.md)에 추가하지 않은 이유와 제거·통합 후보를 기록했습니다. 신규 공식은 자동 활성화되지 않습니다.
+대표 공식은 **12개**, 기본 선택은 **균등 무작위 한 게임**입니다. 균등 알고리즘 6종은 생성 알고리즘 옵션으로, 가중 빈도·핫넘버·지수감쇠는 빈도 기준 옵션으로 통합했습니다. 각 계열은 하나만 선택되며 옵션 변경으로 게임 수가 늘어나지 않습니다.
 
-기본값은 균등 추첨 5종이며 조합 인덱스 공식을 추가로 선택할 수 있습니다. 기존 17개 공식 ID는 유지하고 베이지안 수축은 과거 영향 5%의 실험적 샘플러로 개선했습니다. 기존 사용자의 선택·엔티티·자동화는 유지됩니다. 균등 공식의 결과에는 적합도 점수를 붙이지 않습니다.
+재등장 주기·독창 패턴 3종·삼중 동반출현은 새 추천 선택에서 제거했습니다. AC·사주·중앙값·AI는 유지합니다. [변경 내용과 자동 이전 규칙](docs/FORMULA_CONSOLIDATION.md)을 확인하세요. **기존 통합 재등록이나 구매번호 삭제는 필요하지 않습니다.** 통합 전 센서를 참조하는 자동화는 대표 센서로 변경해야 하며, 저장한 과거 추천의 ID·번호·생성시각·리뷰는 재작성하거나 합산하지 않습니다.
 
-기존 과거 1등 조합 제외 정책을 유지하므로 제품에서는 **제외 후 허용된 공간에서의 조건부 균등성**을 표시합니다. 과거 조합 제외가 당첨확률을 높이지는 않습니다. [연구 반영·검증 범위](docs/RESEARCH_FORMULAS.md)
+균등 공식도 기존 과거 1등 조합 제외 정책 때문에 **허용 공간에서 조건부 균등**합니다. 생성 알고리즘이나 과거 조합 제외가 당첨 확률을 높이지는 않습니다. [연구·검증 범위](docs/RESEARCH_FORMULAS.md)
 
-**공식 이름을 누르면 해당 공식의 상세 안내로 이동합니다.** 각 문서에는 사용 데이터, 실제 계산 원리와 가중치, 이해를 돕는 가상 예시, 설정 방법, 센서 속성 및 해석의 한계가 담겨 있습니다.
+공식 이름을 누르면 기본 계산 원리와 가중치·예시·제한을 확인합니다. 균등·빈도 대표 안내에서는 옵션별 계산 문서도 열 수 있습니다.
 
 1. [균등 공식 · 부분 Fisher–Yates](docs/methods/uniform_fisher_yates.md)
-2. [균등 공식 · Floyd](docs/methods/uniform_floyd.md)
-3. [균등 공식 · 중복거부](docs/methods/uniform_rejection.md)
-4. [균등 공식 · 순차 포함](docs/methods/uniform_sequential.md)
-5. [균등 공식 · 조합보정 층화 CCSS](docs/methods/calibrated_stratified.md)
-6. [균등 공식 · 조합 인덱스](docs/methods/uniform_combination_rank.md)
-7. [독창 패턴 · 위상잔차 그래프](docs/methods/phase_residual_graph.md)
-8. [독창 패턴 · 전이·간격 위상](docs/methods/transition_gap_phase.md)
-9. [독창 패턴 · 다중시간대 공명](docs/methods/multiscale_resonance.md)
-10. [공개 공식 · 가중 빈도](docs/methods/weighted_frequency.md)
-11. [공개 공식 · 핫넘버](docs/methods/hot_numbers.md)
-12. [공개 공식 · 콜드·미출현](docs/methods/overdue_gap.md)
-13. [공개 공식 · 동반출현쌍](docs/methods/pair_cooccurrence.md)
-14. [공개 공식 · 삼중 동반출현](docs/methods/triplet_cooccurrence.md)
-15. [공개 공식 · 지수감쇠 최근성](docs/methods/recency_decay.md)
-16. [실험 공식 · 베이지안 수축](docs/methods/bayesian_shrinkage.md)
-17. [공개 공식 · 재등장 주기](docs/methods/cycle_rhythm.md)
-18. [공개 공식 · 균형 필터](docs/methods/balance_formula.md)
-19. [공개 공식 · 델타 시스템](docs/methods/delta_system.md)
-20. [공개 공식 · 이월수](docs/methods/carryover_formula.md)
-21. [공개 공식 · 종합 앙상블](docs/methods/public_ensemble.md)
-22. [명리 권장 · 개인 사주 원국·대운·추첨일](docs/methods/myungri_hetu_day_pillar.md)
-23. [형태 공식 · AC값 7 이상](docs/methods/ac_range_filter.md)
-24. [합의 추천 · 선택 공식 중앙값](docs/methods/selected_median_consensus.md)
+2. [공개 공식 · 가중 빈도](docs/methods/weighted_frequency.md)
+3. [공개 공식 · 콜드·미출현](docs/methods/overdue_gap.md)
+4. [공개 공식 · 동반출현쌍](docs/methods/pair_cooccurrence.md)
+5. [실험 공식 · 베이지안 수축](docs/methods/bayesian_shrinkage.md)
+6. [공개 공식 · 균형 필터](docs/methods/balance_formula.md)
+7. [공개 공식 · 델타 시스템](docs/methods/delta_system.md)
+8. [공개 공식 · 이월수](docs/methods/carryover_formula.md)
+9. [공개 공식 · 종합 앙상블](docs/methods/public_ensemble.md)
+10. [명리 권장 · 개인 사주 원국·대운·추첨일](docs/methods/myungri_hetu_day_pillar.md)
+11. [형태 공식 · AC값 7 이상](docs/methods/ac_range_filter.md)
+12. [합의 추천 · 선택 공식 중앙값](docs/methods/selected_median_consensus.md)
 
-먼저 [공통 계산 원리·점수 읽는 법](docs/FORMULAS.md)을 확인하면 각 공식의 차이를 비교하기 쉽습니다. 위 24개는 **로컬 추첨 공식**이며 Home Assistant AI 추천은 별도 기능입니다.
+### 통합된 옵션과 이전 계산 정의
+
+아래 항목은 추가 게임을 만드는 활성 공식이 아닙니다. 옵션별 원리 또는 과거 기록 해석·회귀 검증을 위해 문서를 보관합니다.
+
+- [균등 공식 · Floyd](docs/methods/uniform_floyd.md) — 대표 공식의 옵션으로 통합
+- [균등 공식 · 중복거부](docs/methods/uniform_rejection.md) — 대표 공식의 옵션으로 통합
+- [균등 공식 · 순차 포함](docs/methods/uniform_sequential.md) — 대표 공식의 옵션으로 통합
+- [균등 공식 · 조합보정 층화 CCSS](docs/methods/calibrated_stratified.md) — 대표 공식의 옵션으로 통합
+- [균등 공식 · 조합 인덱스](docs/methods/uniform_combination_rank.md) — 대표 공식의 옵션으로 통합
+- [독창 패턴 · 위상잔차 그래프](docs/methods/phase_residual_graph.md) — 새 추천에서 제거
+- [독창 패턴 · 전이·간격 위상](docs/methods/transition_gap_phase.md) — 새 추천에서 제거
+- [독창 패턴 · 다중시간대 공명](docs/methods/multiscale_resonance.md) — 새 추천에서 제거
+- [공개 공식 · 핫넘버](docs/methods/hot_numbers.md) — 대표 공식의 옵션으로 통합
+- [공개 공식 · 삼중 동반출현](docs/methods/triplet_cooccurrence.md) — 새 추천에서 제거
+- [공개 공식 · 지수감쇠 최근성](docs/methods/recency_decay.md) — 대표 공식의 옵션으로 통합
+- [공개 공식 · 재등장 주기](docs/methods/cycle_rhythm.md) — 새 추천에서 제거
+
+먼저 [공통 계산 원리·점수 읽는 법](docs/FORMULAS.md)을 확인하면 각 공식의 차이를 비교하기 쉽습니다. 위 12개는 **로컬 추첨 공식**이며 Home Assistant AI 추천은 별도 기능입니다.
 
 ## 추첨 공식 선택과 상세 정보
 
@@ -85,7 +90,7 @@ action: lotto_645.refresh
 action: lotto_645.generate_ai_recommendation
 ```
 
-번호는 백엔드 CCSS 공식과 OS CSPRNG가 확정하고, 설정 → AI의 기본 데이터 생성 AI 또는 선택한 `ai_task.*` 엔티티는 근거만 설명합니다. AI가 번호를 반환하거나 추첨 공식을 바꾸면 거절합니다. AI는 위 24개 로컬 공식이나 중앙값 집계에 포함되지 않습니다.
+번호는 백엔드 CCSS 공식과 OS CSPRNG가 확정하고, 설정 → AI의 기본 데이터 생성 AI 또는 선택한 `ai_task.*` 엔티티는 근거만 설명합니다. AI가 번호를 반환하거나 추첨 공식을 바꾸면 거절합니다. AI는 위 12개 로컬 공식이나 중앙값 집계에 포함되지 않습니다.
 
 ## 데이터 수집 안전 구조
 

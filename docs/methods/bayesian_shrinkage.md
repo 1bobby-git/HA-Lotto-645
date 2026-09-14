@@ -1,6 +1,6 @@
 # 실험 공식 · 베이지안 수축
 
-[24개 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
+[12개 대표 공식 목록](../../README.md#추첨-공식-12종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: bayesian_shrinkage` · 분류: 실험적 개인화 · 후보 풀: **45개**
 

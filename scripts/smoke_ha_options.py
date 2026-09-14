@@ -50,6 +50,30 @@ async def main():
         assert menu['menu_options']==['recommendations','saju','purchases']
         serialize_form(await flow.async_step_recommendations())
         serialize_form(await flow.async_step_saju())
+        catalog_module=importlib.import_module('custom_components.lotto_645.methods')
+        assert len(catalog_module.method_selector_options())==12
+        form=await flow.async_step_recommendations()
+        fields=to_field_list(form['data_schema'],custom_serializer=cv.custom_serializer)
+        assert {f['name'] for f in fields} >= {'uniform_engine','frequency_preset','selected_methods'}
+        for retired in catalog_module.RETIRED_METHOD_IDS | catalog_module.CONSOLIDATED_METHOD_IDS.keys():
+            denied=await flow.async_step_recommendations({'selected_methods':[retired]})
+            assert denied['errors'].get('selected_methods')=='select_at_least_one', denied
+        for engine in catalog_module.UNIFORM_ENGINES:
+            saved=await flow.async_step_recommendations({'selected_methods':['uniform_fisher_yates'], 'uniform_engine':engine})
+            assert saved['type']==FlowResultType.CREATE_ENTRY and saved['data']['uniform_engine']==engine
+            assert saved['data']['selected_methods']==['uniform_fisher_yates']
+        for preset in catalog_module.FREQUENCY_PRESETS:
+            saved=await flow.async_step_recommendations({'selected_methods':['weighted_frequency'], 'frequency_preset':preset})
+            assert saved['type']==FlowResultType.CREATE_ENTRY and saved['data']['frequency_preset']==preset
+        denied=await flow.async_step_recommendations({'selected_methods':['weighted_frequency'], 'frequency_preset':'invented'})
+        assert denied['errors']['base']=='options_error'
+        old=flow_module.Lotto645OptionsFlow(types.SimpleNamespace(options={'selected_methods':['uniform_floyd','hot_numbers','cycle_rhythm']}))
+        old.hass=hass;old.handler='old';old.flow_id='old'
+        old_form=await old.async_step_recommendations();serialize_form(old_form)
+        old_fields={f['name']:f for f in to_field_list(old_form['data_schema'],custom_serializer=cv.custom_serializer)}
+        assert old_fields['selected_methods']['default']==['uniform_fisher_yates','weighted_frequency']
+        assert old_fields['uniform_engine']['default']=='uniform_floyd'
+        assert old_fields['frequency_preset']['default']=='hot_numbers'
         result=await flow.async_step_recommendations({const.CONF_SELECTED_METHODS:['weighted_frequency']})
         assert result['type']==FlowResultType.CREATE_ENTRY
         invalid=await flow.async_step_recommendations({const.CONF_SELECTED_METHODS:['myungri_hetu_day_pillar']})

@@ -7,7 +7,7 @@ Traditional metaphysics is included as a reproducible cultural heuristic only.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 
@@ -245,8 +245,8 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
     MethodDefinition(
         METHOD_PUBLIC_ENSEMBLE,
         "공개 공식 · 종합 앙상블",
-        "추천 공개 분석식",
-        "가중 빈도·최근성·미출현·동반출현·균형·델타·이월수 등 성격이 다른 공개형 휴리스틱을 합의 점수로 결합한 권장안입니다. 단일 지표 의존을 줄이는 설계이며 실제 예측력 향상이 입증된 것은 아닙니다.",
+        "공개 분석식",
+        "가중 빈도·최근성·미출현·동반출현·균형·델타·이월수 등 성격이 다른 공개형 휴리스틱을 복합 선호 점수로 결합합니다. 단일 지표 의존을 줄이는 설계이며 실제 예측력 향상이 입증된 것은 아닙니다.",
         {"frequency_10": 0.08, "frequency_30": 0.10, "frequency_100": 0.10, "frequency_decay": 0.08, "bayesian_60": 0.08, "overdue_capped": 0.08, "transition": 0.10, "graph_strength": 0.12, "triplet_strength": 0.08, "long_neutral": 0.04, "gap_balance": 0.04},
         pair_weight=0.14,
         triplet_weight=0.07,
@@ -300,16 +300,104 @@ METHODS_BY_ID: Final = {method.method_id: method for method in METHODS}
 
 # Personal Saju is intentionally not selected by default. A user must explicitly
 # select it and complete the birth-profile step before the integration may use it.
-DEFAULT_METHOD_IDS: Final[tuple[str, ...]] = (
-    METHOD_UNIFORM_FISHER_YATES,
-    METHOD_UNIFORM_FLOYD,
-    METHOD_UNIFORM_REJECTION,
-    METHOD_UNIFORM_SEQUENTIAL,
-    METHOD_CALIBRATED_STRATIFIED,
+DEFAULT_METHOD_IDS: Final[tuple[str, ...]] = (METHOD_UNIFORM_FISHER_YATES,)
+
+# Archive definitions and engines remain addressable for historical records and
+# regression verification, but cannot be selected through the live HA surface.
+RETIRED_METHOD_IDS: Final = frozenset({
+    METHOD_CYCLE_RHYTHM, METHOD_PHASE_RESIDUAL, METHOD_TRANSITION_GAP,
+    METHOD_MULTISCALE_RESONANCE, METHOD_TRIPLET_COOCCURRENCE,
+})
+UNIFORM_ENGINES: Final = (
+    METHOD_UNIFORM_FISHER_YATES, METHOD_UNIFORM_FLOYD, METHOD_UNIFORM_REJECTION,
+    METHOD_UNIFORM_SEQUENTIAL, METHOD_CALIBRATED_STRATIFIED, METHOD_UNIFORM_COMBINATION_RANK,
 )
+FREQUENCY_PRESETS: Final = (METHOD_WEIGHTED_FREQUENCY, METHOD_HOT_NUMBERS, METHOD_RECENCY_DECAY)
+CONSOLIDATED_METHOD_IDS: Final = {
+    **{key: METHOD_UNIFORM_FISHER_YATES for key in UNIFORM_ENGINES[1:]},
+    **{key: METHOD_WEIGHTED_FREQUENCY for key in FREQUENCY_PRESETS[1:]},
+}
+ACTIVE_METHOD_IDS: Final = tuple(m.method_id for m in METHODS
+                               if m.method_id not in RETIRED_METHOD_IDS
+                               and m.method_id not in CONSOLIDATED_METHOD_IDS)
+ACTIVE_METHODS: Final = tuple(METHODS_BY_ID[key] for key in ACTIVE_METHOD_IDS)
+CONF_UNIFORM_ENGINE: Final = "uniform_engine"
+CONF_FREQUENCY_PRESET: Final = "frequency_preset"
+CATALOG_REVISION: Final = 1
+CATALOG_REVISION_KEY: Final = "formula_catalog_revision"
+CATALOG_MIGRATION_KEY: Final = "formula_catalog_migration"
+
+
+def formula_settings(options: dict | None = None) -> dict[str, str]:
+    """Resolve only whitelisted generator options, never personal fields."""
+    options = options or {}
+    uniform = options.get(CONF_UNIFORM_ENGINE, METHOD_UNIFORM_FISHER_YATES)
+    frequency = options.get(CONF_FREQUENCY_PRESET, METHOD_WEIGHTED_FREQUENCY)
+    return {
+        CONF_UNIFORM_ENGINE: uniform if uniform in UNIFORM_ENGINES else METHOD_UNIFORM_FISHER_YATES,
+        CONF_FREQUENCY_PRESET: frequency if frequency in FREQUENCY_PRESETS else METHOD_WEIGHTED_FREQUENCY,
+    }
+
+
+def consolidate_options(options: dict) -> dict:
+    """Idempotent upgrade of selections, not historical tickets or review IDs.
+
+    Multiple former variants become one family. Preserve the first selected
+    variant unless an explicit valid preset exists. Never add games to make
+    median consensus valid; disable the aggregate if fewer than two sources
+    remain. Only an empty usable selection falls back to one uniform game.
+    """
+    updated = dict(options)
+    raw = options.get("selected_methods", DEFAULT_METHOD_IDS)
+    before = list(dict.fromkeys(key for key in raw if isinstance(key, str) and key in METHODS_BY_ID)) if isinstance(raw, (list, tuple)) else list(DEFAULT_METHOD_IDS)
+    selected = []
+    for key in before:
+        if key in RETIRED_METHOD_IDS:
+            continue
+        target = CONSOLIDATED_METHOD_IDS.get(key, key)
+        if target not in selected:
+            selected.append(target)
+    consensus_disabled = METHOD_SELECTED_MEDIAN in selected and len(selected) < 3
+    if consensus_disabled:
+        selected.remove(METHOD_SELECTED_MEDIAN)
+    fallback = not selected
+    if fallback:
+        selected = list(DEFAULT_METHOD_IDS)
+    for option, allowed in ((CONF_UNIFORM_ENGINE, UNIFORM_ENGINES),
+                            (CONF_FREQUENCY_PRESET, FREQUENCY_PRESETS)):
+        if updated.get(option) not in allowed:
+            updated[option] = next((key for key in before if key in allowed), allowed[0])
+    updated["selected_methods"] = selected
+    updated[CATALOG_REVISION_KEY] = CATALOG_REVISION
+    if options.get(CATALOG_REVISION_KEY) != CATALOG_REVISION:
+        # Formula IDs only: do not duplicate birth dates, prompts or purchases.
+        updated[CATALOG_MIGRATION_KEY] = {
+            "revision": CATALOG_REVISION, "previous_methods": before,
+            "active_methods": list(selected),
+            "retired_methods": [key for key in before if key in RETIRED_METHOD_IDS],
+            "consolidated_methods": {key: CONSOLIDATED_METHOD_IDS[key] for key in before if key in CONSOLIDATED_METHOD_IDS},
+            "consensus_disabled": consensus_disabled, "fallback_uniform": fallback,
+            "notice": "공식 선택을 통합했습니다. 과거 추천·리뷰·구매 기록은 변경하지 않습니다. 통합 전 센서를 참조하는 자동화는 대표 센서로 변경해야 합니다.",
+        }
+    return updated
+
+
+def active_method_ids(options: dict) -> tuple[str, ...]:
+    """The only selection path used by the live coordinator."""
+    return tuple(consolidate_options(options)["selected_methods"])
+
+
+def resolve_method_definition(method_id: str, options: dict | None = None) -> MethodDefinition:
+    """One stable family/entity ID with a transparent implementation preset."""
+    settings = formula_settings(options)
+    source = (settings[CONF_UNIFORM_ENGINE] if method_id == METHOD_UNIFORM_FISHER_YATES
+              else settings[CONF_FREQUENCY_PRESET] if method_id == METHOD_WEIGHTED_FREQUENCY
+              else method_id)
+    return replace(METHODS_BY_ID[source], method_id=method_id)
+
 
 PUBLIC_METHOD_IDS: Final[tuple[str, ...]] = tuple(
-    method.method_id for method in METHODS if method.category in {"공개 분석식", "추천 공개 분석식"}
+    method.method_id for method in ACTIVE_METHODS if method.category in {"공개 분석식", "추천 공개 분석식"}
 )
 TRADITIONAL_METHOD_IDS: Final[tuple[str, ...]] = (METHOD_MYUNGRI_HETU,)
 
@@ -334,19 +422,24 @@ def method_selector_options() -> list[dict[str, str]]:
             "label": (
                 f"{method.label} [사주정보 입력 필요] — {method.description}"
                 if method.method_id == METHOD_MYUNGRI_HETU
-                else f"{method.label} — {method.description}"
+                else ("균등 무작위 공식 — 생성 알고리즘은 아래 옵션에서 선택합니다. 한 게임만 생성합니다."
+                      if method.method_id == METHOD_UNIFORM_FISHER_YATES else
+                      "빈도 반영 공식 — 가중 빈도·핫넘버·지수감쇠 중 기준을 선택합니다. 예측 효과는 미입증입니다."
+                      if method.method_id == METHOD_WEIGHTED_FREQUENCY else
+                      f"{method.label} — {method.description}")
             ),
         }
-        for method in METHODS
+        for method in ACTIVE_METHODS
     ]
 
 
-def method_catalog() -> list[dict[str, str]]:
+def method_catalog(include_legacy: bool = False) -> list[dict[str, str]]:
     """Return a user-facing explanation catalog for sensor attributes/UI help."""
     return [
         {
             "method_id": method.method_id,
-            "name": method.label,
+            "name": ("균등 무작위 공식" if method.method_id == METHOD_UNIFORM_FISHER_YATES else
+                     "빈도 반영 공식" if method.method_id == METHOD_WEIGHTED_FREQUENCY else method.label),
             "category": method.category,
             "description": method.description,
             "requirements": (
@@ -357,7 +450,7 @@ def method_catalog() -> list[dict[str, str]]:
                 else "없음"
             ),
         }
-        for method in METHODS
+        for method in (METHODS if include_legacy else ACTIVE_METHODS)
     ]
 
 

@@ -66,6 +66,11 @@ def catalog() -> list[dict]:
 
 
 CATALOG = catalog()
+_spec = __import__('importlib.util', fromlist=['util']).spec_from_file_location('doc_active_catalog', COMPONENT / 'methods.py')
+_live = __import__('importlib.util', fromlist=['util']).module_from_spec(_spec)
+__import__('sys').modules[_spec.name] = _live
+_spec.loader.exec_module(_live)
+ACTIVE_CATALOG = [method for method in CATALOG if method['id'] in _live.ACTIVE_METHOD_IDS]
 DOCUMENTS = [ROOT / 'README.md', ROOT / 'docs/FORMULAS.md',
              *[GUIDES / f"{method['id']}.md" for method in CATALOG]]
 
@@ -73,15 +78,15 @@ DOCUMENTS = [ROOT / 'README.md', ROOT / 'docs/FORMULAS.md',
 def test_readme_has_no_version_history_and_keeps_changelog():
     text = (ROOT / 'README.md').read_text(encoding='utf-8')
     assert not re.search(r'^#{1,6}\s+v?\d+\.\d+\.\d+', text, re.MULTILINE)
-    assert '## 추첨 공식 24종' in text
+    assert '## 추첨 공식 12종' in text
     assert '[변경 이력](CHANGELOG.md)' in text
     assert (ROOT / 'CHANGELOG.md').is_file()
 
 
 def test_readme_and_formula_index_link_all_methods_in_catalog_order():
     expected = [(str(index), method['label'], method['id'])
-                for index, method in enumerate(CATALOG, 1)]
-    assert len(expected) == 24
+                for index, method in enumerate(ACTIVE_CATALOG, 1)]
+    assert len(expected) == 12
     for path, prefix in ((ROOT / 'README.md', 'docs/methods/'),
                          (ROOT / 'docs/FORMULAS.md', 'methods/')):
         text = path.read_text(encoding='utf-8')
@@ -105,7 +110,7 @@ def test_method_metadata_and_weight_tables_match_source(method):
     for key, value in method['weights'].items():
         assert actual[key] == pytest.approx(value), (path, key)
     assert '계산 예시' in text and '확률' in text and '구현 근거' in text
-    assert '../../README.md#추첨-공식-24종' in text
+    assert '../../README.md#추첨-공식-12종' in text
     assert '../FORMULAS.md' in text
 
 

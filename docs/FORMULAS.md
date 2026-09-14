@@ -1,41 +1,46 @@
 # 추첨 공식: 공통 계산 원리와 상세 안내
 
-[README의 추첨 공식 24종으로 돌아가기](../README.md#추첨-공식-24종)
+[README의 추첨 공식 12종으로 돌아가기](../README.md#추첨-공식-12종)
 
-이 문서는 **현재 구현의 공통 계산 과정**을 설명합니다. 각 공식의 별도 안내는 아래에서 엽니다. 공식 이름에 쓰인 ‘독창’, ‘공개 공식’, ‘권장’은 분류·설계 의도를 나타내며, 독창성의 외부 인증이나 당첨 예측력 검증을 의미하지 않습니다.
+이 문서는 **현재 구현과 보관된 이전 정의의 공통 계산 과정**을 설명합니다. 독창 패턴 3종과 재등장 주기·삼중 동반출현은 새 추천 선택에서 제거되었습니다. 각 공식의 별도 안내는 아래에서 엽니다. 공식 이름에 쓰인 ‘독창’, ‘공개 공식’, ‘권장’은 분류·설계 의도를 나타내며, 독창성의 외부 인증이나 당첨 예측력 검증을 의미하지 않습니다.
 
 > `score`는 0~1의 후보 적합도입니다. `review_score`와 별점은 과거 저장 추천을 사후 평가한 값입니다. 어느 것도 다음 회차 당첨 확률이 아닙니다. 공정하고 독립적인 6/45 추첨에서 지정한 한 조합의 1등 확률은 `1 / C(45,6) = 1 / 8,145,060`입니다.
 
 ## 공식별 상세 안내
 
 1. [균등 공식 · 부분 Fisher–Yates](methods/uniform_fisher_yates.md)
-2. [균등 공식 · Floyd](methods/uniform_floyd.md)
-3. [균등 공식 · 중복거부](methods/uniform_rejection.md)
-4. [균등 공식 · 순차 포함](methods/uniform_sequential.md)
-5. [균등 공식 · 조합보정 층화 CCSS](methods/calibrated_stratified.md)
-6. [균등 공식 · 조합 인덱스](methods/uniform_combination_rank.md)
-7. [독창 패턴 · 위상잔차 그래프](methods/phase_residual_graph.md)
-8. [독창 패턴 · 전이·간격 위상](methods/transition_gap_phase.md)
-9. [독창 패턴 · 다중시간대 공명](methods/multiscale_resonance.md)
-10. [공개 공식 · 가중 빈도](methods/weighted_frequency.md)
-11. [공개 공식 · 핫넘버](methods/hot_numbers.md)
-12. [공개 공식 · 콜드·미출현](methods/overdue_gap.md)
-13. [공개 공식 · 동반출현쌍](methods/pair_cooccurrence.md)
-14. [공개 공식 · 삼중 동반출현](methods/triplet_cooccurrence.md)
-15. [공개 공식 · 지수감쇠 최근성](methods/recency_decay.md)
-16. [실험 공식 · 베이지안 수축](methods/bayesian_shrinkage.md)
-17. [공개 공식 · 재등장 주기](methods/cycle_rhythm.md)
-18. [공개 공식 · 균형 필터](methods/balance_formula.md)
-19. [공개 공식 · 델타 시스템](methods/delta_system.md)
-20. [공개 공식 · 이월수](methods/carryover_formula.md)
-21. [공개 공식 · 종합 앙상블](methods/public_ensemble.md)
-22. [명리 권장 · 개인 사주 원국·대운·추첨일](methods/myungri_hetu_day_pillar.md)
-23. [형태 공식 · AC값 7 이상](methods/ac_range_filter.md)
-24. [합의 추천 · 선택 공식 중앙값](methods/selected_median_consensus.md)
+2. [공개 공식 · 가중 빈도](methods/weighted_frequency.md)
+3. [공개 공식 · 콜드·미출현](methods/overdue_gap.md)
+4. [공개 공식 · 동반출현쌍](methods/pair_cooccurrence.md)
+5. [실험 공식 · 베이지안 수축](methods/bayesian_shrinkage.md)
+6. [공개 공식 · 균형 필터](methods/balance_formula.md)
+7. [공개 공식 · 델타 시스템](methods/delta_system.md)
+8. [공개 공식 · 이월수](methods/carryover_formula.md)
+9. [공개 공식 · 종합 앙상블](methods/public_ensemble.md)
+10. [명리 권장 · 개인 사주 원국·대운·추첨일](methods/myungri_hetu_day_pillar.md)
+11. [형태 공식 · AC값 7 이상](methods/ac_range_filter.md)
+12. [합의 추천 · 선택 공식 중앙값](methods/selected_median_consensus.md)
+
+### 통합된 옵션과 이전 계산 정의
+
+아래 항목은 추가 게임을 만드는 활성 공식이 아닙니다. 옵션별 원리 또는 과거 기록 해석·회귀 검증을 위해 문서를 보관합니다.
+
+- [균등 공식 · Floyd](methods/uniform_floyd.md) — 대표 공식의 옵션으로 통합
+- [균등 공식 · 중복거부](methods/uniform_rejection.md) — 대표 공식의 옵션으로 통합
+- [균등 공식 · 순차 포함](methods/uniform_sequential.md) — 대표 공식의 옵션으로 통합
+- [균등 공식 · 조합보정 층화 CCSS](methods/calibrated_stratified.md) — 대표 공식의 옵션으로 통합
+- [균등 공식 · 조합 인덱스](methods/uniform_combination_rank.md) — 대표 공식의 옵션으로 통합
+- [독창 패턴 · 위상잔차 그래프](methods/phase_residual_graph.md) — 새 추천에서 제거
+- [독창 패턴 · 전이·간격 위상](methods/transition_gap_phase.md) — 새 추천에서 제거
+- [독창 패턴 · 다중시간대 공명](methods/multiscale_resonance.md) — 새 추천에서 제거
+- [공개 공식 · 핫넘버](methods/hot_numbers.md) — 대표 공식의 옵션으로 통합
+- [공개 공식 · 삼중 동반출현](methods/triplet_cooccurrence.md) — 새 추천에서 제거
+- [공개 공식 · 지수감쇠 최근성](methods/recency_decay.md) — 대표 공식의 옵션으로 통합
+- [공개 공식 · 재등장 주기](methods/cycle_rhythm.md) — 새 추천에서 제거
 
 ## 균등 추첨과 점수형 공식의 구분
 
-신규 기본값은 부분 Fisher–Yates·Floyd·중복거부·순차 포함·CCSS입니다. 조합 인덱스 공식도 추가로 선택할 수 있습니다. 이 6종은 OS CSPRNG를 사용하고 후보의 적합도 점수로 재정렬하지 않습니다. 베이지안 수축은 300회/사전 강도 500/5% 혼합의 별도 실험적 샘플러입니다. AC값 7 이상은 모든 번호쌍의 차이 다양성을 제한하는 별도 형태 샘플러입니다. 이들 8개 샘플링 공식의 `score`는 `null`입니다.
+기본값은 균등 한 게임이며, 6개 균등 알고리즘 중 하나를 옵션에서 고릅니다. 빈도 계열도 가중 빈도·핫넘버·지수감쇠 중 하나를 옵션에서 선택합니다. 예전 독립 공식 정의는 아래 계산과 과거 기록의 해석용으로 남겨 두었으며 선택 메뉴에는 대표 공식 12개만 표시합니다. 활성 샘플링 계열은 균등·베이지안 수축·AC이며 `score`는 `null`입니다.
 
 기존 점수형·사주 공식은 개인화·실험 목적으로 유지합니다. 합의 추천은 실제 추천번호 순번별 중앙값 ±1을 자동 집계하는 별도 파생 경로입니다. 아래 **번호 특징·가중치·상위 후보군 설명은 이 점수형 경로에만 적용**됩니다. 균등 생성과 당첨 예측은 다른 개념이며, 합의 추천은 내부 점수가 아니라 함께 선택한 공식의 실제 추천번호를 입력으로 사용합니다.
 

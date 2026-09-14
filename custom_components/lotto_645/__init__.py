@@ -13,6 +13,7 @@ from .ticket_panel import async_register_ticket_panel, async_remove_ticket_panel
 
 from .const import DOMAIN, SERVICE_GENERATE_AI, SERVICE_REFRESH
 from .coordinator import Lotto645Coordinator
+from .methods import consolidate_options
 
 PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.BINARY_SENSOR]
 
@@ -31,6 +32,10 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Lotto 6/45 Analysis from a config entry."""
+    # Also handles entries restored from an older backup with unchanged version.
+    options = consolidate_options(dict(entry.options))
+    if options != dict(entry.options):
+        hass.config_entries.async_update_entry(entry, options=options)
     await async_register_ticket_panel(hass, entry)
     coordinator = Lotto645Coordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
@@ -97,3 +102,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove the panel only when the entry is really deleted, not reloaded."""
     async_remove_ticket_panel(hass, entry.entry_id, permanent=True)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Upgrade formula selection only; retain storage, entity IDs and user data."""
+    if entry.version > 2:
+        return False
+    if entry.version < 2 or entry.minor_version < 2:
+        hass.config_entries.async_update_entry(
+            entry, options=consolidate_options(dict(entry.options)), version=2, minor_version=2,
+        )
+    return True

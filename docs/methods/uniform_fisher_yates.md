@@ -1,8 +1,19 @@
 # 균등 공식 · 부분 Fisher–Yates
 
-[24개 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
+[12개 대표 공식 목록](../../README.md#추첨-공식-12종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: uniform_fisher_yates` · 분류: 균등 추첨 공식 · 후보 풀: **45개**
+
+## 통합 옵션
+
+이 대표 공식은 추천 설정에서 아래 계산 중 하나를 선택해 **한 게임**을 생성합니다. 아래 기본 계산 설명은 기본 옵션에만 적용되며 다른 옵션의 정확한 가중치는 각 문서를 확인하세요. 실제 결과의 `generator_settings`에 사용한 설정을 기록합니다.
+
+- [균등 공식 · 부분 Fisher–Yates](uniform_fisher_yates.md)
+- [균등 공식 · Floyd](uniform_floyd.md)
+- [균등 공식 · 중복거부](uniform_rejection.md)
+- [균등 공식 · 순차 포함](uniform_sequential.md)
+- [균등 공식 · 조합보정 층화 CCSS](calibrated_stratified.md)
+- [균등 공식 · 조합 인덱스](uniform_combination_rank.md)
 
 ## 1. 어떤 공식인가요?
 

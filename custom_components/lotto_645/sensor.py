@@ -19,7 +19,7 @@ from .const import (
 )
 from .coordinator import Lotto645Coordinator
 from .entity import Lotto645Entity
-from .methods import METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, METHODS_BY_ID, method_catalog
+from .methods import METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, METHODS_BY_ID, method_catalog, ACTIVE_METHODS, resolve_method_definition, CATALOG_MIGRATION_KEY
 from .review import review_name, NOTICE as REVIEW_NOTICE
 from .result_details import decorate_result, winning_attributes
 
@@ -131,16 +131,17 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
     @property
     def native_value(self) -> str:
         """Show a human-readable count instead of the ambiguous bare number 16."""
-        return f"{len(METHODS_BY_ID)}개 추첨 공식"
+        return f"{len(ACTIVE_METHODS)}개 추첨 공식"
 
     @property
     def extra_state_attributes(self) -> dict:
         catalog = method_catalog()
         return {
-            "method_count": len(METHODS_BY_ID),
+            "method_count": len(ACTIVE_METHODS),
+            "catalog_migration": self.coordinator.entry.options.get(CATALOG_MIGRATION_KEY, {}),
             "selected_method_ids": list(self.coordinator.selected_method_ids),
             "selected_method_names": [
-                METHODS_BY_ID[method_id].label
+                resolve_method_definition(method_id, dict(self.coordinator.entry.options)).label
                 for method_id in self.coordinator.selected_method_ids
             ],
             "methods": catalog,
@@ -225,14 +226,14 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
     def __init__(self, coordinator: Lotto645Coordinator, method_id: str) -> None:
         super().__init__(coordinator)
         self.method_id = method_id
-        method = METHODS_BY_ID[method_id]
+        method = resolve_method_definition(method_id, dict(coordinator.entry.options))
         self._attr_name = method.label
         self._attr_unique_id = f"{coordinator.entry.entry_id}_method_{method_id}"
 
     @property
     def name(self) -> str:
         review = self.coordinator.review_for_method(self.method_id) if hasattr(self.coordinator, "review_for_method") else {}
-        return review_name(METHODS_BY_ID[self.method_id].label, review)
+        return review_name(resolve_method_definition(self.method_id, dict(self.coordinator.entry.options)).label, review)
 
     @property
     def available(self) -> bool:
@@ -267,7 +268,7 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
                     "notice": "유효한 다른 로컬 공식 2개 이상과 중앙값 ±1의 유효 조합이 필요합니다. 원본 변경 시 자동 재계산합니다.",
                 }
             return {}
-        method = METHODS_BY_ID[self.method_id]
+        method = resolve_method_definition(self.method_id, dict(self.coordinator.entry.options))
         return {
             **recommendation.as_attributes(),
             "local_review": self.coordinator.review_for_method(self.method_id) if hasattr(self.coordinator, "review_for_method") else {},
