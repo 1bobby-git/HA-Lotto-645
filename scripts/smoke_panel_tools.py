@@ -47,7 +47,7 @@ async def verify_panel_tools(page):
             winning:{status:'evaluated',round:1241,winning_game_count:0,results:catalog.map(m=>({method_id:m.method_id,sensor_name:m.name,source:'local',recommended_numbers:[1,7,15,24,33,45],prize:'미당첨'}))},
             reviews:catalog.map(m=>({method_id:m.method_id,display_name:'★1.0 · '+m.name,reviewed_rounds:1})),
             review_round:{},result_verification:{status:'official_confirmed'},result_round:1241};
-        el.updateResults(toolsFixture);el._clearSmartSync();el.showScreen('review');
+        el.updateResults(toolsFixture);el._clearSmartSync();el.showScreen('home');
         window.wsBeforeTools=requests.length;
     }""", catalog)
     assert await page.locator('#predictions .method-info-trigger').count() == 18
@@ -58,6 +58,7 @@ async def verify_panel_tools(page):
     assert '동행복권 정규 일정 기준' in await page.locator('.hero-clock-date').text_content()
     assert not await page.locator('lotto-panel-tools .countdown').is_visible()
     assert await page.locator('lotto-panel-tools').evaluate('n=>n.getBoundingClientRect().height===0')
+    await page.evaluate("el.showScreen('review')")
 
     # Test unpositioned, sidebar-offset HA layouts as well as a positioned box.
     await verify_panel_host_layout(page)
