@@ -21,6 +21,7 @@ from typing import Any
 from .const import DISCLAIMER, FIRST_PRIZE_ODDS, PUBLIC_FORMULA_NOTICE
 from .methods import (
     DEFAULT_METHOD_IDS,
+    METHOD_AC_FILTER,
     METHOD_BALANCE,
     METHOD_BAYESIAN_SHRINKAGE,
     METHOD_CARRYOVER,
@@ -44,7 +45,13 @@ from .methods import (
     consensus_source_ids,
 )
 from .consensus import refresh_consensus
-from .sampling import generate_ticket, validate_fixed
+from .sampling import (
+    AC_ALLOWED_COMBINATIONS,
+    AC_MINIMUM,
+    ac_value,
+    generate_ticket,
+    validate_sampled_ticket,
+)
 from .models import AnalysisResult, LottoDraw, Recommendation
 from .myungri import build_myungri_context, combo_myungri_details, combo_myungri_score
 
@@ -634,7 +641,7 @@ def build_analysis(
             # Reserve restored tickets belonging to later formulas as well.
             blocked.update(ticket for key, ticket in restored_tickets.items() if key != method_id)
             if method_id in restored_tickets:
-                combo = validate_fixed(restored_tickets[method_id])
+                combo = validate_sampled_ticket(method.sampling, restored_tickets[method_id])
                 if len(combo) != 6 or combo in blocked:
                     raise ValueError("저장된 추첨 공식 번호가 현재 제외 조건과 충돌합니다")
             else:
@@ -660,11 +667,31 @@ def build_analysis(
                 "number_sum": sum(combo), "odd_count": sum(n % 2 for n in combo),
                 "first_prize_odds": FIRST_PRIZE_ODDS, "disclaimer": DISCLAIMER,
             }
+            reason = method.description
+            if method_id == METHOD_AC_FILTER:
+                value = ac_value(combo)
+                details.update({
+                    "ac_value": value, "ac_minimum": AC_MINIMUM,
+                    "distinct_pair_difference_count": value + 5,
+                    "shape_filter": "all_pair_differences_ac_min_7",
+                    "shape_base_combination_count": AC_ALLOWED_COMBINATIONS,
+                    "shape_base_acceptance_ratio": AC_ALLOWED_COMBINATIONS / math.comb(45, 6),
+                    "eligible_combination_count": AC_ALLOWED_COMBINATIONS - sum(
+                        ac_value(ticket) >= AC_MINIMUM for ticket in blocked
+                    ),
+                    "uniformity": "uniform_over_ac_filtered_allowed_combinations",
+                    "predictive_evidence": "not_established",
+                    "shape_notice": "AC 7은 형태 선택 기준이며 최적 당첨 임계값이 아닙니다",
+                })
+                reason = (
+                    f"15개 번호쌍의 서로 다른 차이 {value + 5}개 − 5 = AC {value}. "
+                    "AC 7 이상과 기존 제외 조건 안에서 균등 추출했습니다. 당첨확률은 높아지지 않습니다."
+                )
             if experimental:
                 details.update({"history_lookback": 300, "history_sample_size": min(300, len(history)),
                                 "prior_strength": 500, "history_mix": 0.05})
             recommendations.append(Recommendation(index, method_id, method.label, method.category,
-                                                 combo, method.description, None, details))
+                                                 combo, reason, None, details))
             if progress_callback:
                 progress_callback({"phase": "method_complete", "method_id": method_id, "index": index})
             continue

@@ -38,7 +38,7 @@ def numbers(result):
 
 @pytest.mark.parametrize('ids', [
     ('uniform_fisher_yates','uniform_floyd','uniform_rejection','uniform_sequential',
-     'calibrated_stratified','uniform_combination_rank','bayesian_shrinkage',
+     'calibrated_stratified','uniform_combination_rank','bayesian_shrinkage','ac_range_filter',
      'selected_median_consensus','home_assistant_ai'),
     ('weighted_frequency','hot_numbers','public_ensemble','selected_median_consensus'),
 ])

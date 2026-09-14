@@ -1,6 +1,6 @@
 # 독창 패턴 · 다중시간대 공명
 
-[23개 공식 목록](../../README.md#추첨-공식-23종) · [공통 계산 원리](../FORMULAS.md)
+[24개 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: multiscale_resonance` · 분류: 독창 분석 · 후보 풀: **22개**
 

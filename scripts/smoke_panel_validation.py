@@ -13,7 +13,7 @@ async def verify_panel_validation(page):
         default_method_ids:['weighted_frequency','uniform_floyd','selected_median_consensus']}};
       window.validationResponse={mode:'historical_validation',simulation:true,counts_toward_reviews:false,persisted:false,
         target_round:1200,based_on_round:1199,training_last_round:1199,training_draw_count:1199,
-        component_version:'1.13.0',seed:0,generated_at:'2026-09-14T10:00:00Z',training_sha256:'a'.repeat(64),
+        component_version:'1.14.0',seed:0,generated_at:'2026-09-14T10:00:00Z',training_sha256:'a'.repeat(64),
         checked_game_count:3,unavailable_game_count:0,winning_game_count:2,highest_prize:'2등',
         draw:{round:1200,draw_date:'2025-11-29',numbers:[7,24,30,31,32,42],bonus:9},
         results:[
@@ -65,7 +65,13 @@ async def verify_panel_validation(page):
             await page.evaluate('el.showScreen("validation");el.scrollTop=0')
             assert await page.evaluate('el.scrollWidth<=el.clientWidth+1'), (dark,width)
             for selector in ['#validation-form','#validation-output']:
-                assert await page.locator(selector).evaluate('n=>n.scrollWidth<=n.clientWidth+1'), (dark,width,selector)
+                fits=await page.locator(selector).evaluate('n=>n.scrollWidth<=n.clientWidth+1')
+                if not fits:
+                    print('OVERFLOW',dark,width,selector,await page.locator(selector).evaluate("n=>({outer:n.getBoundingClientRect().toJSON(),scroll:n.scrollWidth,children:[...n.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>n.getBoundingClientRect().right).map(e=>({tag:e.tagName,cls:e.className,text:e.textContent.slice(0,50),rect:e.getBoundingClientRect().toJSON()}))})"),flush=True)
+                    if directory:=os.environ.get('LOTTO_SCREENSHOT_DIR'):
+                        Path(directory).mkdir(parents=True,exist_ok=True)
+                        await page.screenshot(path=str(Path(directory)/'historical-overflow.png'))
+                assert fits, (dark,width,selector)
     await page.emulate_media(forced_colors='active')
     assert await page.locator('#validation-results .ball[data-hit="miss"]').first.evaluate("n=>getComputedStyle(n).opacity==='1'")
     await page.emulate_media(forced_colors='none')

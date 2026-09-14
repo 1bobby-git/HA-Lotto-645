@@ -1,5 +1,5 @@
 /* On-demand historical simulations. Never updates live tickets or review rows. */
-import { numberBalls, renderPredictionRows } from './lotto-panel-view.js?v=1.13.0';
+import { numberBalls, renderPredictionRows } from './lotto-panel-view.js?v=1.14.0';
 
 const SAJU = 'myungri_hetu_day_pillar';
 const AI = 'home_assistant_ai';
@@ -42,7 +42,7 @@ const STYLE = `
  .validation-form,.validation-output{padding:20px 16px}
  .validation-choices{grid-template-columns:1fr}
  .validation-notice{padding:14px 16px;font-size:12px}
- .validation-draw .draw-numbers{--ball-size:27px;gap:6px}
+ .validation-draw .draw-numbers{--ball-size:clamp(20px,calc((100cqw - 150px)/7),27px);gap:6px;max-width:100%}
  .validation-draw .draw-numbers .ball{font-size:13px}
  .validation-draw .bonus-group{gap:6px}
  .validation-help,.validation-audit,.validation-status{font-size:12px}
@@ -76,7 +76,7 @@ class HistoricalValidationView {
     const entry = this.node('entry')?.value;
     const switched = entry !== this.entry;
     if (switched) {
-      this.entry = entry; this.sequence++; this.busy = false; this.catalogSignature = null;
+      this.entry = entry; this.sequence++; this.busy = false; this.catalogSignature = null; this.initialized = false;
       this.node('validation-output').hidden = true; this.message('');
       this.node('validation-seed').value = '0'; this.node('validation-round').value = '';
     }
@@ -84,8 +84,8 @@ class HistoricalValidationView {
     const ready = this.options.saju_profile_ready === true;
     const catalog = Array.isArray(data.method_catalog) ? data.method_catalog : [];
     const signature = JSON.stringify([ready, catalog.map(m => [m.method_id, m.name])]);
-    if (signature !== this.catalogSignature) {
-      const prior = this.catalogSignature === null || switched ? null : new Set(this.ids());
+    if (signature !== this.catalogSignature || !this.initialized) {
+      const prior = !this.initialized || switched ? null : new Set(this.ids());
       this.catalogSignature = signature;
       const root = this.node('validation-choices'); root.replaceChildren();
       for (const method of catalog) {
@@ -103,6 +103,7 @@ class HistoricalValidationView {
     const max = Number(this.options.max_round) || 0, min = Number(this.options.min_round) || 31;
     const input = this.node('validation-round'); input.min = String(min); input.max = String(Math.max(min, max));
     if (!input.value && max >= min) input.value = String(max);
+    if (max >= min && catalog.length && Array.isArray(this.options.default_method_ids)) this.initialized = true;
     this.node('validation-range').textContent = max >= min ? `${min}~${max}회 선택 가능 · 공식 이력 기준` : '검증 가능한 공식 이력이 아직 없습니다. 최소 31회 결과가 필요합니다.';
     this.renderConditions();
   }
@@ -165,7 +166,7 @@ class HistoricalValidationView {
 export function applyHistoricalValidation(panel) {
   if (!panel.node('screen-validation')) return;
   if (!panel.shadowRoot.querySelector('style[data-lotto-validation]')) {
-    const style = document.createElement('style'); style.dataset.lottoValidation = '1.13.0'; style.textContent = STYLE; panel.shadowRoot.append(style);
+    const style = document.createElement('style'); style.dataset.lottoValidation = '1.14.0'; style.textContent = STYLE; panel.shadowRoot.append(style);
   }
   if (panel._historicalValidation && panel._historicalValidation.form !== panel.node('validation-form')) { panel._historicalValidation.sequence++; panel._historicalValidation = null; }
   if (!panel._historicalValidation) panel._historicalValidation = new HistoricalValidationView(panel);

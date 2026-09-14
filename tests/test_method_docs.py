@@ -1,4 +1,4 @@
-"""Keep the 17 Korean method guides aligned with the actual method catalog.
+"""Keep the Korean formula guides aligned with the actual method catalog.
 
 This suite reads Python ASTs without importing Home Assistant or calling a
 network. Documentation links and published worked examples are checked too.
@@ -73,15 +73,15 @@ DOCUMENTS = [ROOT / 'README.md', ROOT / 'docs/FORMULAS.md',
 def test_readme_has_no_version_history_and_keeps_changelog():
     text = (ROOT / 'README.md').read_text(encoding='utf-8')
     assert not re.search(r'^#{1,6}\s+v?\d+\.\d+\.\d+', text, re.MULTILINE)
-    assert '## 추첨 공식 23종' in text
+    assert '## 추첨 공식 24종' in text
     assert '[변경 이력](CHANGELOG.md)' in text
     assert (ROOT / 'CHANGELOG.md').is_file()
 
 
-def test_readme_and_formula_index_link_all_17_methods_in_catalog_order():
+def test_readme_and_formula_index_link_all_methods_in_catalog_order():
     expected = [(str(index), method['label'], method['id'])
                 for index, method in enumerate(CATALOG, 1)]
-    assert len(expected) == 23
+    assert len(expected) == 24
     for path, prefix in ((ROOT / 'README.md', 'docs/methods/'),
                          (ROOT / 'docs/FORMULAS.md', 'methods/')):
         text = path.read_text(encoding='utf-8')
@@ -105,7 +105,7 @@ def test_method_metadata_and_weight_tables_match_source(method):
     for key, value in method['weights'].items():
         assert actual[key] == pytest.approx(value), (path, key)
     assert '계산 예시' in text and '확률' in text and '구현 근거' in text
-    assert '../../README.md#추첨-공식-23종' in text
+    assert '../../README.md#추첨-공식-24종' in text
     assert '../FORMULAS.md' in text
 
 

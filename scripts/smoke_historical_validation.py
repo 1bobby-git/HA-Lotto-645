@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 
 async def verify_historical_validation(hass, owner):
+    import voluptuous as vol
     from homeassistant.exceptions import Unauthorized
     from custom_components.lotto_645 import ticket_panel as panel
     from custom_components.lotto_645.models import LottoDraw
@@ -18,11 +19,15 @@ async def verify_historical_validation(hass, owner):
     try:panel.historical_validate(hass,unauthorized,{'id':600})
     except Unauthorized:pass
     else:raise AssertionError('historical validation must require admin')
+    schema=panel.historical_validate._ws_schema
+    valid=schema({'id':601,'type':'lotto_645/historical_validate','entry_id':owner.entry.entry_id,
+                  'round':61,'method_ids':['uniform_floyd']})
+    assert valid['seed']==0 and valid['round']==61
     for key,bad in [('round',True),('round',31.5),('seed',False),('seed',-1)]:
         msg={'id':601,'type':'lotto_645/historical_validate','entry_id':owner.entry.entry_id,
              'round':61,'method_ids':['uniform_floyd'],'seed':0,key:bad}
-        try:panel.historical_validate.schema(msg)
-        except Exception:pass
+        try:schema(msg)
+        except vol.Invalid:pass
         else:raise AssertionError(f'Invalid integer accepted: {key}={bad}')
     # Use the real coordinator's stored review, purchase, live and frozen data,
     # but give it a synthetic contiguous history for this dedicated request.
