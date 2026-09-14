@@ -69,7 +69,7 @@ jobs:
           text = changelog.read_text()
           assert text.startswith('# Changelog\n\n')
           changelog.write_text('# Changelog\n\n' + payload['release_notes'] + text[len('# Changelog\n\n'):])
-          for file in parts + [Path('.github/workflows/apply-ac-formula.yml')]:
+          for file in parts + [Path('.github/workflows/apply-ac-formula.yml'), Path('.github/workflows/formula-audit-source.yml')]:
               file.unlink()
           assert not Path('.github/workflows/formula-audit-source.yml').exists()
           PY
@@ -93,11 +93,13 @@ jobs:
           name: ac-formula-test-log
           path: /tmp/ac-pytest.txt
           retention-days: 3
+          overwrite: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ac-formula-verified-source
           retention-days: 3
+          overwrite: true
           include-hidden-files: true
           path: |
             .
