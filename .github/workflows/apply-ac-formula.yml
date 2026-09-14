@@ -1,0 +1,104 @@
+name: Apply research AC formula
+on:
+  push:
+    branches: [feat/research-ac-formula]
+    paths: [.github/workflows/apply-ac-formula.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.repository == '1bobby-git/HA-Lotto-645' && github.ref == 'refs/heads/feat/research-ac-formula'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/research-ac-formula
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Preserve concurrent main changes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git merge --no-edit origin/main
+      - name: Verify transport and apply reviewed source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, bz2, hashlib, json, subprocess
+          parts = [Path('.github/ac-patch.part1.b64'), Path('.github/ac-patch.part2.b64')]
+          packed = base64.b64decode(''.join(p.read_text().strip() for p in parts), validate=True)
+          assert hashlib.sha256(packed).hexdigest() == 'eeca8523f3ecc45436497eb5c2b9e0a70827fe02111e3f5bd14413ae1584f5bf', 'Patch transport integrity failed'
+          payload = json.loads(bz2.decompress(packed))
+          patch = Path('/tmp/ac-formula.patch')
+          patch.write_text(payload['patch'])
+          subprocess.run(['git', 'apply', '--check', str(patch)], check=True)
+          subprocess.run(['git', 'apply', str(patch)], check=True)
+          root = Path('.')
+          component = root / 'custom_components/lotto_645'
+          manifest_path = component / 'manifest.json'
+          manifest = json.loads(manifest_path.read_text())
+          previous = manifest['version']
+          assert previous in ('1.12.1', '1.12.2'), f'Unexpected main version: {previous}'
+          manifest['version'] = '1.13.0'
+          manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
+          const = component / 'const.py'
+          old = f'VERSION = "{previous}"'
+          assert const.read_text().count(old) == 1
+          const.write_text(const.read_text().replace(old, 'VERSION = "1.13.0"'))
+          for file in (component / 'www').glob('lotto-panel*.js'):
+              text = file.read_text()
+              updated = text.replace('1.12.1', '1.13.0').replace('1.12.2', '1.13.0')
+              if updated != text:
+                  file.write_text(updated)
+          for file in (root / 'docs/methods').glob('*.md'):
+              text = file.read_text().replace('[23개 공식 목록]', '[24개 공식 목록]').replace('#추첨-공식-23종', '#추첨-공식-24종')
+              text = text.replace('균등 공식은 선택 공식 중앙값의 점수 투표에서 제외합니다.', '균등 공식의 실제 추천번호도 다른 로컬 공식과 함께 선택하면 선택 공식 중앙값 집계에 포함됩니다.')
+              file.write_text(text)
+          (root / 'docs/methods/ac_range_filter.md').write_text(payload['ac_guide'])
+          for file in (root / 'docs/methods').glob('*.md'):
+              (component / 'www/methods' / file.name).write_bytes(file.read_bytes())
+          ai = root / 'docs/AI_RECOMMENDATION.md'
+          ai.write_text(ai.read_text().replace('로컬 23종과 별도', '로컬 24종과 별도'))
+          (component / 'www/methods/home_assistant_ai.md').write_bytes(ai.read_bytes())
+          changelog = root / 'CHANGELOG.md'
+          text = changelog.read_text()
+          assert text.startswith('# Changelog\n\n')
+          changelog.write_text('# Changelog\n\n' + payload['release_notes'] + text[len('# Changelog\n\n'):])
+          for file in parts + [Path('.github/workflows/apply-ac-formula.yml')]:
+              file.unlink()
+          assert not Path('.github/workflows/formula-audit-source.yml').exists()
+          PY
+      - name: Run all Python regression tests
+        run: |
+          set -euo pipefail
+          python -m pip install -q pytest 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0'
+          python -m compileall -q custom_components/lotto_645 scripts
+          python -m pytest -q | tee /tmp/ac-pytest.txt
+          git diff --check
+      - name: Commit only tested changes to the feature branch
+        run: |
+          set -euo pipefail
+          git add -A
+          git commit -m 'feat: add conditional-uniform AC shape formula and catalog audit v1.13.0'
+          git push origin HEAD:refs/heads/feat/research-ac-formula
+          git rev-parse HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ac-formula-test-log
+          path: /tmp/ac-pytest.txt
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ac-formula-verified-source
+          retention-days: 3
+          include-hidden-files: true
+          path: |
+            .
+            !.git
