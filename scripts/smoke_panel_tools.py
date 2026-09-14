@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+from smoke_panel_host_layout import verify_panel_host_layout
+
 ROOT = Path(__file__).resolve().parents[1]
 WWW = ROOT / 'custom_components/lotto_645/www'
 
@@ -52,6 +54,9 @@ async def verify_panel_tools(page):
     assert await page.locator('lotto-panel-tools').count() == 1
     assert await page.locator('.clock-value').is_visible()
     assert '한국시간' in await page.locator('.clock-date').text_content()
+
+    # Test unpositioned, sidebar-offset HA layouts as well as a positioned box.
+    await verify_panel_host_layout(page)
 
     # Place the real panel under an inline ha-panel-custom-like element and a
     # positioned, allocated viewport. Never claim this is a live HA instance.
@@ -141,14 +146,14 @@ async def verify_panel_tools(page):
 
     # Explicit instants, elapsed deadline, rollover, malformed data and XSS.
     result = await page.evaluate("""async () => {
-        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=1.11.8');
+        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=1.11.9');
         const s=toolsFixture.draw_schedule;
         const prior=countdownState(s,Date.parse(s.scheduled_at)-1000);
         const at=countdownState(s,Date.parse(s.scheduled_at));
         const next=countdownState(s,Date.parse(s.rollover_at));
         const invalid=countdownState({...s,scheduled_at:'bad'});
         const div=document.createElement('div');
-        div.append(renderGuideMarkdown('# Test\\n\\n<script>window.bad=1</script>\\n\\n[x](javascript:alert) [data](data:text/html,bad) [ok](https://example.com/)','https://github.com/1bobby-git/HA-Lotto-645/blob/v1.11.8/docs/methods/a.md'));
+        div.append(renderGuideMarkdown('# Test\\n\\n<script>window.bad=1</script>\\n\\n[x](javascript:alert) [data](data:text/html,bad) [ok](https://example.com/)','https://github.com/1bobby-git/HA-Lotto-645/blob/v1.11.9/docs/methods/a.md'));
         return {prior:prior.seconds,waiting:at.waiting,at:at.seconds,next:next.round,invalid,
             scripts:div.querySelectorAll('script').length,links:[...div.querySelectorAll('a')].map(n=>n.protocol)};
     }""")
