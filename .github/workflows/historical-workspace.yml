@@ -1,6 +1,5 @@
 name: Historical validation workspace
 on:
-  workflow_dispatch:
   push:
     branches: [feat/historical-validation-1.13.0]
     paths: [.github/workflows/historical-workspace.yml]
