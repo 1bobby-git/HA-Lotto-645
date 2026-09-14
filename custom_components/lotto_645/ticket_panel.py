@@ -165,7 +165,7 @@ def _publish_panel(hass: HomeAssistant, shared: dict) -> None:
                 'brand_logo_url': f'/lotto_645_brand/logo.png?v={VERSION}' if shared.get('source_logo_verified') else None,
                 '_panel_custom': {'name': 'lotto-ticket-panel', 'embed_iframe': False,
                                   'trust_external': False, 'handle_safe_area': True,
-                                  'module_url': f'/lotto_645_static/lotto-panel.js?v={VERSION}'}},
+                                  'module_url': f'/lotto_645_static/lotto-panel-shell.js?v={VERSION}'}},
     )
 
 
