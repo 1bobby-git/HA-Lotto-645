@@ -1,0 +1,147 @@
+name: Apply formula consolidation
+on:
+  push:
+    branches: [feat/consolidate-formulas-1.14.0]
+    paths: [.github/workflows/apply-formula-consolidation.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.repository == '1bobby-git/HA-Lotto-645' && github.ref == 'refs/heads/feat/consolidate-formulas-1.14.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/consolidate-formulas-1.14.0
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Apply integrity-checked reviewed patch and preserve concurrent main
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, json, lzma, subprocess
+          def git(*args, check=True):
+              return subprocess.run(['git', *args], check=check, text=True, capture_output=True)
+          git('config', 'user.name', 'github-actions[bot]')
+          git('config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com')
+          parts = [Path(f'.github/consolidation.part{i}.b64') for i in (1,2,3)]
+          packed = base64.b64decode(''.join(p.read_text().strip() for p in parts), validate=True)
+          assert hashlib.sha256(packed).hexdigest() == 'e72576bce80cb2c711f4573dd3a4927730519c8487a732a57f88f1c1cca2d6d1', 'Patch integrity mismatch'
+          payload = json.loads(lzma.decompress(packed))
+          for name, expected in payload['base_blobs'].items():
+              if expected is None:
+                  assert not Path(name).exists(), f'Unexpected existing file: {name}'
+              else:
+                  actual = git('rev-parse', f'HEAD:{name}').stdout.strip()
+                  assert actual == expected, f'Baseline changed: {name}: {actual} != {expected}'
+          patch = Path('/tmp/consolidation.patch')
+          patch.write_text(payload['patch'])
+          git('apply', '--unidiff-zero', '--check', str(patch))
+          git('apply', '--unidiff-zero', str(patch))
+          notes = Path('CHANGELOG.md').read_text().split('## 1.14.0',1)[1].split('\n## ',1)[0]
+          notes = '## 1.15.0' + notes.rstrip() + '\n\n'
+          for file in parts + [Path('.github/workflows/apply-formula-consolidation.yml')]:
+              file.unlink()
+          git('add','-A')
+          git('commit','-m','feat: consolidate formula families and migrate selections')
+          git('fetch','origin','main')
+          main_version = json.loads(git('show','origin/main:custom_components/lotto_645/manifest.json').stdout)['version']
+          assert main_version == '1.14.0', f'Review new concurrent version before continuing: {main_version}'
+          merged = git('merge','--no-edit','origin/main', check=False)
+          print(merged.stdout, merged.stderr)
+          conflicts = set(git('diff','--name-only','--diff-filter=U').stdout.splitlines())
+          assert conflicts <= {'CHANGELOG.md','custom_components/lotto_645/ticket_panel.py'}, f'Manual reconciliation required: {conflicts}'
+          if 'custom_components/lotto_645/ticket_panel.py' in conflicts:
+              file = Path('custom_components/lotto_645/ticket_panel.py')
+              text = git('show','origin/main:' + str(file)).stdout
+              text = text.replace('from .methods import METHODS_BY_ID', 'from .methods import METHODS_BY_ID, ACTIVE_METHOD_IDS')
+              needle = "        rows.append({'method_id': method_id, 'label': label, 'display_name': review_name(label, summary), **summary})"
+              assert text.count(needle) == 1
+              text = text.replace(needle, "        if method_id in METHODS_BY_ID and method_id not in ACTIVE_METHOD_IDS:\n            label = '[이전 공식] ' + label\n" + needle)
+              needle = "panel_metadata(coordinator.result_round, metadata.get('status', 'waiting'))"
+              assert text.count(needle) == 1
+              text = text.replace(needle, "panel_metadata(coordinator.result_round, metadata.get('status', 'waiting'), archived_ids=getattr(coordinator, '_review_summaries', {}))")
+              file.write_text(text)
+          main_log = git('show','origin/main:CHANGELOG.md').stdout
+          assert main_log.startswith('# Changelog\n\n')
+          Path('CHANGELOG.md').write_text('# Changelog\n\n' + notes + main_log[len('# Changelog\n\n'):])
+          git('add','-A')
+          if Path('.git/MERGE_HEAD').exists():
+              git('commit','--no-edit')
+          component = Path('custom_components/lotto_645')
+          file = component/'manifest.json'
+          manifest = json.loads(file.read_text()); manifest['version'] = '1.15.0'
+          file.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+          file = component/'const.py'
+          assert file.read_text().count('VERSION = "1.14.0"') == 1
+          file.write_text(file.read_text().replace('VERSION = "1.14.0"','VERSION = "1.15.0"'))
+          for file in (component/'www').glob('lotto-panel*.js'):
+              file.write_text(file.read_text().replace('1.14.0','1.15.0'))
+          def replace(file, before, after):
+              text = file.read_text()
+              assert text.count(before) == 1, f'Reconcile changed code: {file}: {before!r}'
+              file.write_text(text.replace(before,after))
+          # Historical help stays available, but archived IDs do not reappear
+          # as selectable formulas in the newly merged historical-test panel.
+          replace(component/'panel_metadata.py',
+              'catalog.extend({**item, "name": "[이전 공식] " + item["name"]}',
+              'catalog.extend({**item, "name": "[이전 공식] " + item["name"], "selectable": False}')
+          replace(component/'www/lotto-panel-validation.js',
+              'const catalog = Array.isArray(data.method_catalog) ? data.method_catalog : [];',
+              'const catalog = Array.isArray(data.method_catalog) ? data.method_catalog.filter(m => m.selectable !== false) : [];')
+          # Replay the selected family implementation, with only allowlisted
+          # public settings in the audit result. No live record mutation.
+          file = component/'historical_validation.py'
+          replace(file, 'METHOD_SELECTED_MEDIAN, consensus_source_ids', 'METHOD_SELECTED_MEDIAN, consensus_source_ids, formula_settings, resolve_method_definition')
+          replace(file, '    seed: int = 0, saju_profile: dict[str, Any] | None = None,',
+                        '    seed: int = 0, saju_profile: dict[str, Any] | None = None,\n    formula_options: dict[str, Any] | None = None,')
+          replace(file, 'build_analysis(training, local_ids, seed, deepcopy(saju_profile), rng=rng)',
+                        'build_analysis(training, local_ids, seed, deepcopy(saju_profile), formula_options=formula_options, rng=rng)')
+          replace(file, "'formula_version': METHODS_BY_ID[r.method_id].formula_version,",
+                        "'formula_version': resolve_method_definition(r.method_id, formula_options).formula_version,")
+          replace(file, "'method_ids': list(ids), 'results': results,",
+                        "'method_ids': list(ids), 'results': results, 'generator_settings': formula_settings(formula_options),")
+          file = component/'historical_validation_runtime.py'
+          replace(file, 'from .historical_validation import HistoricalValidationError, run_historical_validation',
+                        'from .historical_validation import HistoricalValidationError, run_historical_validation\nfrom .methods import formula_settings')
+          replace(file, 'run_historical_validation, history, target_round, tuple(method_ids), seed, profile,',
+                        "run_historical_validation, history, target_round, tuple(method_ids), seed, profile,\n        formula_settings(getattr(coordinator.entry, 'options', {})),")
+          Path('docs/FORMULA_CONSOLIDATION.md').write_text(Path('docs/FORMULA_CONSOLIDATION.md').read_text() + '\n## 과거 검증과의 호환\n\n과거 회차 검증 기능을 보존합니다. 검증 화면은 활성 대표 공식만 선택할 수 있고, 대표 균등·빈도 공식은 현재 설정한 알고리즘·프리셋을 재실행합니다. 이전 공식의 도움말·기록은 유지하지만 선택 화면에는 복귀시키지 않습니다. 원시 호환 엔진으로 이전 ID를 명시한 격리 실험은 유지됩니다. 검증 결과의 `generator_settings`에는 허용된 두 설정만 공개하며 실제 추천·리뷰 기록을 수정하지 않습니다.\n')
+          assert not git('diff','--name-only','--diff-filter=U').stdout.strip()
+          git('diff','--check')
+          print('Patch applied; concurrent historical validation preserved; target version 1.15.0')
+          PY
+      - name: Run all Python regression tests before publishing the feature branch
+        run: |
+          set -euo pipefail
+          python -m pip install -q pytest 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0'
+          python -m compileall -q custom_components/lotto_645 scripts tests
+          python -m pytest -q | tee /tmp/consolidation-tests.txt
+          git diff --check
+      - name: Publish tested source to feature branch only
+        run: |
+          set -euo pipefail
+          git add -A
+          git commit -m 'feat: retire redundant formulas, expose family presets and migrate safely v1.15.0'
+          git push origin HEAD:refs/heads/feat/consolidate-formulas-1.14.0
+          git rev-parse HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: consolidation-test-log
+          path: /tmp/consolidation-tests.txt
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: consolidation-source
+          include-hidden-files: true
+          retention-days: 3
+          path: |
+            .
+            !.git
+            !**/__pycache__/**
+            !.pytest_cache/**
