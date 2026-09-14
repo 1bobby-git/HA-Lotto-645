@@ -68,7 +68,7 @@ def panel_metadata(result_round: int | None, result_status: str, *, archived_ids
     """Share only public method descriptions, never personal/AI profile data."""
     catalog = method_catalog()
     active = {item["method_id"] for item in catalog}
-    catalog.extend({**item, "name": "[이전 공식] " + item["name"]}
+    catalog.extend({**item, "name": "[이전 공식] " + item["name"], "selectable": False}
                    for item in method_catalog(include_legacy=True)
                    if item["method_id"] in archived_ids and item["method_id"] not in active)
     catalog.append({

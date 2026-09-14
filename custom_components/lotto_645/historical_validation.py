@@ -17,7 +17,7 @@ from typing import Any
 from .ai_formula import AI_BASE_FORMULA, make_ai_ticket
 from .analysis import build_analysis
 from .const import AI_METHOD_ID, VERSION
-from .methods import METHODS_BY_ID, METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, consensus_source_ids
+from .methods import METHODS_BY_ID, METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, consensus_source_ids, formula_settings, resolve_method_definition
 from .models import LottoDraw
 from .result_evaluator import evaluate_ticket
 from .sampling import FORMULA_VERSION
@@ -54,6 +54,7 @@ def validate_method_ids(value: object) -> tuple[str, ...]:
 def run_historical_validation(
     history: Sequence[LottoDraw], target_round: int, method_ids: Sequence[str],
     seed: int = 0, saju_profile: dict[str, Any] | None = None,
+    formula_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Generate once from [1, R-1], then compare to R, returning ephemeral JSON.
 
@@ -84,7 +85,7 @@ def run_historical_validation(
     rng = random.Random(seed)
     local_ids = tuple(key for key in ids if key != AI_METHOD_ID)
     try:
-        analysis = build_analysis(training, local_ids, seed, deepcopy(saju_profile), rng=rng)
+        analysis = build_analysis(training, local_ids, seed, deepcopy(saju_profile), formula_options=formula_options, rng=rng)
     except ValueError as err:
         raise HistoricalValidationError('generation_failed', '선택한 공식으로 검증번호를 만들 수 없습니다. 이력과 사주 설정, 합의 참여 공식을 확인하세요.') from err
     if analysis.based_on_round != target_round - 1 or analysis.target_round != target_round:
@@ -92,7 +93,7 @@ def run_historical_validation(
     # Do not expose Saju details, nor call an AI provider with historical targets.
     generated = {r.method_id: {
         'method_id': r.method_id, 'formula_id': r.method_id, 'sensor_name': r.label,
-        'formula_version': METHODS_BY_ID[r.method_id].formula_version,
+        'formula_version': resolve_method_definition(r.method_id, formula_options).formula_version,
         'recommended_numbers': list(r.numbers), 'source': 'historical_validation',
         'generation_status': 'generated',
     } for r in analysis.recommendations}
@@ -135,7 +136,7 @@ def run_historical_validation(
         'generated_at': datetime.now(UTC).isoformat(), 'seed': seed,
         'rng': 'seeded_simulation_prng', 'generation_sequence': seed,
         'uses_current_saju_profile': METHOD_MYUNGRI_HETU in ids,
-        'method_ids': list(ids), 'results': results,
+        'method_ids': list(ids), 'results': results, 'generator_settings': formula_settings(formula_options),
         'draw': {'round': target.round, 'draw_date': target.draw_date,
                  'numbers': list(target.numbers), 'bonus': target.bonus},
         'checked_game_count': len(compared), 'unavailable_game_count': len(results) - len(compared),

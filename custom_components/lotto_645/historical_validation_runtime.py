@@ -6,6 +6,7 @@ from copy import deepcopy
 from functools import partial
 
 from .historical_validation import HistoricalValidationError, run_historical_validation
+from .methods import formula_settings
 
 KEY = 'lotto_645_historical_validation_workers'
 TIMEOUT_SECONDS = 180
@@ -28,6 +29,7 @@ async def async_validate_history(hass, coordinator, target_round, method_ids, se
     profile = deepcopy(coordinator.saju_profile) if coordinator.saju_profile_ready else None
     worker = hass.async_add_executor_job(partial(
         run_historical_validation, history, target_round, tuple(method_ids), seed, profile,
+        formula_settings(getattr(coordinator.entry, 'options', {})),
     ))
     workers[key] = worker
 

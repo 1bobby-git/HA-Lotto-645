@@ -1,5 +1,5 @@
 /* On-demand historical simulations. Never updates live tickets or review rows. */
-import { numberBalls, renderPredictionRows } from './lotto-panel-view.js?v=1.14.0';
+import { numberBalls, renderPredictionRows } from './lotto-panel-view.js?v=1.15.0';
 
 const SAJU = 'myungri_hetu_day_pillar';
 const AI = 'home_assistant_ai';
@@ -82,7 +82,7 @@ class HistoricalValidationView {
     }
     this.options = data.historical_validation || {};
     const ready = this.options.saju_profile_ready === true;
-    const catalog = Array.isArray(data.method_catalog) ? data.method_catalog : [];
+    const catalog = Array.isArray(data.method_catalog) ? data.method_catalog.filter(m => m.selectable !== false) : [];
     const signature = JSON.stringify([ready, catalog.map(m => [m.method_id, m.name])]);
     if (signature !== this.catalogSignature || !this.initialized) {
       const prior = !this.initialized || switched ? null : new Set(this.ids());
@@ -166,7 +166,7 @@ class HistoricalValidationView {
 export function applyHistoricalValidation(panel) {
   if (!panel.node('screen-validation')) return;
   if (!panel.shadowRoot.querySelector('style[data-lotto-validation]')) {
-    const style = document.createElement('style'); style.dataset.lottoValidation = '1.14.0'; style.textContent = STYLE; panel.shadowRoot.append(style);
+    const style = document.createElement('style'); style.dataset.lottoValidation = '1.15.0'; style.textContent = STYLE; panel.shadowRoot.append(style);
   }
   if (panel._historicalValidation && panel._historicalValidation.form !== panel.node('validation-form')) { panel._historicalValidation.sequence++; panel._historicalValidation = null; }
   if (!panel._historicalValidation) panel._historicalValidation = new HistoricalValidationView(panel);
