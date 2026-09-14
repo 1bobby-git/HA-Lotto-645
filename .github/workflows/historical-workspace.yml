@@ -1,0 +1,23 @@
+name: Historical validation workspace
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/historical-validation-1.13.0]
+    paths: [.github/workflows/historical-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f12cfb2ad36278fa66fce4d5d04fd16c7d634eae
+          persist-credentials: false
+      - run: git archive --format=tar HEAD > /tmp/lotto-current-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: historical-validation-baseline
+          path: /tmp/lotto-current-source.tar
+          retention-days: 1
