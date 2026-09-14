@@ -187,7 +187,7 @@ class LottoPanelTools extends HTMLElement {
       if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) this.closeGuide();
     });
     this.shadowRoot.addEventListener('click', event => {
-      const a = event.target.closest?.('a'); if (!a) return;
+      const a = event.target.closest?.('a'); if (!a || a.classList.contains('method-source')) return;
       const url = new URL(a.href);
       const match = /\/docs\/methods\/([a-z0-9_]+)\.md$/.exec(url.pathname);
       if (url.href.startsWith(REPO) && match && this.catalog.has(match[1])) { event.preventDefault(); void this.openGuide(match[1]); }
