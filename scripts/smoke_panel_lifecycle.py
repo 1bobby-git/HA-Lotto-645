@@ -11,15 +11,21 @@ async def check_panel_lifecycle(hass):
              'two': SimpleNamespace(entry_id='two',title='Two',disabled_by=None)}
     http=SimpleNamespace(async_register_static_paths=AsyncMock())
     registry=SimpleNamespace(async_get_entry=lambda key:entries.get(key))
+    expected_handlers = {
+        p.purchases_get, p.qr_preview, p.purchases_save, p.result_check,
+        p.historical_validate, p.historical_validation_state, p.historical_validation_import,
+    }
     with patch.object(hass,'http',http,create=True), patch.object(hass,'config_entries',registry), patch.object(p.websocket_api,'async_register_command',Mock()) as register:
         await asyncio.gather(*(p.async_register_ticket_panel(hass,entries['one']) for _ in range(2)))
         assert frontend.async_panel_exists(hass,p.PATH)
         assert http.async_register_static_paths.await_count==2 # web resources + brand, once each
-        assert register.call_count==6 # purchases, QR, save, result check, validation run + validation state
+        assert register.call_count == len(expected_handlers)
+        assert {call.args[1] for call in register.call_args_list} == expected_handlers
         p.async_remove_ticket_panel(hass,'one') # temporary options reload
         assert frontend.async_panel_exists(hass,p.PATH)
         await p.async_register_ticket_panel(hass,entries['one'])
         assert http.async_register_static_paths.await_count==2
+        assert register.call_count == len(expected_handlers)
         frontend.async_remove_panel(hass,p.PATH)
         p.async_ensure_ticket_panel(hass)
         assert frontend.async_panel_exists(hass,p.PATH)
@@ -35,8 +41,9 @@ async def check_panel_lifecycle(hass):
         await p.async_register_ticket_panel(hass,entries['two'])
         assert frontend.async_panel_exists(hass,p.PATH)
         assert http.async_register_static_paths.await_count==2
+        assert register.call_count == len(expected_handlers)
         p.async_remove_ticket_panel(hass,'two',permanent=True)
-    print('PASS: real HA panel survives reload, restores validation-state command, keeps admin access and avoids duplicate HTTP routes')
+    print('PASS: real HA panel survives reload, registers all seven commands once including confirmed validation import, keeps admin access and avoids duplicate HTTP routes')
 
 
 if __name__ == '__main__':
