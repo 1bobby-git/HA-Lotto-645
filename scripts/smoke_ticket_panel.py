@@ -14,6 +14,7 @@ from smoke_panel_safe_area import verify_safe_area
 from smoke_panel_design_system import verify_component_design
 from smoke_panel_tools import verify_panel_tools
 from smoke_panel_validation import verify_panel_validation
+from smoke_validation_details import verify_validation_details
 from smoke_match_layout import verify_match_layout
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +40,7 @@ async def run():
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.on('dialog', lambda dialog: dialog.accept())
         resources = {f'/lotto_645_static/{name}': WWW / name for name in (
-            'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js', 'lotto-panel-design.js', 'lotto-panel-tools.js', 'lotto-panel-validation.js'
+            'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js', 'lotto-panel-design.js', 'lotto-panel-tools.js', 'lotto-panel-validation.js', 'lotto-panel-validation-details.js'
         )}
         resources['/lotto_645_brand/logo.png'] = logo
 
@@ -196,6 +197,7 @@ async def run():
         await verify_match_layout(page)
         await verify_panel_tools(page)
         await verify_panel_validation(page)
+        await verify_validation_details(page)
         assert not errors, errors
         await browser.close()
         print('PASS: smart sync, HA-driven narrow host header, real ES modules, canonical logo, PNG QR, explicit save, draft preservation, inactive-only match colors, safe areas, responsive views and panel tools')

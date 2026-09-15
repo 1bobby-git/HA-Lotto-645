@@ -1,5 +1,6 @@
 /* Compact historical comparison. Live pre-draw scores retain their provenance. */
 import { numberBalls } from './lotto-panel-view.js?v=1.15.0';
+import { attachValidationDetails, DETAIL_STYLE } from './lotto-panel-validation-details.js?v=1.17.1';
 const SAJU = 'myungri_hetu_day_pillar';
 const AI = 'home_assistant_ai';
 const RESET = '새 당첨회차가 공식 이력 또는 교차확인 결과로 확인되면 검증 횟수·점수·결과를 초기화합니다. 이미 리뷰에 반영한 과거검증 성과와 실제 추천 리뷰는 유지됩니다.';
@@ -43,21 +44,16 @@ const STYLE = `
 #validation-results .method-info-trigger{color:inherit;min-height:32px;font-size:13px;padding:0}
 .validation-rank{font-size:12px;font-weight:800;display:inline-block;margin-right:6px;white-space:nowrap}
 #validation-results tr{--rank-ink:var(--ink);--rank-wash:var(--surface)}
-#validation-results tr:nth-child(even){--rank-wash:var(--soft)}
-#validation-results tr[data-rank="1"]{--rank-ink:#805500;--rank-wash:#fff8e8}
-#validation-results tr[data-rank="2"]{--rank-ink:#425a72;--rank-wash:#f0f5fa}
-#validation-results tr[data-rank="3"]{--rank-ink:#884b31;--rank-wash:#fff3ec}
+#validation-results tr[data-rank="1"][data-scored="true"]{--rank-ink:#805500;--rank-wash:#fff8e8}
+#validation-results tr[data-rank="2"][data-scored="true"]{--rank-ink:#425a72;--rank-wash:#f0f5fa}
+#validation-results tr[data-rank="3"][data-scored="true"]{--rank-ink:#884b31;--rank-wash:#fff3ec}
 #validation-results tr td{background:var(--rank-wash)}
 #validation-results tr td:first-child,#validation-results .validation-points{color:var(--rank-ink)}
-:host([data-theme="dark"]) #validation-results tr[data-rank="1"]{--rank-ink:#f4cd77;--rank-wash:#352b19}
-:host([data-theme="dark"]) #validation-results tr[data-rank="2"]{--rank-ink:#b9cddd;--rank-wash:#22303d}
-:host([data-theme="dark"]) #validation-results tr[data-rank="3"]{--rank-ink:#efb799;--rank-wash:#382820}
+:host([data-theme="dark"]) #validation-results tr[data-rank="1"][data-scored="true"]{--rank-ink:#f4cd77;--rank-wash:#352b19}
+:host([data-theme="dark"]) #validation-results tr[data-rank="2"][data-scored="true"]{--rank-ink:#b9cddd;--rank-wash:#22303d}
+:host([data-theme="dark"]) #validation-results tr[data-rank="3"][data-scored="true"]{--rank-ink:#efb799;--rank-wash:#382820}
 .validation-points{display:inline-block;margin-right:6px;font-size:17px;line-height:1.4;font-weight:800}
 .validation-metric{display:inline;font-size:12px;line-height:1.6;color:var(--muted)}
-.validation-more{display:inline-block;margin-left:8px;font-size:12px;line-height:1.6}
-.validation-more[open]{display:block;margin-left:0}
-.validation-more summary{min-height:32px;min-width:44px;align-content:center;color:var(--muted);cursor:pointer}
-.validation-more p{margin:4px 0}
 #validation-results .ticket-balls{--ball-size:26px;gap:5px;flex-wrap:nowrap;max-width:100%}
 #validation-results .ticket-balls .ball{font-size:12px}
 #validation-results .result-detail{display:block;margin:5px 0 0;font-size:12px;line-height:1.5;color:var(--muted)}
@@ -85,9 +81,6 @@ const STYLE = `
  #validation-results td:first-child{padding-top:6px}
  #validation-results td:last-child{padding-bottom:8px;display:flex;align-items:baseline;gap:4px 10px;flex-wrap:wrap}
  #validation-results td::before{display:none}
- #validation-results .validation-more{margin-left:auto;flex-basis:auto}
- #validation-results .validation-more[open]{flex-basis:100%;margin-left:0}
- #validation-results .validation-more summary{min-height:32px}
  .validation-toolbar button{flex:1 1 auto}
  .validation-toolbar label{flex:1 1 100%}
  .validation-draw .draw-numbers{--ball-size:24px;gap:4px;min-height:45px}
@@ -97,6 +90,7 @@ const STYLE = `
  #validation-results tr{--rank-ink:CanvasText!important;--rank-wash:Canvas!important}
  #validation-results .validation-rank{border:1px solid CanvasText}
 }
+${DETAIL_STYLE}
 `;
 
 export function verifyHistoricalMatches(data) {
@@ -156,7 +150,7 @@ export function csvCell(value) {
 class HistoricalValidationView {
   constructor(panel) {
     this.panel=panel;this.form=panel.node('validation-form');this.sequence=0;this.entry=null;
-    this.restoreToken=0;this.restoreTimer=null;this.busy=false;this.importing=false;this.importToken=0;this.sort='points';
+    this.restoreToken=0;this.restoreTimer=null;this.busy=false;this.importing=false;this.importToken=0;this.sort='points';this.expandedMethods=new Set();this.detailLimits=new Map();this.detailCycle=null;
     this.node('validation-form').onsubmit=e=>{e.preventDefault();void this.run();};
     this.node('validation-round').oninput=()=>this.changed();
     this.node('validation-choices').onchange=()=>this.changed();
@@ -203,7 +197,7 @@ class HistoricalValidationView {
   setData(data){
     const entry=this.node('entry')?.value,switched=entry!==this.entry;
     const oldMax=Number(this.options?.max_round)||0;
-    if(switched){this.entry=entry;this.sequence++;this.restoreToken++;clearTimeout(this.restoreTimer);this.busy=false;this.importing=false;this.importToken++;this.restoredEntry=null;this.score=null;this.result=null;this.initialized=false;this.catalogSignature=null;this.node('validation-output').hidden=true;this.node('validation-round').value='';this.message('');}
+    if(switched){this.entry=entry;this.sequence++;this.restoreToken++;clearTimeout(this.restoreTimer);this.busy=false;this.importing=false;this.importToken++;this.restoredEntry=null;this.score=null;this.result=null;this.expandedMethods.clear();this.detailLimits.clear();this.detailCycle=null;this.initialized=false;this.catalogSignature=null;this.node('validation-output').hidden=true;this.node('validation-round').value='';this.message('');}
     this.options=data.historical_validation||{};
     const ready=this.options.saju_profile_ready===true,catalog=Array.isArray(data.method_catalog)?data.method_catalog:[];
     const signature=JSON.stringify([ready,catalog.map(m=>[m.method_id,m.name])]);
@@ -271,12 +265,13 @@ class HistoricalValidationView {
   }
   renderList(){
     const score=this.score||{},root=this.node('validation-results');root.replaceChildren();
+    if(this.detailCycle!==score.cycle_id){this.expandedMethods.clear();this.detailLimits.clear();this.detailCycle=score.cycle_id;}
     this.node('validation-total').textContent=`총 ${fmt(score.total_runs)}회 검증 · ${fmt(score.unique_rounds)}개 회차 · 리뷰 미반영 ${fmt(score.unimported_runs)}회`;
     this.node('validation-assessment').textContent=`본번호 3개 이상 무작위 기준 ${Number(score.baseline_hit_rate||2.38341).toFixed(3)}% · 예측 우위 아님.${score.comparable_rounds===false?' 공식별 검증 회차가 달라 비교에 주의하세요.':''}`;
     const rows=rankedRows(this.result?.results||[],score.methods||[],this.sort);
     if(!rows.length){const tr=el('tr'),td=el('td','누적된 검증이 없습니다. 회차와 공식을 선택해 검증하세요.');td.colSpan=3;tr.append(td);root.append(tr);}
     for(const row of rows){
-      const tr=el('tr');tr.dataset.rank=String(row.rank);tr.dataset.methodId=row.method_id;tr.className='prediction-row';tr.dataset.prize=String(row.current?.prize_rank||0);tr.setAttribute('role','row');
+      const tr=el('tr');tr.dataset.rank=String(row.rank);tr.dataset.scored=String(Number(row.score.points||0)>0);tr.dataset.methodId=row.method_id;tr.className='prediction-row';tr.dataset.prize=String(row.current?.prize_rank||0);tr.setAttribute('role','row');
       const method=el('td',row.label),number=el('td'),metrics=el('td');
       [method,number,metrics].forEach((n,i)=>{n.setAttribute('role','cell');n.dataset.label=['순위 · 공식','검증번호','누적 성과'][i];});
       const r=row.current,s=row.score;
@@ -285,17 +280,12 @@ class HistoricalValidationView {
         const text=el('span',undefined,'result-detail');text.append(el('span',r.prize,'validation-prize'),document.createTextNode(`본번호 ${r.main_match_count}개 일치${r.bonus_match?` · 보너스 ${r.matched_bonus_number}`:''}`));number.append(text);
       }else number.append(el('span',r?'생성 불가':'이번 검증 미참여','validation-metric'));
       metrics.append(el('strong',this.sort==='efficiency'?`${Number(s.points_per_100||0).toFixed(1)}점/100회`:`${fmt(s.points)}점`,'validation-points'),el('span',`3개 이상 ${fmt(s.three_plus_hits)}/${fmt(s.generated)}회 · ${Number(s.hit_rate||0).toFixed(1)}%`,'validation-metric'));
-      const more=el('details',undefined,'validation-more');more.append(el('summary','상세'));
-      more.append(el('p',`누적 ${fmt(s.points)}점 · 생성 100회당 ${Number(s.points_per_100||0).toFixed(1)}점`));
-      more.append(el('p',`3개 ${fmt(s.match_3)} · 4개 ${fmt(s.match_4)} · 5개 ${fmt(s.match_5)} · 6개 ${fmt(s.match_6)}회 | 최고 ${s.best_match||0}개 | 생성 불가 ${fmt(s.unavailable)}회`));
-      const interval=s.interval_99;more.append(el('p',`회차별 첫 검증 ${fmt(s.unique_rounds)}회 · ${s.sample_notice||'표본 부족'}${interval?` · 99% 참고구간 ${interval[0]}~${interval[1]}%`:''}`));
-      more.append(el('p','같은 회차의 반복 검증은 위 참고구간에서 제외합니다. 독립 시행을 가정한 기술통계이며 회차 선택·다중 비교·공식 변경의 영향을 보정한 예측확률이 아닙니다.'));
-      more.append(el('p',`공식 버전 ${(s.formula_versions||[]).join(', ')||'기존 기록'}${r?.reason?` · ${r.reason}`:''}`));
-      more.append(el('p',`${score.point_policy||'3개=1점 · 4개=3점 · 5개=10점 · 6개=50점'} · 보너스 가산 없음`));
+      const more=el('button','상세','validation-detail-toggle');more.type='button';
       metrics.append(more);tr.append(method,number,metrics);root.append(tr);
     }
     this.panel.shadowRoot.querySelector('lotto-panel-tools')?.decorate('validation-results',rows.map(r=>({method_id:r.method_id})));
     rows.forEach((r,i)=>root.children[i]?.cells[0]?.prepend(el('span',`${r.tied?'공동 ':''}${r.rank}위`,'validation-rank')));
+    attachValidationDetails(this,rows,score);
     this.renderConditions();
   }
   async importReview(){
@@ -346,7 +336,7 @@ class HistoricalValidationView {
 
 export function applyHistoricalValidation(panel){
   if(!panel.node('screen-validation'))return;
-  let style=panel.shadowRoot.querySelector('style[data-lotto-validation]');if(!style){style=el('style');panel.shadowRoot.append(style);}style.dataset.lottoValidation='1.17.0';style.textContent=STYLE;
+  let style=panel.shadowRoot.querySelector('style[data-lotto-validation]');if(!style){style=el('style');panel.shadowRoot.append(style);}style.dataset.lottoValidation='1.17.1';style.textContent=STYLE;
   if(panel._historicalValidation&&panel._historicalValidation.form!==panel.node('validation-form')){panel._historicalValidation.sequence++;panel._historicalValidation.restoreToken++;clearTimeout(panel._historicalValidation.restoreTimer);panel._historicalValidation=null;}
   if(!panel._historicalValidation)panel._historicalValidation=new HistoricalValidationView(panel);
   if(panel._latestToolsData)panel._historicalValidation.setData(panel._latestToolsData);
