@@ -1,8 +1,9 @@
 /* Compact historical comparison. Live pre-draw scores retain their provenance. */
 import { numberBalls } from './lotto-panel-view.js?v=1.15.0';
-import { attachValidationDetails, DETAIL_STYLE } from './lotto-panel-validation-details.js?v=1.17.1';
+import { attachValidationDetails, DETAIL_STYLE } from './lotto-panel-validation-details.js?v=1.18.1';
 const SAJU = 'myungri_hetu_day_pillar';
 const AI = 'home_assistant_ai';
+const VALIDATION_UI_VERSION = '1.18.1';
 const RESET = '새 당첨회차가 공식 이력 또는 교차확인 결과로 확인되면 검증 횟수·점수·결과를 초기화합니다. 이미 리뷰에 반영한 과거검증 성과와 실제 추천 리뷰는 유지됩니다.';
 const el = (tag, text, cls) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; if(cls)n.className=cls; return n; };
 const fmt = n => Number(n||0).toLocaleString('ko-KR');
@@ -150,7 +151,7 @@ export function csvCell(value) {
 class HistoricalValidationView {
   constructor(panel) {
     this.panel=panel;this.form=panel.node('validation-form');this.sequence=0;this.entry=null;
-    this.restoreToken=0;this.restoreTimer=null;this.busy=false;this.importing=false;this.importToken=0;this.sort='points';this.expandedMethods=new Set();this.detailLimits=new Map();this.detailCycle=null;
+    this.restoreToken=0;this.restoreTimer=null;this.busy=false;this.importing=false;this.importToken=0;this.sort='points';this.expandedMethods=new Set();this.detailLimits=new Map();this.detailCycle=null;this.runtimeVersion=VALIDATION_UI_VERSION;
     this.node('validation-form').onsubmit=e=>{e.preventDefault();void this.run();};
     this.node('validation-round').oninput=()=>this.changed();
     this.node('validation-choices').onchange=()=>this.changed();
@@ -336,8 +337,14 @@ class HistoricalValidationView {
 
 export function applyHistoricalValidation(panel){
   if(!panel.node('screen-validation'))return;
-  let style=panel.shadowRoot.querySelector('style[data-lotto-validation]');if(!style){style=el('style');panel.shadowRoot.append(style);}style.dataset.lottoValidation='1.17.1';style.textContent=STYLE;
-  if(panel._historicalValidation&&panel._historicalValidation.form!==panel.node('validation-form')){panel._historicalValidation.sequence++;panel._historicalValidation.restoreToken++;clearTimeout(panel._historicalValidation.restoreTimer);panel._historicalValidation=null;}
+  let style=panel.shadowRoot.querySelector('style[data-lotto-validation]');if(!style){style=el('style');panel.shadowRoot.append(style);}style.dataset.lottoValidation=VALIDATION_UI_VERSION;style.textContent=STYLE;
+  const current=panel._historicalValidation;
+  const needsUpgrade=current&&(current.form!==panel.node('validation-form')||current.runtimeVersion!==VALIDATION_UI_VERSION);
+  if(needsUpgrade){
+    current.sequence=(current.sequence||0)+1;current.restoreToken=(current.restoreToken||0)+1;clearTimeout(current.restoreTimer);
+    if('importToken' in current)current.importToken=(current.importToken||0)+1;
+    panel._historicalValidation=null;
+  }
   if(!panel._historicalValidation)panel._historicalValidation=new HistoricalValidationView(panel);
   if(panel._latestToolsData)panel._historicalValidation.setData(panel._latestToolsData);
   if(!panel._historicalValidationHook){panel._historicalValidationHook=true;const update=panel.updateResults;panel.updateResults=function(data,...args){const value=update.call(this,data,...args);this._historicalValidation?.setData(data);return value;};}
