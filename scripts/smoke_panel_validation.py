@@ -15,7 +15,7 @@ async def verify_panel_validation(page):
           default_method_ids:['weighted_frequency','uniform_floyd','selected_median_consensus']}};
       window.validationResponse={mode:'historical_validation',simulation:true,counts_toward_reviews:false,persisted:false,
         target_round:1200,based_on_round:1199,training_last_round:1199,training_draw_count:1199,
-        component_version:'1.17.0',generated_at:'2026-09-15T00:00:00Z',training_sha256:'a'.repeat(64),
+        component_version:'1.17.1',generated_at:'2026-09-15T00:00:00Z',training_sha256:'a'.repeat(64),
         checked_game_count:3,unavailable_game_count:0,winning_game_count:2,highest_prize:'2등',
         draw:{round:1200,draw_date:'2025-11-29',numbers:[7,24,30,31,32,42],bonus:9},
         results:[
@@ -58,7 +58,7 @@ async def verify_panel_validation(page):
     await page.wait_for_function('!el._historicalValidation.busy && !el.node("validation-output").hidden')
     assert await page.evaluate('validationCalls.length') == 1
     assert 'seed' not in await page.evaluate('validationCalls[0]')
-    assert await page.locator('#validation-results tr').count() == 3
+    assert await page.locator('#validation-results > .prediction-row').count() == 3
     assert await page.locator('#validation-scoreboard,.validation-score-card').count() == 0
     assert await page.locator('#validation-results .ball[data-hit="main"]').count() == 8
     assert await page.locator('#validation-results .ball[data-hit="bonus"]').count() == 1
@@ -66,17 +66,17 @@ async def verify_panel_validation(page):
     assert '회차가 달라' in await page.locator('#validation-assessment').text_content()
     assert '초기화' in await page.locator('#validation-reset-notice').text_content()
     assert await page.evaluate("JSON.stringify(liveBeforeValidation)===JSON.stringify(['predictions','reviews','wallet-games'].map(id=>el.node(id).innerHTML))")
-    assert await page.locator('#validation-results tr').first.get_attribute('data-method-id') == 'uniform_floyd'
+    assert await page.locator('#validation-results > .prediction-row').first.get_attribute('data-method-id') == 'uniform_floyd'
     await page.locator('#validation-sort').select_option('current')
-    assert await page.locator('#validation-results tr').first.get_attribute('data-method-id') == 'uniform_floyd'
+    assert await page.locator('#validation-results > .prediction-row').first.get_attribute('data-method-id') == 'uniform_floyd'
     await page.locator('#validation-sort').select_option('efficiency')
-    assert await page.locator('#validation-results tr').first.get_attribute('data-rank') == '1'
+    assert await page.locator('#validation-results > .prediction-row').first.get_attribute('data-rank') == '1'
     await page.evaluate('el._historicalValidation.restoreLatest()')
     assert await page.evaluate('validationCalls.length') == 1
-    assert await page.locator('#validation-results tr').count() == 3
+    assert await page.locator('#validation-results > .prediction-row').count() == 3
     # Pure ranking ties and spreadsheet-formula escaping execute in the real module.
     assert await page.evaluate('''async()=>{
-      const m=await import('/lotto_645_static/lotto-panel-validation.js?v=1.17.0');
+      const m=await import('/lotto_645_static/lotto-panel-validation.js?v=1.17.1');
       const rows=m.rankedRows([],[{method_id:'a',points:2},{method_id:'b',points:2},{method_id:'c',points:1}]);
       return rows.map(r=>r.rank).join(',')==='1,1,3' && rows[0].tied && m.csvCell('=SUM(1)').startsWith('"\\\'');
     }''')
@@ -119,7 +119,7 @@ async def verify_panel_validation(page):
     assert await page.locator('#reviews .validation-import-note').count() == 3
     assert await page.evaluate('validationBase.reviews.every(r=>r.reviewed_rounds===6)')
     await page.locator('#tab-review').click()
-    await page.locator('#validation-review-order select').select_option('historical')
+    await page.locator('#validation-review-order select_option('historical')
     assert await page.locator('#reviews tr').first.get_attribute('data-review-method') == 'uniform_floyd'
     await page.locator('#tab-validation').click()
     async with page.expect_download() as download_info:
