@@ -18,6 +18,9 @@ from .const import DOMAIN, VERSION
 from .panel_metadata import panel_metadata
 from .historical_validation import MIN_TARGET_ROUND, HistoricalValidationError
 from .historical_validation_runtime import async_validate_history
+from .historical_validation_scores import (
+    ScoreConflict, async_access, cached_reviews, published_round, summary as score_summary,
+)
 from .const import AI_METHOD_ID
 from .methods import METHODS_BY_ID, RETIRED_METHOD_LABELS
 from .purchased_tickets import PurchaseInputError, parse_round
@@ -60,11 +63,14 @@ def _review_rows(coordinator) -> list[dict]:
     ids.extend(key for key in getattr(coordinator, '_review_summaries', {}) if key not in ids)
     if getattr(coordinator, 'ai_enabled', False) and AI_METHOD_ID not in ids:
         ids.append(AI_METHOD_ID)
+    imported = cached_reviews(coordinator.hass, coordinator.entry.entry_id) if hasattr(coordinator, 'hass') else {}
+    ids.extend(key for key in imported if key not in ids)
     rows = []
     for method_id in ids:
         summary = coordinator.review_for_method(method_id) if hasattr(coordinator, 'review_for_method') else {}
         label = METHODS_BY_ID[method_id].label if method_id in METHODS_BY_ID else 'Home Assistant AI 추천' if method_id == AI_METHOD_ID else RETIRED_METHOD_LABELS.get(method_id, method_id)
-        rows.append({'method_id': method_id, 'label': label, 'display_name': review_name(label, summary), **summary})
+        rows.append({'method_id': method_id, 'label': label, 'display_name': review_name(label, summary), **summary,
+                     'historical_review': imported.get(method_id)})
     return rows
 
 
@@ -175,41 +181,24 @@ def _validation_states(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
     return shared.setdefault('validation_states', {})
 
 
-def _validation_snapshot(state: dict[str, Any] | None) -> dict[str, Any]:
-    if not state:
-        return {'status': 'idle'}
-    return {key: value for key, value in state.items() if key != 'task'}
+def _validation_snapshot(state):
+    return {k: v for k, v in state.items() if k != 'task'} if state else {'status': 'idle'}
 
 
-async def _validation_worker(
-    hass: HomeAssistant,
-    coordinator: Any,
-    entry_id: str,
-    round_no: int,
-    method_ids: list[str],
-    state: dict[str, Any],
-) -> None:
+async def _validation_worker(hass, coordinator, entry_id, round_no, method_ids, state):
     try:
         result = await async_validate_history(hass, coordinator, round_no, method_ids)
-        entry = hass.config_entries.async_get_entry(entry_id)
-        if entry is None or getattr(entry, 'runtime_data', None) is not coordinator:
+        if _coordinator(hass, {'entry_id': entry_id}) is not coordinator:
             raise HomeAssistantError('Integration reloaded during validation')
     except HistoricalValidationError as err:
-        state.update(
-            status='error', error_code=err.code, error=str(err),
-            finished_at=datetime.now(UTC).isoformat(),
-        )
+        state.update(status='error', error_code=err.code, error=str(err))
     except (HomeAssistantError, ValueError, OSError):
-        state.update(
-            status='error', error_code='validation_failed',
-            error='과거 검증을 완료하지 못했습니다. 실제 추천번호와 리뷰는 변경되지 않았습니다.',
-            finished_at=datetime.now(UTC).isoformat(),
-        )
+        state.update(status='error', error_code='validation_failed',
+                     error='과거 검증을 완료하지 못했습니다. 실제 추천번호와 리뷰는 변경되지 않았습니다.')
     else:
-        state.update(
-            status='completed', result=result, error=None, error_code=None,
-            finished_at=datetime.now(UTC).isoformat(),
-        )
+        state.update(status='completed', result=result, error=None, error_code=None)
+    finally:
+        state['finished_at'] = datetime.now(UTC).isoformat()
 
 
 @websocket_api.websocket_command({
@@ -221,51 +210,44 @@ async def _validation_worker(
 @websocket_api.require_admin
 @websocket_api.async_response
 async def historical_validate(hass, connection, msg):
-    """Run a read-only simulation in an HA-owned task and retain its latest state."""
-    # `_validation_worker` owns async_validate_history(...) so page/WebSocket
-    # cancellation cannot abort the Home Assistant-owned calculation.
-    coordinator = _coordinator(hass, msg)
-    states = _validation_states(hass)
-    state = states.get(msg['entry_id'])
-    requested_ids = list(msg['method_ids'])
-
-    if state and state.get('status') == 'running':
-        if state.get('round') != msg['round'] or state.get('method_ids') != requested_ids:
-            connection.send_error(
-                msg['id'], 'validation_busy',
-                '다른 과거 회차 검증이 계산 중입니다. 완료 후 다시 실행하세요.',
+    """HA owns async_validate_history(...); closing the page cannot cancel it."""
+    try:
+        coordinator = _coordinator(hass, msg)
+        payload = await async_access(hass, msg['entry_id'], published_round(coordinator),
+                                     cycle_reader=lambda: published_round(coordinator))
+        states = _validation_states(hass)
+        state = states.get(msg['entry_id'])
+        requested_ids = list(msg['method_ids'])
+        if state and state.get('status') == 'running':
+            if state.get('round') != msg['round'] or state.get('method_ids') != requested_ids:
+                connection.send_error(msg['id'], 'validation_busy', '다른 검증이 계산 중입니다. 완료 후 다시 실행하세요.')
+                return
+            task = state.get('task')
+        else:
+            state = {'status': 'running', 'run_id': (state or {}).get('run_id', 0) + 1,
+                     'cycle_id': payload['cycle_id'], 'round': msg['round'], 'method_ids': requested_ids,
+                     'started_at': datetime.now(UTC).isoformat(), 'result': None}
+            states[msg['entry_id']] = state
+            task = hass.async_create_task(
+                _validation_worker(hass, coordinator, msg['entry_id'], msg['round'], requested_ids, state),
+                f'{DOMAIN} historical validation {msg["entry_id"]}',
             )
+            state['task'] = task
+        if task is None:
+            raise ValueError('missing task')
+        await asyncio.shield(task)
+        if state['status'] != 'completed':
+            connection.send_error(msg['id'], state.get('error_code', 'validation_failed'), state.get('error', '검증 실패'))
             return
-        task = state.get('task')
-    else:
-        run_id = int(state.get('run_id', 0) if state else 0) + 1
-        state = {
-            'status': 'running', 'run_id': run_id, 'round': msg['round'],
-            'method_ids': requested_ids, 'started_at': datetime.now(UTC).isoformat(),
-            'finished_at': None, 'result': None, 'error': None, 'error_code': None,
-        }
-        states[msg['entry_id']] = state
-        task = hass.async_create_task(
-            _validation_worker(
-                hass, coordinator, msg['entry_id'], msg['round'], requested_ids, state,
-            ),
-            f'{DOMAIN} historical validation {msg["entry_id"]}',
-        )
-        state['task'] = task
-
-    if task is None:
-        connection.send_error(msg['id'], 'validation_failed', '과거 검증 작업 상태를 확인하지 못했습니다.')
-        return
-
-    await asyncio.shield(task)
-    snapshot = _validation_snapshot(state)
-    if snapshot.get('status') == 'completed':
-        connection.send_result(msg['id'], snapshot['result'])
-    else:
-        connection.send_error(
-            msg['id'], snapshot.get('error_code') or 'validation_failed',
-            snapshot.get('error') or '과거 검증을 완료하지 못했습니다.',
-        )
+        latest = await async_access(hass, msg['entry_id'], published_round(coordinator),
+                                     cycle_reader=lambda: published_round(coordinator))
+        if latest['cycle_id'] != state['cycle_id']:
+            raise ScoreConflict('새 당첨회차가 확인되어 이전 검증을 초기화했습니다.')
+        connection.send_result(msg['id'], state['result'])
+    except ScoreConflict as err:
+        connection.send_error(msg['id'], 'validation_cycle_expired', str(err))
+    except (HomeAssistantError, ValueError, OSError):
+        connection.send_error(msg['id'], 'validation_failed', '검증 저장소 또는 통합 상태를 확인하세요. 기존 기록은 보존합니다.')
 
 
 @websocket_api.websocket_command({
@@ -274,10 +256,49 @@ async def historical_validate(hass, connection, msg):
 @websocket_api.require_admin
 @websocket_api.async_response
 async def historical_validation_state(hass, connection, msg):
-    """Return the latest in-memory validation job/result for panel restoration."""
-    _coordinator(hass, msg)
-    state = _validation_states(hass).get(msg['entry_id'])
-    connection.send_result(msg['id'], _validation_snapshot(state))
+    """Restore the persisted cycle even after an HA restart; never generate."""
+    try:
+        coordinator = _coordinator(hass, msg)
+        payload = await async_access(hass, msg['entry_id'], published_round(coordinator),
+                                     cycle_reader=lambda: published_round(coordinator))
+        state = _validation_states(hass).get(msg['entry_id'])
+        if state and state.get('cycle_id') != payload['cycle_id']:
+            state = None
+        snapshot = _validation_snapshot(state)
+        score = score_summary(payload)
+        if snapshot['status'] in ('idle', 'completed') and payload.get('last_result'):
+            result = {**payload['last_result'], 'validation_cycle': payload['cycle_id'],
+                      'validation_scoreboard': score, 'validation_scoreboard_persisted': True}
+            snapshot.update(status='completed', result=result, round=result['target_round'],
+                            method_ids=result.get('method_ids', []))
+        snapshot.update(validation_scoreboard=score)
+        connection.send_result(msg['id'], snapshot)
+    except (HomeAssistantError, ValueError, OSError):
+        connection.send_error(msg['id'], 'score_storage_error', '검증 기록을 복원하지 못했습니다. 원본을 보존합니다.')
+
+
+@websocket_api.websocket_command({
+    'type': 'lotto_645/historical_validation_import', vol.Required('entry_id'): str,
+    vol.Required('confirmed'): vol.All(bool, vol.In([True])),
+    vol.Required('revision'): vol.All(str, vol.Length(min=64, max=64)),
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def historical_validation_import(hass, connection, msg):
+    """Import server-owned aggregates only after confirming this exact revision."""
+    try:
+        coordinator = _coordinator(hass, msg)
+        if msg.get('confirmed') is not True:
+            raise ScoreConflict('리뷰 반영 확인이 필요합니다.')
+        payload = await async_access(
+            hass, msg['entry_id'], published_round(coordinator), import_revision=msg['revision'],
+            cycle_reader=lambda: published_round(coordinator),
+        )
+        connection.send_result(msg['id'], {**_view(coordinator), 'validation_scoreboard': score_summary(payload)})
+    except ScoreConflict as err:
+        connection.send_error(msg['id'], 'validation_revision_conflict', str(err))
+    except (HomeAssistantError, ValueError, OSError):
+        connection.send_error(msg['id'], 'score_storage_error', '리뷰에 저장하지 못했습니다. 다시 확인한 후 재시도하세요.')
 
 
 def _publish_panel(hass: HomeAssistant, shared: dict) -> None:
@@ -316,10 +337,8 @@ async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
                 StaticPathConfig('/lotto_645_brand', str(Path(__file__).parent / 'brand'), False)])
             shared['brand_registered'] = True
         if not shared.get('commands_registered', shared.get('registered', False)):
-            for handler in (
-                purchases_get, qr_preview, purchases_save, result_check,
-                historical_validate, historical_validation_state,
-            ):
+            for handler in (purchases_get, qr_preview, purchases_save, result_check, historical_validate,
+                            historical_validation_state, historical_validation_import):
                 websocket_api.async_register_command(hass, handler)
             shared['commands_registered'] = True
         shared['source_logo_verified'] = await hass.async_add_executor_job(_source_logo_available)

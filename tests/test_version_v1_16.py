@@ -4,8 +4,11 @@ import json
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_v1_16_version_alignment():
-    const = (ROOT / 'custom_components/lotto_645/const.py').read_text()
-    manifest = json.loads((ROOT / 'custom_components/lotto_645/manifest.json').read_text())
-    assert 'VERSION = "1.16.0"' in const
-    assert manifest['version'] == '1.16.0'
+def test_release_version_alignment():
+    root = ROOT / 'custom_components/lotto_645'
+    version = json.loads((root / 'manifest.json').read_text())['version']
+    assert tuple(map(int, version.split('.'))) >= (1, 16, 0)
+    assert f'VERSION = "{version}"' in (root / 'const.py').read_text()
+    shell = (root / 'www/lotto-panel-shell.js').read_text()
+    assert f"data-lotto-ha-host-header', '{version}'" in shell
+    assert f'lotto-panel-validation.js?v={version}' in shell

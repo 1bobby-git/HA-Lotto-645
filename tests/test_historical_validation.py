@@ -218,13 +218,16 @@ def test_cancel_or_timeout_keeps_single_worker_lease(monkeypatch,cancel):
 def test_ui_and_websocket_separation_is_explicit():
     root=ROOT/'custom_components/lotto_645'
     endpoint=(root/'ticket_panel.py').read_text()
-    handler=endpoint.split('async def historical_validate(')[1].split('\ndef _publish_panel')[0]
+    handler=endpoint.split('async def historical_validate(')[1].split('\n\n@websocket_api.websocket_command')[0]
     assert '_view(' not in handler
     assert 'async_validate_history(' in handler
     js=(root/'www/lotto-panel-validation.js').read_text()
     assert "request('historical_validate'" in js
-    assert "node('predictions')" not in js and "node('reviews')" not in js
-    assert 'sequence !== this.sequence' in js
+    generation = js.split('async run(){')[1].split('  render(data)')[0]
+    assert "node('predictions')" not in js
+    assert 'updateResults(' not in generation and 'historical_validation_import' not in generation
+    assert "request('historical_validation_import'" in js and 'window.confirm(' in js
+    assert 'sequence!==this.sequence' in js.replace(' ', '')
     assert 'validation-seed' not in js and 'data.seed' not in js
     assert "vol.Optional('seed'" not in endpoint
     assert "localStorage" not in js and "setInterval" not in js
