@@ -1,0 +1,55 @@
+name: Apply validation controller cleanup patch
+
+on:
+  push:
+    branches: [fix/validation-hot-upgrade-v1.18.1]
+    paths: [.github/workflows/apply-validation-hot-upgrade-cleanup.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/validation-hot-upgrade-v1.18.1
+      - name: Remove stale injected UI before controller replacement
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('custom_components/lotto_645/www/lotto-panel-validation.js')
+          text = p.read_text()
+          old = "  if(needsUpgrade){\n    current.sequence=(current.sequence||0)+1;current.restoreToken=(current.restoreToken||0)+1;clearTimeout(current.restoreTimer);\n    if('importToken' in current)current.importToken=(current.importToken||0)+1;\n    panel._historicalValidation=null;\n  }"
+          new = "  if(needsUpgrade){\n    current.sequence=(current.sequence||0)+1;current.restoreToken=(current.restoreToken||0)+1;clearTimeout(current.restoreTimer);\n    if('importToken' in current)current.importToken=(current.importToken||0)+1;\n    panel.node('validation-total')?.remove();\n    panel.node('validation-assessment')?.remove();\n    panel.node('validation-sort')?.closest('.validation-toolbar')?.remove();\n    panel.node('validation-review-order')?.remove();\n    panel._historicalValidation=null;\n  }"
+          if text.count(old) != 1:
+              raise SystemExit('validation.js upgrade block marker mismatch')
+          p.write_text(text.replace(old, new, 1))
+
+          p = Path('scripts/smoke_panel_validation.py')
+          text = p.read_text()
+          old = "      return el._historicalValidation!==stale\n        && el._historicalValidation.runtimeVersion==='1.18.1'\n        && el._historicalValidation.form===el.node('validation-form');"
+          new = "      return el._historicalValidation!==stale\n        && el._historicalValidation.runtimeVersion==='1.18.1'\n        && el._historicalValidation.form===el.node('validation-form')\n        && el.shadowRoot.querySelectorAll('#validation-sort').length===1\n        && el.shadowRoot.querySelectorAll('#validation-total').length===1\n        && el.shadowRoot.querySelectorAll('#validation-import').length===1\n        && el.shadowRoot.querySelectorAll('#validation-export').length===1\n        && el.shadowRoot.querySelectorAll('#validation-assessment').length===1;"
+          if text.count(old) != 1:
+              raise SystemExit('smoke hot-upgrade assertion marker mismatch')
+          p.write_text(text.replace(old, new, 1))
+
+          changelog = Path('CHANGELOG_v1.18.1.md')
+          text = changelog.read_text()
+          line = '- 컨트롤러 교체 전에 이전 런타임이 삽입한 정렬·내보내기·평가 UI를 제거해 중복 ID/중복 툴바가 생기지 않도록 했습니다.\n'
+          if line not in text:
+              changelog.write_text(text + line)
+
+          Path('.github/workflows/apply-validation-hot-upgrade-cleanup.yml').unlink()
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: clean stale validation controls during hot upgrade'
+          git push origin HEAD:fix/validation-hot-upgrade-v1.18.1
