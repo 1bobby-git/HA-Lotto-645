@@ -6,6 +6,7 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 
 from .const import (
@@ -26,6 +27,48 @@ from .result_details import decorate_result, winning_attributes
 PARALLEL_UPDATES = 0
 
 
+def _active_optional_sensor_unique_ids(coordinator: Lotto645Coordinator) -> set[str]:
+    """Return optional sensor registry identities that should exist now."""
+    entry_id = coordinator.entry.entry_id
+    active = {
+        f"{entry_id}_method_{method_id}"
+        for method_id in coordinator.selected_method_ids
+    }
+    if METHOD_MYUNGRI_HETU in coordinator.configured_method_ids:
+        active.add(f"{entry_id}_saju_profile")
+    if coordinator.ai_enabled:
+        active.add(f"{entry_id}_ai_recommendation")
+    return active
+
+
+def _prune_stale_optional_sensor_entities(
+    hass: HomeAssistant, entry: ConfigEntry, coordinator: Lotto645Coordinator
+) -> None:
+    """Delete deselected formula/AI/profile sensors from the HA registry.
+
+    Options changes reload the entry. At the next sensor setup, old entities are
+    no longer active but their registry records would otherwise remain and show
+    as unavailable. Only this integration's optional sensor identities are
+    touched; review/history data and stable summary/result entities are kept.
+    """
+    registry = er.async_get(hass)
+    active = _active_optional_sensor_unique_ids(coordinator)
+    method_prefix = f"{entry.entry_id}_method_"
+    optional_singletons = {
+        f"{entry.entry_id}_saju_profile",
+        f"{entry.entry_id}_ai_recommendation",
+    }
+    for registry_entry in er.async_entries_for_config_entry(
+        registry, entry.entry_id
+    ):
+        if registry_entry.domain != "sensor" or registry_entry.platform != DOMAIN:
+            continue
+        unique_id = registry_entry.unique_id
+        managed = unique_id.startswith(method_prefix) or unique_id in optional_singletons
+        if managed and unique_id not in active:
+            registry.async_remove(registry_entry.entity_id)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -33,6 +76,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Lotto sensors."""
     coordinator: Lotto645Coordinator = entry.runtime_data
+    _prune_stale_optional_sensor_entities(hass, entry, coordinator)
     entities: list[SensorEntity] = [
         LottoRecommendationsSensor(coordinator),
         LottoMethodGuideSensor(coordinator),
