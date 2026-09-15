@@ -70,12 +70,13 @@ DOCUMENTS = [ROOT / 'README.md', ROOT / 'docs/FORMULAS.md',
              *[GUIDES / f"{method['id']}.md" for method in CATALOG]]
 
 
-def test_readme_has_no_version_history_and_keeps_changelog():
+def test_readme_has_no_changelog_or_version_history():
     text = (ROOT / 'README.md').read_text(encoding='utf-8')
     assert not re.search(r'^#{1,6}\s+v?\d+\.\d+\.\d+', text, re.MULTILINE)
     assert '## 추첨 공식 19종' in text
-    assert '[변경 이력](CHANGELOG.md)' in text
-    assert (ROOT / 'CHANGELOG.md').is_file()
+    assert 'changelog' not in text.lower()
+    assert not list(ROOT.glob('CHANGELOG*.md'))
+    assert not (ROOT / 'docs/RELEASE_V110_CHECKLIST.md').exists()
 
 
 def test_readme_and_formula_index_link_all_methods_in_catalog_order():
