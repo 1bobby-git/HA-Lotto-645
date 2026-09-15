@@ -15,6 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from .const import DOMAIN
+from .validation_hit_history import MAX_HIT_HISTORY, hit_event, migrate_hits, validate_hits
 
 STORE_VERSION = 1
 CACHE_KEY = f"{DOMAIN}_historical_validation_score_ledgers"
@@ -82,6 +83,10 @@ def _validate(payload: Any) -> dict[str, Any]:
                     or any(not isinstance(v, str) for v in row['formula_versions'])):
                 raise ValueError('invalid first-round evidence')
             result[group][method_id] = row
+    for method_id, row in result['methods'].items():
+        if 'hit_history' not in row:
+            row['hit_history'] = migrate_hits(result, method_id)
+        row['hit_history'] = validate_hits(row['hit_history'], result['total_runs'], row['three_plus_hits'])
     # v1 had no cycle anchor or unique-round evidence; preserve its aggregate,
     # but never invent independent trials from its rolling recent-50 history.
     return result
@@ -123,6 +128,9 @@ def apply_result(payload: dict[str, Any], result: dict[str, Any]) -> dict[str, A
     rows = result.get('results')
     if type(target) is not int or target < 1 or not isinstance(rows, list):
         raise ValueError('invalid validation result')
+    for method_id, old in updated['methods'].items():
+        if 'hit_history' not in old:
+            old['hit_history'] = migrate_hits(updated, method_id)
     updated['total_runs'] += 1
     updated['rounds'] = sorted(set(updated.get('rounds', [])) | {target})
     run_methods = []
@@ -137,6 +145,7 @@ def apply_result(payload: dict[str, Any], result: dict[str, Any]) -> dict[str, A
         label = str(raw.get('sensor_name') or key)[:180]
         row = updated['methods'].setdefault(key, _method_row(key, label))
         row['label'] = label
+        row.setdefault('hit_history', [])
         row['attempts'] += 1
         row.setdefault('first_rounds', {})
         versions = row.setdefault('formula_versions', [])
@@ -155,6 +164,9 @@ def apply_result(payload: dict[str, Any], result: dict[str, Any]) -> dict[str, A
                 row['three_plus_hits'] += 1
                 row[f'match_{match}'] += 1
                 row['points'] += POINTS[match]
+                events = row.setdefault('hit_history', [])
+                events.append(hit_event(result, raw, updated['total_runs']))
+                row['hit_history'] = events[-MAX_HIT_HISTORY:]
         else:
             row['unavailable'] += 1
         run_methods.append({'method_id': key, 'match': match, 'points': POINTS.get(match, 0)})
@@ -188,6 +200,9 @@ def summary(payload: dict[str, Any]) -> dict[str, Any]:
     for raw in payload.get('methods', {}).values():
         row = deepcopy(raw)
         generated, hits = row.get('generated', 0), row.get('three_plus_hits', 0)
+        events = row.setdefault('hit_history', [])
+        row['hit_history_omitted'] = max(0, hits - len(events))
+        row['hit_history_limit'] = MAX_HIT_HISTORY
         row['hit_rate'] = round(hits*100/generated, 1) if generated else 0.0
         row['points_per_100'] = round(row['points']*100/generated, 2) if generated else 0.0
         first = row.pop('first_rounds', {})
