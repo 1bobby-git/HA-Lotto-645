@@ -104,7 +104,7 @@ HACS 사용자 저장소: `https://github.com/1bobby-git/HA-Lotto-645`
 
 ## 관련 문서
 
-[공통 계산 원리](docs/FORMULAS.md) · [명리 규칙과 한계](docs/SAJU_RULES.md) · [계산 검증 범위](docs/VALIDATION.md) · [변경 이력](CHANGELOG.md)
+[공통 계산 원리](docs/FORMULAS.md) · [명리 규칙과 한계](docs/SAJU_RULES.md) · [계산 검증 범위](docs/VALIDATION.md)
 
 ## 라이선스
 
