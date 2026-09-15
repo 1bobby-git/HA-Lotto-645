@@ -40,7 +40,7 @@ async def run():
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.on('dialog', lambda dialog: dialog.accept())
         resources = {f'/lotto_645_static/{name}': WWW / name for name in (
-            'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js', 'lotto-panel-design.js', 'lotto-panel-tools.js', 'lotto-panel-validation.js', 'lotto-panel-validation-details.js'
+            'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-research.js', 'lotto-panel-core.js', 'lotto-panel-view.js', 'lotto-panel-design.js', 'lotto-panel-tools.js', 'lotto-panel-validation.js', 'lotto-panel-validation-details.js'
         )}
         resources['/lotto_645_brand/logo.png'] = logo
 
