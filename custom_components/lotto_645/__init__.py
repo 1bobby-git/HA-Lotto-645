@@ -9,10 +9,16 @@ from homeassistant.const import ATTR_ENTITY_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.event import async_track_utc_time_change
-from .ticket_panel import async_register_ticket_panel, async_remove_ticket_panel, async_ensure_ticket_panel
 
 from .const import DOMAIN, SERVICE_GENERATE_AI, SERVICE_REFRESH
+from .research_extension import install_research_extensions
+
+# Install additive research formulas before coordinator, ticket-panel schemas,
+# config flows or validation code import the formula catalog.
+install_research_extensions()
+
 from .coordinator import Lotto645Coordinator
+from .ticket_panel import async_register_ticket_panel, async_remove_ticket_panel, async_ensure_ticket_panel
 
 PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.BINARY_SENSOR]
 
@@ -35,6 +41,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = Lotto645Coordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
+    from .research_runtime import async_register_research_commands
+    async_register_research_commands(hass)
     from .validation_lifecycle import async_setup_validation
     await async_setup_validation(hass, coordinator)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))

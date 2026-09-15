@@ -1,5 +1,6 @@
 /* UI entry point: two-tier Home Assistant header plus demand-driven panel synchronization. */
 import './lotto-panel-core.js?v=1.15.0';
+import { installResearchTools } from './lotto-panel-research.js?v=1.18.0';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const PANEL_SYNC_INTERVAL = 60_000;
@@ -313,3 +314,5 @@ Panel.prototype.render = function (...args) {
   }
   return value;
 };
+
+installResearchTools(Panel);

@@ -82,5 +82,7 @@ jobs:
         run: python -m pip install playwright 'qrcode[pil]'
       - name: Install headless browser
         run: python -m playwright install --with-deps chromium
-      - name: Validate local QR preview and explicit save in browser
-        run: python scripts/smoke_ticket_panel.py
+      - name: Validate local QR preview and research tools in browser
+        run: |
+          python scripts/smoke_ticket_panel.py
+          python scripts/smoke_research_panel.py
