@@ -343,6 +343,10 @@ export function applyHistoricalValidation(panel){
   if(needsUpgrade){
     current.sequence=(current.sequence||0)+1;current.restoreToken=(current.restoreToken||0)+1;clearTimeout(current.restoreTimer);
     if('importToken' in current)current.importToken=(current.importToken||0)+1;
+    panel.node('validation-total')?.remove();
+    panel.node('validation-assessment')?.remove();
+    panel.node('validation-sort')?.closest('.validation-toolbar')?.remove();
+    panel.node('validation-review-order')?.remove();
     panel._historicalValidation=null;
   }
   if(!panel._historicalValidation)panel._historicalValidation=new HistoricalValidationView(panel);

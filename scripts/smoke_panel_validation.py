@@ -164,7 +164,12 @@ async def verify_panel_validation(page):
       m.applyHistoricalValidation(el);
       return el._historicalValidation!==stale
         && el._historicalValidation.runtimeVersion==='1.18.1'
-        && el._historicalValidation.form===el.node('validation-form');
+        && el._historicalValidation.form===el.node('validation-form')
+        && el.shadowRoot.querySelectorAll('#validation-sort').length===1
+        && el.shadowRoot.querySelectorAll('#validation-total').length===1
+        && el.shadowRoot.querySelectorAll('#validation-import').length===1
+        && el.shadowRoot.querySelectorAll('#validation-export').length===1
+        && el.shadowRoot.querySelectorAll('#validation-assessment').length===1;
     }''')
     await page.wait_for_timeout(20)
     print('PASS: unified compact ranks, hot-upgrade controller replacement, 10 theme/width combinations, >=4.5 contrast, reset, consent/cancel, review provenance, CSV, stale-entry and error recovery')
