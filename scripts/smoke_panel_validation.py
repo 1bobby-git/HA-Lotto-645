@@ -119,7 +119,7 @@ async def verify_panel_validation(page):
     assert await page.locator('#reviews .validation-import-note').count() == 3
     assert await page.evaluate('validationBase.reviews.every(r=>r.reviewed_rounds===6)')
     await page.locator('#tab-review').click()
-    await page.locator('#validation-review-order select_option('historical')
+    await page.locator('#validation-review-order select').select_option('historical')
     assert await page.locator('#reviews tr').first.get_attribute('data-review-method') == 'uniform_floyd'
     await page.locator('#tab-validation').click()
     async with page.expect_download() as download_info:
