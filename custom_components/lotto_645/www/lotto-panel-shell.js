@@ -3,7 +3,7 @@ import './lotto-panel.js?v=1.18.0';
 import { applyComponentDesign } from './lotto-panel-design.js?v=1.14.0';
 import { applyPanelTools, countdownState } from './lotto-panel-tools.js?v=1.15.0';
 
-import { applyHistoricalValidation } from './lotto-panel-validation.js?v=1.17.1';
+import { applyHistoricalValidation } from './lotto-panel-validation.js?v=1.18.0';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const Panel = customElements.get('lotto-ticket-panel');
