@@ -34,7 +34,7 @@
           "advanced_methods": "Advanced: uniform algorithms / frequency presets (optional)"
         },
         "data_description": {
-          "selected_methods": "Multiple formulas can be selected. Personal Four Pillars can only be enabled after the personal profile has been saved. None of these formulas changes the mathematical winning probability. The selected-formula median consensus requires at least two other local formulas and excludes AI.",
+          "selected_methods": "Multiple formulas can be selected. Personal Four Pillars can only be enabled after the personal profile has been saved. None of these formulas changes the mathematical winning probability. The selected-formula median consensus requires at least two other local formulas and excludes AI. Sensors for formulas removed from the selection are deleted from the entity registry after reload.",
           "enable_ai_recommendation": "AI is independent from local formulas. Manual Refresh / Regenerate does not regenerate the AI recommendation.",
           "ai_auto_generate": "Only generates AI automatically when a new official draw is detected. Manual local regeneration suppresses AI generation.",
           "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed.",
@@ -43,14 +43,13 @@
       },
       "saju": {
         "title": "Personal Four Pillars profile",
-        "description": "Save personal birth information before using the Four Pillars recommendation. Enter the birth date as YYYY-MM-DD and birth time as HH:MM. Raw birth values remain in Home Assistant and are not sent to the lottery mirror or HA AI prompts.",
+        "description": "Save personal birth information before using the Four Pillars recommendation. Birth place is selected from the 17 first-level South Korean regions and Asia/Seoul is applied automatically. Raw birth data remains local to Home Assistant.",
         "data": {
           "saju_calendar": "Birth calendar",
           "saju_birth_date": "Birth date (YYYY-MM-DD)",
           "saju_birth_time": "Birth time (HH:MM or unknown)",
           "saju_gender": "Gender (luck-cycle direction)",
-          "saju_birth_place": "Birth place",
-          "saju_timezone": "Birth timezone (IANA)",
+          "saju_birth_place": "Birth place (South Korean region)",
           "saju_lunar_leap_month": "Lunar leap month",
           "saju_true_solar_time": "Use true solar time correction",
           "saju_longitude": "Birth longitude (optional)",
@@ -59,8 +58,7 @@
         "data_description": {
           "saju_birth_date": "Example: 1982-03-15",
           "saju_birth_time": "Use the recorded local birth time. Explicit unknown omits the hour pillar; boundary cases still require a known time.",
-          "saju_birth_place": "Example: Seoul, South Korea. No external geocoding request is made.",
-          "saju_timezone": "For births in Korea, Asia/Seoul is normally used.",
+          "saju_birth_place": "Choose one of the 17 South Korean first-level regions. No geocoding or external dataset is requested. A legacy overseas value already saved by an older release remains selectable only as that saved value.",
           "saju_lunar_leap_month": "Used only for lunar-calendar birth dates.",
           "saju_true_solar_time": "When enabled, the hour pillar time is corrected using timezone meridian, longitude and equation of time.",
           "saju_longitude": "Only needed when true solar time correction is enabled.",
@@ -97,7 +95,8 @@
       "invalid_purchase_numbers": "Enter six distinct integers 1–45 separated by commas/spaces, or twelve zero-padded digits.",
       "purchase_games_required": "Enter at least one game, or select delete explicitly.",
       "purchase_storage_unavailable": "Could not save. Existing tickets are preserved.",
-      "purchase_game_limit": "Enter at most five games (A–E) per draw."
+      "purchase_game_limit": "Enter at most five games (A–E) per draw.",
+      "select_korean_birthplace": "Choose one of the 17 South Korean regions."
     },
     "abort": {
       "purchase_integration_not_ready": "Wait for the integration to finish setup.",

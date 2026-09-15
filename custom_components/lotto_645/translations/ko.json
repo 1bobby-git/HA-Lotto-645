@@ -34,7 +34,7 @@
           "advanced_methods": "고급 선택 · 균등 알고리즘 / 빈도 프리셋 (선택 사항)"
         },
         "data_description": {
-          "selected_methods": "여러 공식을 동시에 선택할 수 있습니다. 명리 권장은 개인 사주정보가 먼저 저장되어 있어야 활성화할 수 있습니다. 어떤 공식도 실제 당첨 확률을 높인다고 보장하지 않습니다. '합의 추천 · 선택 공식 중앙값'은 AI를 제외한 다른 로컬 공식 2개 이상을 함께 선택해야 합니다.",
+          "selected_methods": "여러 공식을 동시에 선택할 수 있습니다. 명리 권장은 개인 사주정보가 먼저 저장되어 있어야 활성화할 수 있습니다. 어떤 공식도 실제 당첨 확률을 높인다고 보장하지 않습니다. '합의 추천 · 선택 공식 중앙값'은 AI를 제외한 다른 로컬 공식 2개 이상을 함께 선택해야 합니다. 선택에서 해제한 공식의 추천 센서는 재로드 후 엔티티 레지스트리에서 삭제됩니다.",
           "enable_ai_recommendation": "AI 추천은 로컬 분석과 별도입니다. '즉시 새로고침 · 번호 재생성'을 눌러도 AI 추천은 다시 생성하지 않습니다.",
           "ai_auto_generate": "새 공식 회차가 확인된 경우에만 자동 AI 생성을 허용합니다. 수동 번호 재생성에서는 AI 자동 생성을 억제합니다.",
           "allow_official_direct_fallback": "공유 미러가 실패할 때만 최근 1~2개 회차를 순차·저빈도로 확인합니다. 전체 회차 직접 크롤링에는 사용하지 않습니다. 특별한 이유가 없으면 끈 상태를 권장합니다.",
@@ -43,14 +43,13 @@
       },
       "saju": {
         "title": "명리 사주정보 입력·수정",
-        "description": "명리 권장 번호를 사용하기 전에 개인 사주정보를 저장하세요. 생년월일은 YYYY-MM-DD, 출생시간은 HH:MM 형식으로 입력합니다. 입력값은 Home Assistant 구성에 로컬 저장되며 로또 미러나 HA AI 프롬프트에 원본 출생정보를 전송하지 않습니다.",
+        "description": "명리 권장 번호를 사용하기 전에 개인 사주정보를 저장하세요. 출생지는 대한민국 17개 시·도에서 선택하며 시간대는 Asia/Seoul로 자동 적용합니다. 생년월일은 YYYY-MM-DD, 출생시간은 HH:MM 형식입니다. 원본 출생정보는 외부로 전송하지 않습니다.",
         "data": {
           "saju_calendar": "출생일 기준 (양력/음력)",
           "saju_birth_date": "생년월일 (YYYY-MM-DD)",
           "saju_birth_time": "출생시간 (HH:MM 또는 미상)",
           "saju_gender": "성별 (대운 순·역행 계산용)",
-          "saju_birth_place": "출생지",
-          "saju_timezone": "출생지 시간대 (IANA)",
+          "saju_birth_place": "출생지 (대한민국 시·도)",
           "saju_lunar_leap_month": "음력 윤달",
           "saju_true_solar_time": "진태양시 보정 사용",
           "saju_longitude": "출생지 경도 (선택 사항)",
@@ -59,8 +58,7 @@
         "data_description": {
           "saju_birth_date": "예: 1982-03-15",
           "saju_birth_time": "예: 14:30. 모르면 미상으로 입력하면 시주를 제외합니다. 절입일 경계는 정확한 시각이 필요하고, 대운 시작이 불확실하면 대운 점수는 제외합니다.",
-          "saju_birth_place": "예: Seoul, South Korea. 외부 지오코딩은 호출하지 않습니다.",
-          "saju_timezone": "한국 출생이면 일반적으로 Asia/Seoul을 사용합니다.",
+          "saju_birth_place": "대한민국 17개 시·도에서 선택합니다. 외부 지오코딩/다운로드를 호출하지 않습니다. 기존 버전에서 저장한 해외 출생지는 기존 값만 유지할 수 있습니다.",
           "saju_lunar_leap_month": "음력 출생일 때만 사용합니다. 양력이면 자동으로 무시됩니다.",
           "saju_true_solar_time": "선택 시 표준시 자오선과 출생지 경도, 균시차를 이용해 시주용 시각을 보정합니다.",
           "saju_longitude": "진태양시 보정을 켰을 때만 필요합니다. 예: 서울 약 126.9780.",
@@ -97,7 +95,8 @@
       "invalid_purchase_numbers": "1~45의 서로 다른 정수 6개를 쉼표/공백으로 구분하세요. 두 자리씩 12자리도 가능합니다.",
       "purchase_games_required": "A~E 중 한 게임 이상을 입력하세요. 삭제하려면 삭제 항목을 켜세요.",
       "purchase_storage_unavailable": "저장하지 못했습니다. 기존 구매번호는 유지됩니다.",
-      "purchase_game_limit": "한 회차에 최대 5게임(A~E)을 입력할 수 있습니다."
+      "purchase_game_limit": "한 회차에 최대 5게임(A~E)을 입력할 수 있습니다.",
+      "select_korean_birthplace": "출생지는 대한민국 17개 시·도 중 하나를 선택하세요."
     },
     "abort": {
       "purchase_integration_not_ready": "통합 초기화 후 다시 구성하세요.",

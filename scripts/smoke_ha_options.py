@@ -49,7 +49,18 @@ async def main():
         assert menu['type']==FlowResultType.MENU
         assert menu['menu_options']==['recommendations','saju','purchases']
         serialize_form(await flow.async_step_recommendations())
-        serialize_form(await flow.async_step_saju())
+        saju_form=await flow.async_step_saju()
+        serialize_form(saju_form)
+        saju_fields=to_field_list(saju_form['data_schema'],custom_serializer=cv.custom_serializer)
+        saju_names={field['name'] for field in saju_fields}
+        assert const.CONF_SAJU_BIRTH_PLACE in saju_names
+        assert const.CONF_SAJU_TIMEZONE not in saju_names
+        birthplace_field=next(
+            field for field in saju_fields if field['name']==const.CONF_SAJU_BIRTH_PLACE
+        )
+        birthplace_options=birthplace_field['selector']['select']['options']
+        assert len(birthplace_options)==17
+        assert any(option['value']=='서울특별시' for option in birthplace_options)
         advanced_result=await flow.async_step_recommendations({const.CONF_SELECTED_METHODS:['weighted_frequency'], 'advanced_methods':['uniform_floyd']})
         assert advanced_result['data'][const.CONF_SELECTED_METHODS]==['weighted_frequency','uniform_floyd']
         assert 'advanced_methods' not in advanced_result['data']
@@ -59,13 +70,18 @@ async def main():
         assert invalid['errors']['base']=='saju_profile_required'
         submitted={
             'saju_calendar':'lunar', 'saju_lunar_standard':'korean', 'saju_birth_date':'20000230',
-            'saju_birth_time':'1430','saju_gender':'male','saju_birth_place':'SYNTHETIC',
-            'saju_timezone':'Asia/Seoul','saju_lunar_leap_month':False, 'saju_true_solar_time':False,
+            'saju_birth_time':'1430','saju_gender':'male','saju_birth_place':'서울특별시',
+            'saju_lunar_leap_month':False, 'saju_true_solar_time':False,
         }
         result=await flow.async_step_saju(submitted)
         assert result['type']==FlowResultType.CREATE_ENTRY,result
         assert result['data']['saju_birth_date']=='2000-02-30'
         assert result['data']['saju_birth_time']=='14:30'
+        assert result['data'][const.CONF_SAJU_BIRTH_PLACE]=='서울특별시'
+        assert result['data'][const.CONF_SAJU_TIMEZONE]=='Asia/Seoul'
+        invalid_place={**submitted,'saju_birth_place':'SYNTHETIC'}
+        invalid_place_result=await flow.async_step_saju(invalid_place)
+        assert invalid_place_result['errors'][const.CONF_SAJU_BIRTH_PLACE]=='select_korean_birthplace'
         saved=flow_module.Lotto645OptionsFlow(types.SimpleNamespace(options=result['data']))
         saved.hass=hass;saved.handler='synthetic';saved.flow_id='synthetic'
         saved_form=await saved.async_step_saju()
@@ -128,6 +144,37 @@ async def main():
         # Purchased tickets use a separate durable store; normal options/AI are untouched.
         purchase_module=importlib.import_module('custom_components.lotto_645.purchased_tickets')
         sensor_module=importlib.import_module('custom_components.lotto_645.sensor')
+        fake_registry=types.SimpleNamespace(
+            removed=[],
+            async_remove=lambda entity_id: fake_registry.removed.append(entity_id),
+        )
+        fake_entries=[
+            types.SimpleNamespace(entity_id='sensor.keep_method',domain='sensor',platform=const.DOMAIN,unique_id='prune_method_weighted_frequency'),
+            types.SimpleNamespace(entity_id='sensor.drop_method',domain='sensor',platform=const.DOMAIN,unique_id='prune_method_uniform_floyd'),
+            types.SimpleNamespace(entity_id='sensor.drop_ai',domain='sensor',platform=const.DOMAIN,unique_id='prune_ai_recommendation'),
+            types.SimpleNamespace(entity_id='sensor.drop_saju',domain='sensor',platform=const.DOMAIN,unique_id='prune_saju_profile'),
+            types.SimpleNamespace(entity_id='sensor.keep_summary',domain='sensor',platform=const.DOMAIN,unique_id='prune_recommendations'),
+            types.SimpleNamespace(entity_id='sensor.other_platform',domain='sensor',platform='other',unique_id='prune_method_uniform_rejection'),
+        ]
+        prune_coordinator=types.SimpleNamespace(
+            entry=types.SimpleNamespace(entry_id='prune'),
+            selected_method_ids=('weighted_frequency',),
+            configured_method_ids=('weighted_frequency',),
+            ai_enabled=False,
+        )
+        from unittest.mock import patch
+        with patch.object(sensor_module.er,'async_get',return_value=fake_registry), patch.object(
+            sensor_module.er,'async_entries_for_config_entry',return_value=fake_entries
+        ):
+            sensor_module._prune_stale_optional_sensor_entities(
+                hass, types.SimpleNamespace(entry_id='prune'), prune_coordinator
+            )
+        assert set(fake_registry.removed)=={
+            'sensor.drop_method','sensor.drop_ai','sensor.drop_saju'
+        }
+        assert '_prune_stale_optional_sensor_entities' in __import__('inspect').getsource(
+            sensor_module.async_setup_entry
+        )
         from homeassistant.helpers.storage import Store
         obj.hass=hass
         obj.entry=types.SimpleNamespace(entry_id='purchase-smoke', domain=const.DOMAIN, options={
@@ -310,6 +357,6 @@ async def main():
         from smoke_historical_validation import verify_historical_validation
         await verify_historical_validation(hass, obj)
         await hass.async_stop(force=True)
-    print('PASS: real HA options menu/forms/JSON serialization/profile save/compact normalization/gating; coordinator manual/AI contracts; purchased five-line round storage, restore, atomic save and draw-name checks')
+    print('PASS: real HA options menu/forms; Korea-only birthplace dropdown + implicit Asia/Seoul; deselected formula sensor registry pruning; profile save/gating; coordinator manual/AI contracts; purchased ticket storage and draw checks')
 
 if __name__=='__main__':asyncio.run(main())

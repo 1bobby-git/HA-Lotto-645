@@ -37,6 +37,11 @@ from .const import (
     DOMAIN,
     NAME,
 )
+from .korean_birthplaces import (
+    KOREAN_BIRTHPLACE_VALUES,
+    birthplace_selector_options,
+    is_supported_birthplace,
+)
 from .methods import (
     DEFAULT_METHOD_IDS,
     METHOD_MYUNGRI_HETU,
@@ -137,9 +142,11 @@ def _saju_schema(options: dict[str, Any]) -> vol.Schema:
     """
     calendar = str(options.get(CONF_SAJU_CALENDAR, DEFAULT_SAJU_CALENDAR))
     gender = str(options.get(CONF_SAJU_GENDER, "male") or "male")
-    timezone = str(
-        options.get(CONF_SAJU_TIMEZONE, DEFAULT_SAJU_TIMEZONE)
-        or DEFAULT_SAJU_TIMEZONE
+    birth_place = str(options.get(CONF_SAJU_BIRTH_PLACE, "") or "").strip()
+    birthplace_marker = (
+        vol.Required(CONF_SAJU_BIRTH_PLACE, default=birth_place)
+        if birth_place
+        else vol.Required(CONF_SAJU_BIRTH_PLACE)
     )
     longitude_marker = _optional_text_marker(CONF_SAJU_LONGITUDE, options)
 
@@ -171,8 +178,13 @@ def _saju_schema(options: dict[str, Any]) -> vol.Schema:
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
-            _required_text_marker(CONF_SAJU_BIRTH_PLACE, options): selector.TextSelector(),
-            vol.Required(CONF_SAJU_TIMEZONE, default=timezone): selector.TextSelector(),
+            birthplace_marker: selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=birthplace_selector_options(birth_place),
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    custom_value=False,
+                )
+            ),
             vol.Optional(
                 CONF_SAJU_LUNAR_LEAP_MONTH,
                 default=bool(options.get(CONF_SAJU_LUNAR_LEAP_MONTH, False)),
@@ -304,13 +316,23 @@ class Lotto645OptionsFlow(OptionsFlow):
             form_values.update(user_input)
             pending = dict(self._options)
             pending.update(user_input)
+            previous_birth_place = str(
+                self._options.get(CONF_SAJU_BIRTH_PLACE, "") or ""
+            ).strip()
             pending[CONF_SAJU_BIRTH_PLACE] = str(
                 pending.get(CONF_SAJU_BIRTH_PLACE, "") or ""
             ).strip()
-            pending[CONF_SAJU_TIMEZONE] = str(
-                pending.get(CONF_SAJU_TIMEZONE, DEFAULT_SAJU_TIMEZONE)
-                or DEFAULT_SAJU_TIMEZONE
-            ).strip()
+            if not is_supported_birthplace(
+                pending[CONF_SAJU_BIRTH_PLACE], legacy=previous_birth_place
+            ):
+                errors[CONF_SAJU_BIRTH_PLACE] = "select_korean_birthplace"
+            elif pending[CONF_SAJU_BIRTH_PLACE] in KOREAN_BIRTHPLACE_VALUES:
+                pending[CONF_SAJU_TIMEZONE] = DEFAULT_SAJU_TIMEZONE
+            else:
+                pending[CONF_SAJU_TIMEZONE] = str(
+                    pending.get(CONF_SAJU_TIMEZONE, DEFAULT_SAJU_TIMEZONE)
+                    or DEFAULT_SAJU_TIMEZONE
+                ).strip()
             if pending.get(CONF_SAJU_CALENDAR) != "lunar":
                 pending[CONF_SAJU_LUNAR_LEAP_MONTH] = False
             if not pending.get(CONF_SAJU_TRUE_SOLAR_TIME):
@@ -320,22 +342,25 @@ class Lotto645OptionsFlow(OptionsFlow):
                     pending[CONF_SAJU_LONGITUDE]
                 ).strip()
 
-            try:
-                pending[CONF_SAJU_BIRTH_DATE] = normalize_birth_date(
-                    pending.get(CONF_SAJU_BIRTH_DATE, "")
-                )
-                pending[CONF_SAJU_BIRTH_TIME] = normalize_birth_time(
-                    pending.get(CONF_SAJU_BIRTH_TIME, "")
-                )
-                await self.hass.async_add_executor_job(validate_saju_profile, extract_saju_profile(pending))
-            except SajuProfileError as err:
-                _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
-                errors["base"] = "invalid_saju_profile"
-            except (TypeError, ValueError) as err:
-                _LOGGER.exception("개인 사주정보 처리 중 오류: %s", err)
-                errors["base"] = "options_error"
-            else:
-                return self.async_create_entry(title="", data=pending)
+            if not errors:
+                try:
+                    pending[CONF_SAJU_BIRTH_DATE] = normalize_birth_date(
+                        pending.get(CONF_SAJU_BIRTH_DATE, "")
+                    )
+                    pending[CONF_SAJU_BIRTH_TIME] = normalize_birth_time(
+                        pending.get(CONF_SAJU_BIRTH_TIME, "")
+                    )
+                    await self.hass.async_add_executor_job(
+                        validate_saju_profile, extract_saju_profile(pending)
+                    )
+                except SajuProfileError as err:
+                    _LOGGER.debug("개인 사주정보 검증 실패: %s", err)
+                    errors["base"] = "invalid_saju_profile"
+                except (TypeError, ValueError) as err:
+                    _LOGGER.exception("개인 사주정보 처리 중 오류: %s", err)
+                    errors["base"] = "options_error"
+                else:
+                    return self.async_create_entry(title="", data=pending)
             form_values = pending
 
         return self.async_show_form(
