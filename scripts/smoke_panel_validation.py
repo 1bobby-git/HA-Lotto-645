@@ -15,7 +15,7 @@ async def verify_panel_validation(page):
           default_method_ids:['weighted_frequency','uniform_floyd','selected_median_consensus']}};
       window.validationResponse={mode:'historical_validation',simulation:true,counts_toward_reviews:false,persisted:false,
         target_round:1200,based_on_round:1199,training_last_round:1199,training_draw_count:1199,
-        component_version:'1.17.1',generated_at:'2026-09-15T00:00:00Z',training_sha256:'a'.repeat(64),
+        component_version:'1.18.1',generated_at:'2026-09-15T00:00:00Z',training_sha256:'a'.repeat(64),
         checked_game_count:3,unavailable_game_count:0,winning_game_count:2,highest_prize:'2등',
         draw:{round:1200,draw_date:'2025-11-29',numbers:[7,24,30,31,32,42],bonus:9},
         results:[
@@ -76,7 +76,7 @@ async def verify_panel_validation(page):
     assert await page.locator('#validation-results > .prediction-row').count() == 3
     # Pure ranking ties and spreadsheet-formula escaping execute in the real module.
     assert await page.evaluate('''async()=>{
-      const m=await import('/lotto_645_static/lotto-panel-validation.js?v=1.17.1');
+      const m=await import('/lotto_645_static/lotto-panel-validation.js?v=1.18.1');
       const rows=m.rankedRows([],[{method_id:'a',points:2},{method_id:'b',points:2},{method_id:'c',points:1}]);
       return rows.map(r=>r.rank).join(',')==='1,1,3' && rows[0].tied && m.csvCell('=SUM(1)').startsWith('"\\\'');
     }''')
@@ -157,4 +157,19 @@ async def verify_panel_validation(page):
     await page.wait_for_function('!el._historicalValidation.busy')
     assert '검증 테스트 오류' in await page.locator('#validation-status').text_content()
     await page.evaluate('el._clearSmartSync()')
-    print('PASS: unified compact ranks, 10 theme/width combinations, >=4.5 contrast, reset, consent/cancel, review provenance, CSV, stale-entry and error recovery')
+    assert await page.evaluate('''async()=>{
+      const m=await import('/lotto_645_static/lotto-panel-validation.js?v=1.18.1');
+      const stale=el._historicalValidation;
+      stale.runtimeVersion='1.18.0';
+      m.applyHistoricalValidation(el);
+      return el._historicalValidation!==stale
+        && el._historicalValidation.runtimeVersion==='1.18.1'
+        && el._historicalValidation.form===el.node('validation-form')
+        && el.shadowRoot.querySelectorAll('#validation-sort').length===1
+        && el.shadowRoot.querySelectorAll('#validation-total').length===1
+        && el.shadowRoot.querySelectorAll('#validation-import').length===1
+        && el.shadowRoot.querySelectorAll('#validation-export').length===1
+        && el.shadowRoot.querySelectorAll('#validation-assessment').length===1;
+    }''')
+    await page.wait_for_timeout(20)
+    print('PASS: unified compact ranks, hot-upgrade controller replacement, 10 theme/width combinations, >=4.5 contrast, reset, consent/cancel, review provenance, CSV, stale-entry and error recovery')

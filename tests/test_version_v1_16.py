@@ -12,3 +12,5 @@ def test_release_version_alignment():
     shell = (root / 'www/lotto-panel-shell.js').read_text()
     assert f"data-lotto-ha-host-header', '{version}'" in shell
     assert f'lotto-panel-validation.js?v={version}' in shell
+    validation = (root / 'www/lotto-panel-validation.js').read_text()
+    assert f"VALIDATION_UI_VERSION = '{version}'" in validation
