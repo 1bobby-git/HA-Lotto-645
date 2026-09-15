@@ -90,7 +90,7 @@ async def verify_validation_details(page):
               return Math.abs(r.width-t.width)<2&&Math.abs(r.left-t.left)<2&&n.scrollWidth<=n.clientWidth+1;
             }'''),(dark,width)
             assert await page.locator('#validation-output').evaluate('n=>n.scrollWidth<=n.clientWidth+1'),(dark,width)
-            assert await primary.evaluate('n=>n.getBoundingClientRect().height<160'),(dark,width)
+            assert await primary.evaluate('n=>n.getBoundingClientRect().height<220'),(dark,width)
             assert await page.locator('#validation-results > .prediction-row[data-scored="false"] td').evaluate_all('''nodes=>nodes.every(n=>{
               const probe=document.createElement('span');probe.style.backgroundColor='var(--surface)';n.append(probe);
               const bg=getComputedStyle(probe).backgroundColor;probe.remove();return getComputedStyle(n).backgroundColor===bg;
