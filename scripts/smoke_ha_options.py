@@ -47,8 +47,20 @@ async def main():
         flow.hass=hass;flow.handler='synthetic-config-entry';flow.flow_id='synthetic-flow'
         menu=await flow.async_step_init()
         assert menu['type']==FlowResultType.MENU
-        assert menu['menu_options']==['recommendations','saju','purchases']
+        assert menu['menu_options']==['recommendations','generation_rules','personal_lucky','saju','purchases']
         serialize_form(await flow.async_step_recommendations())
+        serialize_form(await flow.async_step_generation_rules())
+        serialize_form(await flow.async_step_personal_lucky())
+        good_rules=await flow.async_step_generation_rules({'fixed':'7', 'excluded':'13', 'odd':'2-4'})
+        assert good_rules['type']==FlowResultType.CREATE_ENTRY
+        assert good_rules['data']['generation_rules']['fixed']==(7,)
+        assert 'selected_methods' not in good_rules['data']
+        bad_rules=await flow.async_step_generation_rules({'fixed':'7', 'excluded':'7'})
+        assert bad_rules['errors']['base']=='invalid_generation_rules'
+        lucky=await flow.async_step_personal_lucky({'lucky_keyword':'  나의  소망 ', 'lucky_theme':'wish'})
+        assert lucky['data']['lucky_keyword']=='나의 소망'
+        bad_vote=await flow.async_step_recommendations({const.CONF_SELECTED_METHODS:['selected_vote_consensus']})
+        assert bad_vote['errors']['base']=='consensus_sources_required'
         saju_form=await flow.async_step_saju()
         serialize_form(saju_form)
         saju_fields=to_field_list(saju_form['data_schema'],custom_serializer=cv.custom_serializer)

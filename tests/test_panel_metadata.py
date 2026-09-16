@@ -69,9 +69,9 @@ def test_anchor_and_date_validation():
 def test_all_local_guides_are_packaged_verbatim_and_ai_is_separate():
     result = metadata.panel_metadata(1241, 'official_history')
     catalog = result['method_catalog']
-    assert len(methods.METHODS) == 19
-    assert len(catalog) == 20
-    assert len({m['method_id'] for m in catalog}) == 20
+    assert len(methods.METHODS) == 22
+    assert len(catalog) == 23
+    assert len({m['method_id'] for m in catalog}) == 23
     for method in methods.METHODS:
         source = ROOT / 'docs/methods' / (method.method_id + '.md')
         bundled = COMPONENT / 'www/methods' / source.name

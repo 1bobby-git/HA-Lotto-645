@@ -3,7 +3,7 @@ import { numberBalls } from './lotto-panel-view.js?v=1.15.0';
 import { attachValidationDetails, DETAIL_STYLE } from './lotto-panel-validation-details.js?v=1.19.0';
 const SAJU = 'myungri_hetu_day_pillar';
 const AI = 'home_assistant_ai';
-const VALIDATION_UI_VERSION = '1.19.0';
+const VALIDATION_UI_VERSION = '1.20.0';
 const RESET = '새 당첨회차가 공식 이력 또는 교차확인 결과로 확인되면 검증 횟수·점수·결과를 초기화합니다. 이미 리뷰에 반영한 과거검증 성과와 실제 추천 리뷰는 유지됩니다.';
 const el = (tag, text, cls) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; if(cls)n.className=cls; return n; };
 const fmt = n => Number(n||0).toLocaleString('ko-KR');

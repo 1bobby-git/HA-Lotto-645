@@ -43,6 +43,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.runtime_data = coordinator
     from .research_runtime import async_register_research_commands
     async_register_research_commands(hass)
+    from .portfolio_runtime import async_register_portfolio_commands
+    async_register_portfolio_commands(hass)
     from .validation_lifecycle import async_setup_validation
     await async_setup_validation(hass, coordinator)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))

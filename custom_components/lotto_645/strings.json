@@ -19,7 +19,9 @@
         "menu_options": {
           "recommendations": "Draw formulas, AI, and data source",
           "saju": "Personal Four Pillars profile",
-          "purchases": "Purchased tickets: enter / edit"
+          "purchases": "Purchased tickets: enter / edit",
+          "generation_rules": "조건 지정 생성 설정",
+          "personal_lucky": "개인 행운 번호 설정"
         }
       },
       "recommendations": {
@@ -83,6 +85,32 @@
           "game_e": "Game E (six numbers)",
           "clear_round": "Delete this round (ignore input lines)"
         }
+      },
+      "generation_rules": {
+        "title": "조건 지정 생성 설정",
+        "description": "선택한 조건을 반드시 지키며 임의로 완화하지 않습니다. 범위는 2-4 또는 3처럼 입력하세요. 고정·제외번호는 공백 또는 쉼표로 구분합니다. 이 설정만 저장해도 공식이 자동 선택되지는 않습니다. 추천 설정에서 조건 지정 균등 생성을 선택하세요.\n\n{detail}",
+        "data": {
+          "fixed": "고정번호 (최대 6개)",
+          "excluded": "제외번호",
+          "total": "번호 합계 (21-255)",
+          "odd": "홀수 개수 (0-6)",
+          "low": "1~22 번호 개수 (0-6)",
+          "carryover": "직전 본번호와 일치 수 (0-6)",
+          "neighbors": "직전 본번호의 ±1 · 이월수 제외 (0-6)",
+          "primes": "소수 개수 · 1 제외 (0-6)",
+          "multiples3": "3의 배수 개수 (0-6)",
+          "max_same_ending": "같은 끝수 최대 개수 (1-5)",
+          "max_run": "최대 연속 길이 (1-6)",
+          "ac_min": "AC 최솟값 (0-10)"
+        }
+      },
+      "personal_lucky": {
+        "title": "개인 행운 번호 설정",
+        "description": "80자 이내 별명·키워드를 로컬에서 번호로 바꾸는 재미 기능입니다. 꿈·소망 테마도 자체 문자열 변환이며 전통 해몽 사전이 아닙니다. 생년월일은 필요하지 않습니다. 키워드는 로그·AI에 전달하지 않으며 다시 생성하면 새 번호가 나옵니다. 추천 설정에서 개인 행운 번호를 선택하세요.",
+        "data": {
+          "lucky_keyword": "별명 또는 키워드",
+          "lucky_theme": "테마"
+        }
       }
     },
     "error": {
@@ -90,13 +118,15 @@
       "saju_profile_required": "Save the Personal Four Pillars profile from the previous menu before enabling this draw formula.",
       "invalid_saju_profile": "Check birth date, time, lunar standard/leap month, timezone and longitude. Solar-term or DST boundary ambiguity requires a known time.",
       "options_error": "An error occurred while processing the options. Check the entered values and try again.",
-      "consensus_sources_required": "The selected-formula median consensus requires at least two other draw formulas.",
+      "consensus_sources_required": "합의 추천에는 합의·AI를 제외한 다른 로컬 공식이 2개 이상 필요합니다.",
       "invalid_purchase_round": "Enter a positive draw number.",
       "invalid_purchase_numbers": "Enter six distinct integers 1–45 separated by commas/spaces, or twelve zero-padded digits.",
       "purchase_games_required": "Enter at least one game, or select delete explicitly.",
       "purchase_storage_unavailable": "Could not save. Existing tickets are preserved.",
       "purchase_game_limit": "Enter at most five games (A–E) per draw.",
-      "select_korean_birthplace": "Choose one of the 17 South Korean regions."
+      "select_korean_birthplace": "Choose one of the 17 South Korean regions.",
+      "invalid_generation_rules": "조건이 서로 충돌하거나 입력 범위가 올바르지 않습니다. 위 안내를 확인하세요.",
+      "invalid_lucky_keyword": "80자 이내의 일반 문자열과 지원되는 테마를 선택하세요."
     },
     "abort": {
       "purchase_integration_not_ready": "Wait for the integration to finish setup.",

@@ -18,7 +18,8 @@ from .ai_formula import AI_BASE_FORMULA, make_ai_ticket
 from .analysis import build_analysis
 from .consensus import refresh_consensus, valid_ticket
 from .const import AI_METHOD_ID, VERSION
-from .methods import METHODS_BY_ID, METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, consensus_source_ids
+from .constraints import ConstraintError
+from .methods import METHODS_BY_ID, METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE, consensus_source_ids
 from .models import LottoDraw
 from .result_evaluator import evaluate_ticket
 from .sampling import FORMULA_VERSION
@@ -46,14 +47,14 @@ def validate_method_ids(value: object) -> tuple[str, ...]:
             or len(set(value)) != len(value)):
         raise HistoricalValidationError('invalid_formulas', '검증할 추첨 공식을 1개 이상 선택하세요. 중복·알 수 없는 공식은 사용할 수 없습니다.')
     ids = tuple(value)
-    if METHOD_SELECTED_MEDIAN in ids and len(consensus_source_ids(ids)) < 2:
+    if any(k in ids for k in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE)) and len(consensus_source_ids(ids)) < 2:
         raise HistoricalValidationError('consensus_sources_required', '합의 추천은 다른 로컬 추첨 공식을 2개 이상 함께 선택해야 합니다. AI는 합의에 포함되지 않습니다.')
     return ids
 
 
 def run_historical_validation(
     history: Sequence[LottoDraw], target_round: int, method_ids: Sequence[str],
-    saju_profile: dict[str, Any] | None = None, *, previous_tickets: Sequence[tuple[int, ...]] = (), rng=None,
+    saju_profile: dict[str, Any] | None = None, *, previous_tickets: Sequence[tuple[int, ...]] = (), rng=None, formula_options=None,
 ) -> dict[str, Any]:
     """Generate once from [1, R-1], then compare to R, returning ephemeral JSON.
 
@@ -93,9 +94,11 @@ def run_historical_validation(
     local_ids = tuple(key for key in ids if key != AI_METHOD_ID)
     try:
         analysis = build_analysis(training, local_ids, generation_variant, deepcopy(saju_profile),
-                                  excluded_combinations=tuple(blocked), rng=rng)
-        if METHOD_SELECTED_MEDIAN in local_ids and blocked:
+                                  excluded_combinations=tuple(blocked), rng=rng, formula_options=deepcopy(formula_options))
+        if any(k in local_ids for k in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE)) and blocked:
             analysis = refresh_consensus(analysis, local_ids, training, excluded_combinations=blocked)
+    except ConstraintError as err:
+        raise HistoricalValidationError(err.code, str(err)) from err
     except ValueError as err:
         raise HistoricalValidationError('generation_failed', '선택한 공식으로 검증번호를 만들 수 없습니다. 이력과 사주 설정, 합의 참여 공식을 확인하세요.') from err
     if analysis.based_on_round != target_round - 1 or analysis.target_round != target_round:
@@ -129,7 +132,7 @@ def run_historical_validation(
                 'formula_version': METHODS_BY_ID[key].formula_version,
                 'source': 'historical_validation', 'generation_status': 'unavailable',
                 'recommended_numbers': [], 'status': '판정 불가', 'prize': '생성 불가',
-                'prize_rank': None, 'reason': '중앙값 ±1 범위에서 제외 조건을 만족하는 조합이 없습니다.',
+                'prize_rank': None, 'reason': '선택한 합의 규칙과 제외 조건을 만족하는 조합이 없습니다.',
             })
             continue
         results.append({**row, **evaluate_ticket(tuple(row['recommended_numbers']), target)})
@@ -147,6 +150,7 @@ def run_historical_validation(
         'rng': 'system_csprng' if isinstance(rng, secrets.SystemRandom) else 'injected_test_rng',
         'previous_simulation_excluded': bool(blocked),
         'uses_current_saju_profile': METHOD_MYUNGRI_HETU in ids,
+        'uses_current_formula_options': any(k in ids for k in ('constraint_uniform', 'personal_lucky')),
         'method_ids': list(ids), 'results': results,
         'draw': {'round': target.round, 'draw_date': target.draw_date,
                  'numbers': list(target.numbers), 'bonus': target.bonus},

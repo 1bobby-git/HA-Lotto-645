@@ -46,6 +46,7 @@ from .methods import (
     DEFAULT_METHOD_IDS,
     METHOD_MYUNGRI_HETU,
     METHOD_SELECTED_MEDIAN,
+    METHOD_SELECTED_VOTE,
     consensus_source_ids,
     METHODS_BY_ID,
     ADVANCED_METHOD_IDS,
@@ -252,7 +253,7 @@ class Lotto645OptionsFlow(OptionsFlow):
         del user_input
         return self.async_show_menu(
             step_id="init",
-            menu_options=["recommendations", "saju", "purchases"],
+            menu_options=["recommendations", "generation_rules", "personal_lucky", "saju", "purchases"],
         )
 
     async def async_step_recommendations(
@@ -271,7 +272,7 @@ class Lotto645OptionsFlow(OptionsFlow):
                 if not normalized:
                     errors[CONF_SELECTED_METHODS] = "select_at_least_one"
                 elif (
-                    METHOD_SELECTED_MEDIAN in normalized
+                    any(key in normalized for key in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE))
                     and len(consensus_source_ids(normalized)) < 2
                 ):
                     errors["base"] = "consensus_sources_required"
@@ -304,6 +305,76 @@ class Lotto645OptionsFlow(OptionsFlow):
             step_id="recommendations",
             data_schema=_recommendation_schema(form_values),
             errors=errors,
+        )
+
+    async def async_step_generation_rules(self, user_input=None) -> ConfigFlowResult:
+        """Save independent strict rules without enabling a formula or buying tickets."""
+        from dataclasses import asdict
+        from .constraints import Rules, RULES_KEY, LABELS, ConstraintError
+
+        current = Rules.parse(self._options.get(RULES_KEY))
+        values = asdict(current)
+        values = {key: " ".join(map(str, value)) if key in ("fixed", "excluded")
+                  else f"{value[0]}-{value[1]}" if isinstance(value, tuple) else str(value)
+                  for key, value in values.items()}
+        errors = {}
+        detail = ""
+        if user_input is not None:
+            values.update(user_input)
+            try:
+                submitted = dict(user_input)
+                for key in ("max_same_ending", "max_run", "ac_min"):
+                    value = submitted.get(key, getattr(current, key))
+                    if isinstance(value, str) and value.strip().isdigit():
+                        value = int(value.strip())
+                    submitted[key] = value
+                rules = Rules.parse(submitted)
+                owner = getattr(self._entry, "runtime_data", None)
+                if owner is not None and getattr(owner, "history", None):
+                    rules.check_feasible(owner.history[-1].numbers)
+                pending = dict(self._options)
+                pending[RULES_KEY] = asdict(rules)
+                return self.async_create_entry(title="", data=pending)
+            except (ConstraintError, TypeError, ValueError) as err:
+                errors["base"] = "invalid_generation_rules"
+                detail = str(err)
+        return self.async_show_form(
+            step_id="generation_rules",
+            data_schema=vol.Schema({vol.Optional(key, default=str(value)): selector.TextSelector()
+                                    for key, value in values.items()}),
+            errors=errors, description_placeholders={"detail": detail},
+        )
+
+    async def async_step_personal_lucky(self, user_input=None) -> ConfigFlowResult:
+        """Keyword stays in local options; no date of birth or external AI required."""
+        from .personal_lucky import KEYWORD_KEY, THEME_KEY, normalize_keyword, THEMES
+
+        values = {KEYWORD_KEY: self._options.get(KEYWORD_KEY, "행운"),
+                  THEME_KEY: self._options.get(THEME_KEY, "keyword")}
+        errors = {}
+        if user_input is not None:
+            values.update(user_input)
+            try:
+                keyword = normalize_keyword(values[KEYWORD_KEY])
+                if values[THEME_KEY] not in THEMES:
+                    raise ValueError("Unknown theme")
+                pending = dict(self._options)
+                pending.update({KEYWORD_KEY: keyword, THEME_KEY: values[THEME_KEY]})
+                return self.async_create_entry(title="", data=pending)
+            except (TypeError, ValueError):
+                # Never log or echo the user's raw keyword in an exception.
+                errors["base"] = "invalid_lucky_keyword"
+        return self.async_show_form(
+            step_id="personal_lucky",
+            data_schema=vol.Schema({
+                vol.Required(KEYWORD_KEY, default=str(values[KEYWORD_KEY])): selector.TextSelector(),
+                vol.Required(THEME_KEY, default=str(values[THEME_KEY])): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=[
+                        {"value": "keyword", "label": "별명·키워드"},
+                        {"value": "dream", "label": "꿈 키워드 (재미용)"},
+                        {"value": "wish", "label": "소망 키워드 (재미용)"},
+                    ], mode=selector.SelectSelectorMode.DROPDOWN)),
+            }), errors=errors,
         )
 
     async def async_step_saju(

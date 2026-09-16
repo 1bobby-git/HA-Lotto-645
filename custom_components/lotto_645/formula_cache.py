@@ -8,15 +8,20 @@ from .methods import METHODS_BY_ID
 from .sampling import FORMULA_VERSION, validate_sampled_ticket
 
 
-def cache_key(history, method_ids, nonce):
+def cache_key(history, method_ids, nonce, options=None):
     payload = [(d.round, d.numbers, d.bonus) for d in history]
-    return {"version": FORMULA_VERSION, "based_on_round": history[-1].round,
+    key = {"version": FORMULA_VERSION, "based_on_round": history[-1].round,
             "methods": list(method_ids), "nonce": nonce,
             "history_digest": sha256(json.dumps(payload).encode()).hexdigest()}
+    from .formula_settings import fingerprint
+    digest = fingerprint(options, method_ids)
+    if digest is not None:
+        key["formula_options_digest"] = digest
+    return key
 
 
-def restore_tickets(cache, history, method_ids, nonce):
-    if not isinstance(cache, dict) or cache.get("key") != cache_key(history, method_ids, nonce):
+def restore_tickets(cache, history, method_ids, nonce, options=None):
+    if not isinstance(cache, dict) or cache.get("key") != cache_key(history, method_ids, nonce, options):
         return {}
     expected = {key for key in method_ids if METHODS_BY_ID[key].sampling}
     raw = cache.get("tickets")
@@ -27,6 +32,10 @@ def restore_tickets(cache, history, method_ids, nonce):
             key: validate_sampled_ticket(METHODS_BY_ID[key].sampling, values)
             for key, values in raw.items()
         }
+        if "constraint_uniform" in tickets:
+            from .constraints import Rules, RULES_KEY, violations
+            if violations(tickets["constraint_uniform"], Rules.parse((options or {}).get(RULES_KEY)), history[-1].numbers):
+                return {}
         if any(len(t) != 6 for t in tickets.values()) or len(set(tickets.values())) != len(tickets):
             return {}
         if set(tickets.values()) & {d.numbers for d in history}:
@@ -36,7 +45,7 @@ def restore_tickets(cache, history, method_ids, nonce):
     return tickets
 
 
-def store_tickets(analysis, history, method_ids, nonce):
-    return {"key": cache_key(history, method_ids, nonce),
+def store_tickets(analysis, history, method_ids, nonce, options=None):
+    return {"key": cache_key(history, method_ids, nonce, options),
             "tickets": {r.method_id: list(r.numbers) for r in analysis.recommendations
                         if METHODS_BY_ID[r.method_id].sampling}}

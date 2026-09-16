@@ -110,8 +110,9 @@ class GenerationController:
                 raise GenerationCancelled()
             # This callback runs in the executor, never calls HA async APIs.
             self.hass.loop.call_soon_threadsafe(self._accept, token, event)
+        options = {} if len(args) > 6 else {"formula_options": dict(self.owner.entry.options)}
         self.worker = self.hass.async_add_executor_job(
-            partial(build_analysis, *args, progress_callback=report)
+            partial(build_analysis, *args, progress_callback=report, **options)
         )
         try:
             return await asyncio.shield(self.worker)

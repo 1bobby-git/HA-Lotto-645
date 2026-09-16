@@ -1,6 +1,6 @@
 # 균등 공식 · 부분 Fisher–Yates
 
-[추첨 공식 목록](../../README.md#추첨-공식-19종) · [공통 계산 원리](../FORMULAS.md)
+[추첨 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: uniform_fisher_yates` · 분류: 균등 추첨 공식 · 후보 풀: **45개**
 
