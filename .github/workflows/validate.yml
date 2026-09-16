@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.14'
       - name: Install test dependencies
-        run: python -m pip install -q pytest 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0'
+        run: python -m pip install -q pytest 'aiohttp==3.13.3' 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0'
       - name: Compile Python sources
         run: python -m compileall -q custom_components/lotto_645 scripts
       - name: Run all regression and rule-table tests
