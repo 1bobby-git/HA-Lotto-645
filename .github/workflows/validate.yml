@@ -1,10 +1,10 @@
-name: Validate public component
+name: Validate
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  public-contract:
+  public-adapter:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -15,5 +15,10 @@ jobs:
         with:
           python-version: '3.14'
       - run: python -m pip install pytest aiohttp voluptuous
+      - run: python -m pytest -q
       - run: python -m compileall -q custom_components/lotto_645
-      - run: python -m pytest -q tests/test_lab_service_client.py tests/test_remote_cutover.py
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master

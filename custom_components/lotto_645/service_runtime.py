@@ -38,8 +38,9 @@ class ServiceRuntime:
             except ValueError:
                 self.status = 'invalid_connection_settings'
         self.catalog_store = Store(self.hass,1,f'{DOMAIN}.catalog.{self.entry.entry_id}')
-        self.generator = RemoteGeneration(self.client, Store(self.hass,1,f'{DOMAIN}.remote.{self.entry.entry_id}')) if self.client else None
-        self.ai_generator = RemoteGeneration(self.client, Store(self.hass,1,f'{DOMAIN}.remote_ai.{self.entry.entry_id}')) if self.client else None
+        scope=hashlib.sha256((str(options.get(CONF_SERVICE_URL,''))+'\0'+str(options.get(CONF_SERVICE_TOKEN,''))).encode()).hexdigest()[:24]
+        self.generator = RemoteGeneration(self.client, Store(self.hass,1,f'{DOMAIN}.remote.{self.entry.entry_id}.{scope}')) if self.client else None
+        self.ai_generator = RemoteGeneration(self.client, Store(self.hass,1,f'{DOMAIN}.remote_ai.{self.entry.entry_id}.{scope}')) if self.client else None
 
     async def prepare(self):
         if self.catalog is None:
