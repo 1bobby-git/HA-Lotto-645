@@ -1,0 +1,23 @@
+name: Research source snapshot
+on:
+  push:
+    branches: [feature/researched-formulas]
+    paths: [.github/workflows/research-source.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: research-source
+          retention-days: 1
+          include-hidden-files: true
+          path: |
+            .
+            !.git
