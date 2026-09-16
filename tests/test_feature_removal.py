@@ -14,12 +14,14 @@ def test_removed_modules_and_endpoints_are_absent():
     for name in migration._REMOVED_SCRIPTS:
         assert not (COMPONENT/'www'/name).exists()
     assert not set(migration._REMOVED_IDS)&set(methods.METHODS_BY_ID)
-    tree=ast.parse((COMPONENT/'ticket_panel.py').read_text())
+    tree=ast.parse((COMPONENT/'ticket_panel.py').read_text(encoding="utf-8"))
     defs={n.name for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
     assert 'subscribe_updates' in defs
     assert not any('historical' in name or 'portfolio' in name for name in defs)
-    source=(COMPONENT/'www/lotto-panel-view.js').read_text()
+    source=(COMPONENT/'www/lotto-panel-view.js').read_text(encoding="utf-8")
     assert 'tab-validation' not in source and 'current-recommendations' in source
+    for name in ('home','wallet','review'):
+        assert f'id="tab-{name}"' in source and f'aria-controls="screen-{name}"' in source
     assert not (ROOT/'scripts/audit_formulas.py').exists()
 
 
@@ -43,4 +45,4 @@ def test_cleanup_removes_only_allowlisted_files_and_preserves_user_records(tmp_p
     for name in ['purchased_tickets.py','review.py','user-records.json']:(tmp_path/name).write_text('preserve')
     migration.cleanup_files(tmp_path)
     for name in migration._REMOVED_MODULES:assert not (tmp_path/(name+'.py')).exists()
-    for name in ['purchased_tickets.py','review.py','user-records.json']:assert (tmp_path/name).read_text()=='preserve'
+    for name in ['purchased_tickets.py','review.py','user-records.json']:assert (tmp_path/name).read_text(encoding="utf-8")=='preserve'

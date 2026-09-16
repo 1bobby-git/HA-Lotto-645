@@ -10,7 +10,7 @@ from test_analysis_engine import ROOT, models
 
 
 def production_function(name, namespace):
-    tree=ast.parse((ROOT/'custom_components/lotto_645/ticket_panel.py').read_text())
+    tree=ast.parse((ROOT/'custom_components/lotto_645/ticket_panel.py').read_text(encoding="utf-8"))
     node=next(n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==name)
     node.decorator_list=[]
     if name=='subscribe_updates':
@@ -57,7 +57,7 @@ def test_subscription_is_entry_scoped_and_contains_no_numbers_or_profiles():
 
 
 def test_pruner_keeps_guide_and_active_formula_but_removes_deselected():
-    source=ast.parse((ROOT/'custom_components/lotto_645/sensor.py').read_text())
+    source=ast.parse((ROOT/'custom_components/lotto_645/sensor.py').read_text(encoding="utf-8"))
     keep={'_active_optional_sensor_unique_ids','_prune_stale_optional_sensor_entities'}
     nodes=[n for n in source.body if isinstance(n,ast.FunctionDef) and n.name in keep]
     entries=[SimpleNamespace(domain='sensor',platform='lotto_645',unique_id='entry_'+name,entity_id=name)

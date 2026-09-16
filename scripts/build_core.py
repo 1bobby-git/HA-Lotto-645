@@ -31,9 +31,9 @@ def build(destination: Path, commit: str = 'working-tree') -> dict:
     if commit != 'working-tree' and not re.fullmatch(r'[0-9a-f]{40}', commit):
         raise ValueError('Expected immutable 40-character Git commit')
     destination.mkdir(parents=True, exist_ok=True)
-    init = (CORE/'__init__.py').read_text()
+    init = (CORE/'__init__.py').read_text(encoding="utf-8")
     version = re.search(r'CORE_VERSION = "([0-9.]+)"', init).group(1)
-    manifest_ha = json.loads((CORE.parent/'manifest.json').read_text())
+    manifest_ha = json.loads((CORE.parent/'manifest.json').read_text(encoding="utf-8"))
     if manifest_ha['version'] != version:
         raise ValueError('HA and Core versions differ')
     files = {f'lotto_core/{p.relative_to(CORE).as_posix()}': p.read_bytes()

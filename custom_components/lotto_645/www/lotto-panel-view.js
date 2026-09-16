@@ -189,6 +189,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
       <span class="header-label">나의 로또, 한곳에</span>
       <div class="header-tools"><span id="connection" class="connection" data-online="false">연결 확인 중</span><div id="entry-field" class="entry-field" hidden><label for="entry" class="sr-only">로또 통합 선택</label><select id="entry"></select></div><a class="settings" href="/config/integrations/integration/lotto_645" aria-label="로또 통합 및 센서 설정">${icons.settings}</a></div>
     </div>
+    <div class="wrap"><div class="main-tabs" role="tablist" aria-label="로또 관리 화면"><button id="tab-home" type="button" role="tab" aria-selected="true" aria-controls="screen-home" tabindex="0" data-screen="home">한눈에</button><button id="tab-wallet" type="button" role="tab" aria-selected="false" aria-controls="screen-wallet" tabindex="-1" data-screen="wallet">내 복권</button><button id="tab-review" type="button" role="tab" aria-selected="false" aria-controls="screen-review" tabindex="-1" data-screen="review">추천 리뷰</button></div></div>
   </header>
   <main class="wrap">
     <section id="screen-home" class="screen" role="tabpanel" aria-labelledby="tab-home" tabindex="0">

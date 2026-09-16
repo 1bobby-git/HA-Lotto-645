@@ -246,5 +246,5 @@ def async_remove_ticket_panel(hass: HomeAssistant, entry_id: str, *, permanent: 
         _publish_panel(hass, shared)
     else:
         existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
-        if existing and (getattr(existing, 'config', None) or {}).get('_panel_custom', {}).get('name') == 'lotto-ticket-panel':
+        if existing and (getattr(existing, 'config', None) or {}).get('_panel_custom', {}).get('name') in {'lotto-ticket-panel', PANEL_TAG}:
             frontend.async_remove_panel(hass, PATH)

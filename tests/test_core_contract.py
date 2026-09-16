@@ -68,7 +68,7 @@ def test_stream_copies_match_final_records_and_cannot_mutate_them():
 def test_core_has_no_ha_or_evaluation_runtime_dependencies():
     root=ROOT/'custom_components/lotto_645/lotto_core'
     for path in root.glob('*.py'):
-        tree=ast.parse(path.read_text())
+        tree=ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node,ast.ImportFrom):
                 assert not (node.module or '').startswith(('homeassistant','requests','aiohttp','sqlite3'))
