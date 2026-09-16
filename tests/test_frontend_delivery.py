@@ -13,12 +13,16 @@ def test_release_has_isolated_resource_path_and_matching_element():
         text=(R/'www'/name).read_text(encoding='utf-8')
         for found in re.findall(r'\.js\?v=([0-9.]+)',text):assert found==v
         for found in re.findall(r'lotto-(?:ticket-panel|panel-tools)-v([0-9-]+)',text):assert found==v.replace('.','-')
-def test_overview_has_link_not_a_second_number_list():
+def test_overview_has_no_recommendation_summary():
     text=(R/'www/lotto-panel-view.js').read_text(encoding='utf-8')
     assert 'id="current-recommendations"' not in text
-    assert 'id="open-current-review"' in text
+    for obsolete in ('recommendation-summary','current-title','current-count','current-meta','open-current-review'):
+        assert obsolete not in text
     assert 'id="predictions"' in text
     assert 'data-go="review"' in text
     script=(R/'www/lotto-panel-core.js').read_text(encoding='utf-8')
     assert "this.node('current-recommendations')" not in script
+    for obsolete in ('current-title','current-count','current-meta','open-current-review'):
+        assert obsolete not in script
     assert "reviewPresentation(data)" in script
+    assert 'id="home-wallet-heading"' in text and 'class="draw-stage"' in text

@@ -133,7 +133,7 @@ main{padding-top:40px!important} .screen{outline:0}.page-heading{display:flex;al
 .quick-copy{flex:1}.quick-copy strong{display:block;font-size:13px}.quick-copy small{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:2px}.quick-link>svg{width:15px;color:var(--muted)}
 .small-print{display:flex;align-items:flex-start;gap:7px;color:var(--muted);font-size:11px;margin:20px 2px 0;line-height:1.8}.small-print svg{width:14px;height:14px;margin-top:3px}
 .footer{margin-top:32px;padding-top:20px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:18px;font-size:10px;color:var(--muted)}
-.footer .sync{white-space:nowrap}.recommendation-summary{margin-top:24px}.recommendation-summary .primary{margin-top:12px;max-width:100%;white-space:normal}.wallet-toolbar{display:flex;flex-wrap:wrap;min-width:0;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px}.wallet-toolbar .select-wrap{display:flex;flex-wrap:wrap;min-width:0;align-items:center;gap:12px}.wallet-toolbar label{font-size:13px;color:var(--muted);white-space:nowrap;margin:0}.wallet-toolbar select{width:190px;max-width:100%}
+.footer .sync{white-space:nowrap}.wallet-toolbar{display:flex;flex-wrap:wrap;min-width:0;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px}.wallet-toolbar .select-wrap{display:flex;flex-wrap:wrap;min-width:0;align-items:center;gap:12px}.wallet-toolbar label{font-size:13px;color:var(--muted);white-space:nowrap;margin:0}.wallet-toolbar select{width:190px;max-width:100%}
 .wallet-paper .ticket-list{padding:0 30px}.wallet-paper .ticket-row{min-height:92px;grid-template-columns:40px minmax(0,1fr) auto;gap:24px}.wallet-paper .ticket-balls{--ball-size:43px;gap:16px}.wallet-paper .ball{font-size:17px}.wallet-paper .game-label{font-size:15px}.wallet-paper .prize{font-size:13px}.wallet-paper .paper-top{padding:24px 30px}.wallet-paper .paper-bottom{padding:18px 30px}
 .wallet-actions{display:flex;flex-wrap:wrap;gap:8px}.wallet-actions button{font-size:13px}.wallet-description{font-size:12px;color:var(--muted);margin:18px 2px 0}
 .review-grid{display:grid;gap:24px}.review-block{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:26px}
@@ -199,11 +199,6 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
         <div class="draw-foot"><div class="result-copy"><span class="caption">구매·추천번호 대조</span><strong id="result">저장한 번호를 확인하고 있어요.</strong></div><button id="check" type="button">${icons.refresh}다시 확인</button></div>
         <details class="draw-details"><summary>결과 확인 기준과 출처</summary><p>속보 결과는 공식 이력이 확인되면 다시 대조합니다. 출처가 서로 다르면 판정을 보류합니다. 결과 발표나 수신이 늦어질 수 있습니다.</p><div id="sources"></div></details>
       </section>
-     <section class="review-block recommendation-summary" aria-labelledby="current-title">
- <div class="section-heading"><h2 id="current-title">이번 회차 추천</h2><span id="current-count" class="review-count"></span></div>
- <p id="current-meta" class="review-note" role="status" aria-live="polite"></p>
- <button id="open-current-review" type="button" class="primary" data-go="review">추천 리뷰에서 번호 확인${icons.arrow}</button>
-</section>
  <div class="dashboard-grid">
         <section aria-labelledby="home-wallet-heading"><div class="section-heading"><h2 id="home-wallet-heading">내 복권</h2><button type="button" data-go="wallet">전체 보기${icons.arrow}</button></div>
           <div class="ticket-paper"><div class="paper-top"><span class="paper-label">${icons.ticket}<span id="mini-round">보관한 복권</span></span><span id="mini-count" class="paper-meta">불러오는 중</span></div><div id="mini-games" class="ticket-list"></div><div class="paper-bottom"><span>등록한 번호는 결과 발표 후 자동 대조해요.</span><button type="button" data-go="wallet">복권 관리${icons.arrow}</button></div></div>
