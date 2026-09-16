@@ -63,8 +63,13 @@ jobs:
           assert tree == '79c84d0ab01f46da245944c78d786a5a87f15dc6', tree
           subprocess.run(['git', 'diff', '--cached', '--check'], check=True)
           print('Exact locally tested source tree:', tree)
+          # The Actions token cannot write workflow files. Those changes are applied
+          # separately through the user's authorized GitHub connector.
+          subprocess.run(['git', 'restore', '--source=HEAD', '--staged', '--worktree', '.github/workflows'], check=True)
+          changed = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()
+          assert not any(name.startswith('.github/workflows/') for name in changed)
           PY
-      - name: Commit to the feature branch only
+      - name: Commit application source to the feature branch only
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
