@@ -16,6 +16,10 @@ from typing import Any
 
 import aiohttp
 
+from .const import VERSION
+
+CLIENT_USER_AGENT = f"HA-Lotto-645/{VERSION} (+https://github.com/1bobby-git/HA-Lotto-645)"
+
 from .service_contract import Catalog, ContractError, Generation, identifier, method_ids, positive
 
 MAX_RESPONSE_BYTES = 2_000_000
@@ -79,7 +83,7 @@ class LottoLabClient:
         self._token = self._valid_token(value)
 
     async def _request(self, method: str, path: str, *, body: dict | None = None, request_key: str | None = None):
-        headers = {"Authorization": f"Bearer {self._token}", "Accept": "application/json"}
+        headers = {"Authorization": f"Bearer {self._token}", "Accept": "application/json", "User-Agent": CLIENT_USER_AGENT}
         if request_key:
             headers["Idempotency-Key"] = identifier(request_key)
         if body is not None:

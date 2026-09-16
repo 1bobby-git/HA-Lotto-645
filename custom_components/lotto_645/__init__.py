@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.event import async_track_utc_time_change
+from homeassistant.helpers.event import async_track_utc_time_change, async_track_time_interval
 
 from .const import DOMAIN, SERVICE_GENERATE_AI, SERVICE_REFRESH
 from .coordinator import Lotto645Coordinator
@@ -47,6 +49,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_poll_published_results()
 
     entry.async_on_unload(async_track_utc_time_change(hass, _publication_tick, second=15))
+
+    async def _connection_retry(_now):
+        if coordinator.service.status in {
+            'not_connected', 'managed_connection_pending', 'connection_unavailable',
+            'service_unavailable', 'reauth_required', 'managed_storage_error',
+            'catalog_storage_error', 'operator_attention_required'}:
+            await coordinator.async_request_refresh()
+
+    entry.async_on_unload(async_track_time_interval(hass, _connection_retry, timedelta(minutes=5)))
+
 
     for weekday, hour, minute in _RESULT_CHECKS_UTC:
         async def _scheduled_result_check(now, expected_weekday=weekday) -> None:
@@ -105,8 +117,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Retain existing identity, options and records while upgrading schema."""
-    if entry.version > 2:
+    if entry.version > 3:
         return False
-    if entry.version < 2:
-        hass.config_entries.async_update_entry(entry, version=2)
+    if entry.version < 3:
+        hass.config_entries.async_update_entry(entry, version=3)
     return True

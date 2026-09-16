@@ -23,7 +23,7 @@ _REMOVED_IDS = frozenset({'personal_lucky', 'portfolio_triplet_coverage'})
 
 def clean_options(raw: dict) -> dict:
     options = {key: value for key, value in raw.items()
-               if key not in {'lucky_keyword', 'lucky_theme', 'personal_lucky'}}
+               if key not in {'lucky_keyword', 'lucky_theme', 'personal_lucky', 'generation_rules', 'formula_options'}}
     for key in ('selected_methods', 'advanced_methods'):
         if isinstance(options.get(key), (list, tuple)):
             options[key] = [value for value in options[key] if value not in _REMOVED_IDS]

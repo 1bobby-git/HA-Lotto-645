@@ -1,57 +1,14 @@
-# Private Core service migration — preparatory implementation
+# Core 연결 운영 — 2.0.1
 
-## Status
+Core 연결은 사용자 설정이 아니라 컴포넌트와 운영 서버가 관리한다.
 
-This branch **does not switch the active v1.21.0 coordinator to a remote service**.
-The existing bundled core, QR wallet, generated-number records, actual reviews,
-entity IDs, settings and stable release remain in place until the migration
-preconditions below are met. This is not a completed core extraction or a new
-production release.
+- 신규 설치: `https://lottolab.toiss.kr`에 고유 설치 ID와 기기별 자격정보를 자동 등록한다. 주소·토큰·인증서 입력 메뉴가 없다.
+- 기존 설치: 기존 주소·기기 자격정보·인증서 지문을 내부 Store로 먼저 저장한 뒤 사용자 옵션에서 제거한다. 원격 생성 요청 원장 키와 기존 번호는 유지한다.
+- 저장 실패·통신 실패 시 기존 기록은 삭제하지 않는다. 제한된 재시도를 수행하며 인증서 검증을 끄거나 다른 서버로 우회하지 않는다.
+- 자동 등록·복구에는 원본 QR·구매번호·사주정보를 보내지 않는다. 명리 계산의 개별 개인정보 동의는 유지한다.
+- 조건 지정과 JSON 추가 옵션은 사용자 UI·실행 입력에서 제거했다. 공식 업데이트는 서비스 카탈로그로 반영한다.
+- 설정 메뉴: 공식·AI 선택, 사주정보, 구매복권 관리. 가입·토큰 복사 등 수동 접속 절차가 없다.
 
-## Added implementation
+운영자는 자동 등록 한도, 장치별 권한·폐기, API 용량·TLS·DNS를 관리한다. 기기 인증정보는 공개 코드·릴리스·진단 출력에 넣지 않는다. 신규 자동등록의 계산 제한은 서버 정책이며 기존 운영자 발급 기기 정책을 임의로 바꾸지 않는다.
 
-- `service_contract.py`: strict, calculation-free catalog and generation DTOs;
-  context/version/number checks; drops upstream private details and summaries.
-- `lab_client.py`: HTTPS-only production API transport, scoped bearer auth,
-  disabled redirects, bounded messages/timeouts, safe status errors and stable
-  idempotency keys. Explicit loopback HTTP is for local tests only.
-- `remote_generation.py`: Store-compatible durable request reservation,
-  same-key retry after restart, committed-result publication, independent from
-  the wallet. Personal-request recovery before acknowledgement is a deliberate
-  fail-closed state pending a service recovery endpoint.
-- `tests/test_lab_service_client.py`: 19 targeted protocol/transport/persistence
-  cases. These are not real user-HA or production-service tests.
-
-## Required server contract (not deployed by this branch)
-
-`GET /v1/formulas`, `POST /v1/generations`,
-`GET /v1/generations/{id}`, `POST /v1/generations/{id}/cancel`.
-Requests include contract version 1, an idempotency request key, target round,
-selected formula IDs and public options. Optional personal input requires
-explicit consent. No GitHub repository token is accepted as a deployment plan.
-The server must authenticate the account/device, enforce ownership and resource
-limits, reject changed request bodies under an existing key, pin the core/data,
-commit the result durably, then return `completed` with server generation time.
-Catalogs and results use the independent core's public projection, never raw
-internal `generate_json()` output.
-
-## Before the actual HA cutover
-
-1. Finish the 16-module source import and independent private Core package in
-   `1bobby-git/Lotto-Lab-Core`. The original source is pinned to
-   `2e68bfbeaf8e19331b2b60a4a3f26f5c8bbba238`.
-2. Provide an actual reachable service endpoint and scoped device authorization.
-   Confirm server-execution vs customer-runtime distribution and HA usage policy.
-3. Connect the client through configuration, reauthentication, per-entry catalog,
-   coordinator generation/AI/consensus, and the real review snapshot lifecycle.
-   The current module-global metadata must not become shared account state.
-4. Preserve and migrate stored data. Wallet startup and offline result checking
-   must not fail because the generation API is unavailable.
-5. Validate that exact flow in the supported HA environment; only then remove
-   bundled core code, compatibility imports and public Core release build steps.
-6. Publish a stable release only after the deployed endpoint, QR workflow,
-   current-round generation and pre-draw review all work together.
-
-The temporary public `codex/source-snapshot` branch only archives an already
-public pinned commit and downloads declared public dependencies. It must not be
-merged. No new private core code or private credentials are put into public CI.
+기존 복권·실제 리뷰·엔티티는 유지한다. GitHub 배포, HACS 설치, 실제 HA 적용 확인이 끝나야 작업 완료로 보고한다.

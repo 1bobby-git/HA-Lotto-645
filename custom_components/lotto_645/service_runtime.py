@@ -12,6 +12,7 @@ from homeassistant.helpers.storage import Store
 from .const import DOMAIN, CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CERT, CONF_PERSONAL_CONSENT
 from .lab_client import LottoLabClient, LabServiceError
 from .remote_generation import RemoteGeneration
+from .managed_connection import ManagedConnection, CONNECTION_KEYS, without_user_connection
 from .service_contract import Catalog, numbers
 from .methods import install_catalog, METHOD_MYUNGRI_HETU, METHODS_BY_ID
 from .models import AnalysisResult, Recommendation
@@ -29,18 +30,22 @@ class ServiceRuntime:
         self.retry_task = None
         self.lock = asyncio.Lock()
         self._failed_context = None
-        options = self.entry.options
-        if options.get(CONF_SERVICE_URL) and options.get(CONF_SERVICE_TOKEN):
-            try:
-                self.client = LottoLabClient(async_get_clientsession(self.hass),
-                    options[CONF_SERVICE_URL], options[CONF_SERVICE_TOKEN],
-                    certificate_sha256=options.get(CONF_SERVICE_CERT))
-            except ValueError:
-                self.status = 'invalid_connection_settings'
+        self.connection = {}
+        self.connection_manager = ManagedConnection(Store(self.hass, 1, f'{DOMAIN}.connection.{self.entry.entry_id}'))
         self.catalog_store = Store(self.hass,1,f'{DOMAIN}.catalog.{self.entry.entry_id}')
-        scope=hashlib.sha256((str(options.get(CONF_SERVICE_URL,''))+'\0'+str(options.get(CONF_SERVICE_TOKEN,''))).encode()).hexdigest()[:24]
-        self.generator = RemoteGeneration(self.client, Store(self.hass,1,f'{DOMAIN}.remote.{self.entry.entry_id}.{scope}')) if self.client else None
-        self.ai_generator = RemoteGeneration(self.client, Store(self.hass,1,f'{DOMAIN}.remote_ai.{self.entry.entry_id}.{scope}')) if self.client else None
+        self.generator = None
+        self.ai_generator = None
+
+    def _configure_connection(self, values):
+        if self.client is not None and self.connection == values:
+            return
+        self.connection = dict(values)
+        self.client = LottoLabClient(async_get_clientsession(self.hass),
+            values[CONF_SERVICE_URL], values[CONF_SERVICE_TOKEN],
+            certificate_sha256=values.get(CONF_SERVICE_CERT))
+        scope=hashlib.sha256((values[CONF_SERVICE_URL]+'\0'+values[CONF_SERVICE_TOKEN]).encode()).hexdigest()[:24]
+        self.generator=RemoteGeneration(self.client,Store(self.hass,1,f'{DOMAIN}.remote.{self.entry.entry_id}.{scope}'))
+        self.ai_generator=RemoteGeneration(self.client,Store(self.hass,1,f'{DOMAIN}.remote_ai.{self.entry.entry_id}.{scope}'))
 
     async def prepare(self):
         if self.catalog is None:
@@ -51,7 +56,17 @@ class ServiceRuntime:
                     install_catalog(self.catalog)
             except (ValueError, OSError):
                 pass
-        if not self.client:
+        try:
+            legacy = {**dict(self.entry.data), **dict(self.entry.options)}
+            await self.connection_manager.load(legacy)
+            data = without_user_connection(self.entry.data)
+            options = without_user_connection(self.entry.options)
+            if data != dict(self.entry.data) or options != dict(self.entry.options):
+                self.hass.config_entries.async_update_entry(self.entry, data=data, options=options)
+            await self.connection_manager.ensure_enrolled(async_get_clientsession(self.hass))
+            self._configure_connection(self.connection_manager.values)
+        except (OSError, ValueError, LabServiceError) as exc:
+            self.status = exc.code if isinstance(exc,LabServiceError) else 'managed_storage_error'
             return
         try:
             catalog = await self.client.async_catalog()
@@ -69,7 +84,7 @@ class ServiceRuntime:
         except (LabServiceError, OSError, ValueError) as exc:
             self.status = exc.code if isinstance(exc,LabServiceError) else 'catalog_storage_error'
             if self.status == 'reauth_required':
-                self.entry.async_start_reauth(self.hass)
+                self.connection_manager.invalidate()
 
     def legacy_analysis(self):
         target = self.owner.history[-1].round+1
@@ -92,9 +107,9 @@ class ServiceRuntime:
 
     def material_context(self, options, profile):
         # Local digest is keyed so it does not become a public birth-date oracle.
-        content=json.dumps({'options':options,'profile':profile,'origin':self.entry.options.get(CONF_SERVICE_URL),
+        content=json.dumps({'options':options,'profile':profile,'origin':self.connection.get(CONF_SERVICE_URL),
                             'device':self.info.get('device_id')},sort_keys=True,ensure_ascii=False).encode()
-        return hmac.new(self.entry.options[CONF_SERVICE_TOKEN].encode(),content,hashlib.sha256).hexdigest()
+        return hmac.new(self.connection[CONF_SERVICE_TOKEN].encode(),content,hashlib.sha256).hexdigest()
 
     @staticmethod
     def analysis_from_saved(saved, ids, nonce, status):
@@ -146,15 +161,15 @@ class ServiceRuntime:
 
     async def _analysis(self):
         if not self.client:
+            await self.prepare()
+        if not self.client:
             return self.legacy_analysis()
         if self.catalog is None or time.monotonic()-self.catalog_updated_at>3600 or self.status in ('connection_unavailable','reauth_required'):
             await self.prepare()
         ids=self.owner.selected_method_ids
         target=self.owner.history[-1].round+1
         options={}
-        if 'constraint_uniform' in ids:
-            options['generation_rules']=self.entry.options.get('generation_rules',{})
-        options.update(self.entry.options.get('formula_options',{}))
+        # Deprecated manual generation rules and JSON overrides are not applied.
         profile=self.owner.saju_profile if METHOD_MYUNGRI_HETU in ids else None
         material=self.material_context(options,profile)
         context_tag=hashlib.sha256(json.dumps([target,ids,material,self.owner._local_generation_nonce]).encode()).hexdigest()
@@ -220,7 +235,7 @@ class ServiceRuntime:
         except (LabServiceError,OSError,ValueError) as exc:
             self.status=exc.code if isinstance(exc,LabServiceError) else 'service_storage_error'
             if self.status=='reauth_required':
-                self.entry.async_start_reauth(self.hass)
+                self.connection_manager.invalidate()
         return self._previous_analysis(state)
 
     def _previous_analysis(self,state):
