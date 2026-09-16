@@ -216,7 +216,13 @@ class ReviewBook:
         row = self.rounds.get(str(round_no), {})
         result = row.get("result")
         if not result:
-            return {"round": round_no, "status": "waiting", "methods": [], "notice": NOTICE}
+            methods = [{"method_id": key, **deepcopy(prediction),
+                        "target_round": round_no, "status": "waiting",
+                        "review_score": None, "stars": None, "prize_rank": None,
+                        "counts_toward_rating": False}
+                       for key, prediction in row.get("predictions", {}).items()]
+            return {"round": round_no, "status": "waiting", "methods": methods,
+                    "peer_count": len(methods), "notice": NOTICE}
         d = result["draw"]
         draw = LottoDraw(d["round"], d["draw_date"], tuple(d["numbers"]), d["bonus"])
         methods = [{"method_id": key, **prediction, **compare_numbers(prediction["numbers"], draw)}
@@ -226,7 +232,8 @@ class ReviewBook:
             method["rank_this_round"] = 1 + sum(m["review_score"] > method["review_score"] for m in methods)
         return {"round": round_no, "status": "confirmed" if result["confirmed"] else "provisional",
                 "methods": sorted(methods, key=lambda m: (-m["review_score"], m["method_id"])),
-                "peer_count": len(methods), "notice": NOTICE, "policy": POLICY}
+                "peer_count": len(methods), "notice": NOTICE, "policy": POLICY,
+                "draw": deepcopy(result["draw"])}
 
     def summary(self, method_id: str, reports: dict[int, dict] | None = None) -> dict:
         rows = []

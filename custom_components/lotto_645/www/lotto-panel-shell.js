@@ -1,8 +1,8 @@
 /* Production entry: component presentation with HA-owned narrow-state decisions. */
-import './lotto-panel.js?v=2.0.1';
-import { PANEL_TAG } from './lotto-panel-core.js?v=2.0.1';
-import { applyComponentDesign } from './lotto-panel-design.js?v=2.0.1';
-import { applyPanelTools, countdownState } from './lotto-panel-tools.js?v=2.0.1';
+import './lotto-panel.js?v=2.0.2';
+import { PANEL_TAG } from './lotto-panel-core.js?v=2.0.2';
+import { applyComponentDesign } from './lotto-panel-design.js?v=2.0.2';
+import { applyPanelTools, countdownState } from './lotto-panel-tools.js?v=2.0.2';
 
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
@@ -129,7 +129,7 @@ const LOTTO_BALL_AND_COUNTDOWN_STYLE = `
   line-height:1.55;
 }
 .hero-draw-countdown[data-waiting="true"] .hero-clock-value{color:var(--blue)}
-lotto-panel-tools-v2-0-1{display:block!important;height:0!important;min-height:0!important;margin:0!important;overflow:visible!important}
+lotto-panel-tools-v2-0-2{display:block!important;height:0!important;min-height:0!important;margin:0!important;overflow:visible!important}
 @container wallet (max-width:560px){
   .hero-draw-countdown{margin-top:12px;gap:2px 7px}
   .hero-clock-label{font-size:12px}
@@ -207,7 +207,7 @@ function renderHeroCountdown(panel, state, schedule) {
 
 /* Reuse the existing local-only timer, but move its visible result into the
    “이번 주의 작은 기대.” hero. The old standalone countdown is always hidden. */
-const Tools = customElements.get('lotto-panel-tools-v2-0-1');
+const Tools = customElements.get('lotto-panel-tools-v2-0-2');
 if (Tools && !Tools.prototype._lottoHeroCountdownPatched) {
   Tools.prototype._lottoHeroCountdownPatched = true;
   const previousTickClock = Tools.prototype.tickClock;
@@ -283,7 +283,7 @@ Panel.prototype.render = function (...args) {
       hostStyle = document.createElement('style');
       root.append(hostStyle);
     }
-    hostStyle.setAttribute('data-lotto-ha-host-header', '2.0.1');
+    hostStyle.setAttribute('data-lotto-ha-host-header', '2.0.2');
     hostStyle.textContent = HA_HOST_HEADER_STYLE;
   }
   ensureHeroCountdown(this);
@@ -296,10 +296,10 @@ Panel.prototype.render = function (...args) {
       root.append(ballStyle);
     }
     /* Refresh stale style nodes instead of accepting their old text. */
-    ballStyle.setAttribute('data-lotto-official-ball-colors', '2.0.1');
+    ballStyle.setAttribute('data-lotto-official-ball-colors', '2.0.2');
     ballStyle.textContent = LOTTO_BALL_AND_COUNTDOWN_STYLE;
   }
-  const tools = root?.querySelector('lotto-panel-tools-v2-0-1');
+  const tools = root?.querySelector('lotto-panel-tools-v2-0-2');
   if (tools) {
     tools.style.height = '0';
     tools.style.minHeight = '0';

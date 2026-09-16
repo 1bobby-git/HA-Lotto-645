@@ -1,8 +1,8 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '2.0.1';
+const VERSION = '2.0.2';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
-const REPO = `https://github.com/1bobby-git/HA-Lotto-645/blob/v${VERSION}/`;
+import {reviewPresentation} from './lotto-panel-view.js?v=2.0.2';
 const AI_ID = 'home_assistant_ai';
 const validId = id => typeof id === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(id);
 const element = (tag, text, className) => {
@@ -53,7 +53,7 @@ export function countdownState(schedule, now = Date.now()) {
     days: Math.floor(seconds / 86400), hours: Math.floor(seconds % 86400 / 3600),
     minutes: Math.floor(seconds % 3600 / 60), remainder: seconds % 60 };
 }
-const sourceURL = id => REPO + (id === AI_ID ? 'docs/AI_RECOMMENDATION.md' : `docs/methods/${id}.md`);
+const sourceURL = id => new URL(`/lotto_645_static/methods/${id}.md`,location.href).href;
 
 // DOM-only subset covering our bundled Markdown guides. Raw HTML stays text;
 // never evaluate Markdown, inject its HTML, or load images/external parsers.
@@ -174,7 +174,7 @@ class LottoPanelTools extends HTMLElement {
       <dialog id="method-dialog" aria-modal="true" aria-labelledby="method-title">
         <header class="method-head"><h2 id="method-title" class="method-title" tabindex="-1"></h2><button class="method-close" type="button" aria-label="추첨 공식 설명 닫기">×</button></header>
         <div class="method-body" tabindex="0" aria-label="추첨 공식 상세 설명"></div>
-        <footer class="method-foot"><p>추천 점수와 과거 리뷰는 당첨 확률이 아닙니다.</p><a class="method-source" target="_blank" rel="noopener noreferrer">GitHub 원문 보기</a></footer>
+        <footer class="method-foot"><p>추천 점수와 과거 리뷰는 당첨 확률이 아닙니다.</p><button class="method-source" type="button">닫기</button></footer>
       </dialog>`;
     this.catalog = new Map(); this._generation = 0;
     this.shadowRoot.querySelector('.method-close').onclick = () => this.closeGuide();
@@ -189,8 +189,8 @@ class LottoPanelTools extends HTMLElement {
     this.shadowRoot.addEventListener('click', event => {
       const a = event.target.closest?.('a'); if (!a || a.classList.contains('method-source')) return;
       const url = new URL(a.href);
-      const match = /\/docs\/methods\/([a-z0-9_]+)\.md$/.exec(url.pathname);
-      if (url.href.startsWith(REPO) && match && this.catalog.has(match[1])) { event.preventDefault(); void this.openGuide(match[1]); }
+      const match = /\/lotto_645_static\/methods\/([a-z0-9_]+)\.md$/.exec(url.pathname);
+      if (url.origin === location.origin && match && this.catalog.has(match[1])) { event.preventDefault(); void this.openGuide(match[1]); }
     });
   }
   get dialog() { return this.shadowRoot.querySelector('dialog'); }
@@ -232,7 +232,7 @@ class LottoPanelTools extends HTMLElement {
     const serverNow = Date.parse(this.schedule?.server_now);
     this._clockOffset = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
     this.decorate('current-recommendations', data.recommendations || []);
-    this.decorate('predictions', (data.winning?.results || []).filter(r => r.source !== 'purchased'));
+    this.decorate('predictions', reviewPresentation(data).rows);
     this.decorate('reviews', data.reviews || []);
     this.startClock();
   }
@@ -272,7 +272,7 @@ class LottoPanelTools extends HTMLElement {
     const generation = ++this._generation;
     this._currentMethod = id;
     this.shadowRoot.querySelector('.method-title').textContent = this.catalog.get(id).name || id;
-    this.shadowRoot.querySelector('.method-source').href = sourceURL(id);
+    this.shadowRoot.querySelector('.method-source').onclick = () => this.closeGuide();
     const body = this.shadowRoot.querySelector('.method-body');
     body.replaceChildren(element('p', '상세 설명을 불러오고 있어요.')); body.setAttribute('aria-busy', 'true');
     this.panel.setAttribute('data-method-open', '');
@@ -299,7 +299,7 @@ class LottoPanelTools extends HTMLElement {
       body.replaceChildren(renderGuideMarkdown(markdown, sourceURL(id))); body.scrollTop = 0;
     } catch {
       if (generation !== this._generation || !this.isConnected || !this.dialog.open) return;
-      const error = element('p', '설명을 불러오지 못했어요. 다시 시도하거나 아래 GitHub 원문을 확인해 주세요.', 'method-error'); error.setAttribute('role', 'alert');
+      const error = element('p', '설명을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.', 'method-error'); error.setAttribute('role', 'alert');
       const retry = element('button', '다시 불러오기', 'method-retry'); retry.type = 'button'; retry.onclick = () => void this.openGuide(id);
       body.replaceChildren(error, retry);
     } finally { if (generation === this._generation) body.removeAttribute('aria-busy'); }
@@ -325,21 +325,21 @@ class LottoPanelTools extends HTMLElement {
     else if (!event.shiftKey && active === last) { event.preventDefault(); first?.focus(); }
   }
 }
-if (!customElements.get('lotto-panel-tools-v2-0-1')) customElements.define('lotto-panel-tools-v2-0-1', LottoPanelTools);
+if (!customElements.get('lotto-panel-tools-v2-0-2')) customElements.define('lotto-panel-tools-v2-0-2', LottoPanelTools);
 
 export function applyPanelTools(panel) {
   const root = panel.shadowRoot, main = root?.querySelector('main'); if (!main) return;
-  if (!root.querySelector('style[data-lotto-panel-tools-v2-0-1]')) {
+  if (!root.querySelector('style[data-lotto-panel-tools-v2-0-2]')) {
     const style = element('style'); style.dataset.lottoPanelTools = VERSION; style.textContent = PANEL_STYLE; root.append(style);
   }
-  if (!root.querySelector('lotto-panel-tools-v2-0-1')) {
-    const tools = document.createElement('lotto-panel-tools-v2-0-1'); tools.panel = panel; main.prepend(tools);
+  if (!root.querySelector('lotto-panel-tools-v2-0-2')) {
+    const tools = document.createElement('lotto-panel-tools-v2-0-2'); tools.panel = panel; main.prepend(tools);
     if (panel._latestToolsData) tools.setData(panel._latestToolsData);
   }
   for (const id of ['current-recommendations', 'predictions', 'reviews']) {
     const block = panel.node(id)?.closest('.review-block');
     if (block && !block.querySelector('.method-help-hint')) {
-      const hint = element('p', '추첨 공식 이름을 누르면 계산 원리·가중치·예시를 확인할 수 있어요.', 'method-help-hint'); block.insertBefore(hint, block.querySelector('.table-scroll'));
+      const hint = element('p', '공식 이름을 누르면 번호 선택 방식과 이용 시 참고사항을 볼 수 있어요.', 'method-help-hint'); block.insertBefore(hint, block.querySelector('.table-scroll'));
     }
   }
   if (!panel._toolsDataHook) {
@@ -347,7 +347,7 @@ export function applyPanelTools(panel) {
     const update = panel.updateResults;
     panel.updateResults = function (data, ...args) {
       const result = update.call(this, data, ...args); this._latestToolsData = data;
-      this.shadowRoot.querySelector('lotto-panel-tools-v2-0-1')?.setData(data); return result;
+      this.shadowRoot.querySelector('lotto-panel-tools-v2-0-2')?.setData(data); return result;
     };
   }
 }

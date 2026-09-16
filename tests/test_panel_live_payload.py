@@ -31,7 +31,7 @@ def test_view_includes_current_sensor_records_separate_from_last_draw():
         data=SimpleNamespace(analysis=current,generated_at=datetime.now(UTC),ai_recommendation=None),
         result_history=[],winning_summary={'round':30,'results':[]},entry=SimpleNamespace(entry_id='entry'),purchase_storage_error=False,
         local_generation_sequence=4)
-    view=production_function('_view',{'Any':object,'_review_rows':lambda c:[], 'panel_metadata':lambda *args:{}})(owner)
+    view=production_function('_view',{'Any':object,'_review_rows':lambda c:[], 'panel_metadata':lambda *args:{'draw_schedule':{'round':31}}})(owner)
     assert view['recommendation_target']==31 and view['winning']['round']==30 and view['round']==29
     assert view['recommendations'][0]['numbers']==list(rec.numbers)
     assert view['recommendations'][0]['method_id']==rec.method_id and view['entry_id']=='entry'

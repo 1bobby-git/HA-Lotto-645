@@ -56,7 +56,7 @@ def method_selector_options(*, advanced=False):
 def method_catalog():
     return [{"method_id":m.method_id,"formula_id":m.method_id,"label":m.label,
              "category":m.category,"name":m.label,"description":m.description,
-             "requirements":"개인정보 원격 계산 동의 필요" if m.requires_personal_profile else "Core API 연결",
+             "requirements":"개인정보 원격 계산 동의 필요" if m.requires_personal_profile else "별도 연결 설정 없이 이용",
              "formula_version":m.formula_version,"status":m.status,
              "options_schema":m.options_schema} for m in METHODS_BY_ID.values()]
 
