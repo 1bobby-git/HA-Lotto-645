@@ -96,7 +96,7 @@ async def verify_panel_host_layout(page: Page) -> None:
                             header:getComputedStyle(q('.ha-host-header')).display,
                             brand:box(q('.brand-logo')),tabs:box(q('.main-tabs')),
                             title:box(q('#screen-'+el._screen+' h1')),
-                            clock:box(q('lotto-panel-tools-v1-21-0'))};
+                            clock:box(q('lotto-panel-tools-v2-0-0'))};
                     }""")
                     label = (layout, width, height, sidebar, narrow, direction, screen)
                     left = sidebar if direction == 'ltr' else 0

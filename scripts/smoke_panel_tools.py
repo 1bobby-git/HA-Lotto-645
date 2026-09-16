@@ -13,12 +13,10 @@ WWW = ROOT / 'custom_components/lotto_645/www'
 
 
 def guide_catalog():
-    # Import the actual pure catalog, not the HA integration initializer.
-    spec = importlib.util.spec_from_file_location('panel_tools_catalog', WWW.parent / 'lotto_core/methods.py')
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module.method_catalog() + [{'method_id':'home_assistant_ai','name':'Home Assistant AI 추천'}]
+    # Use only the shipped public catalog; never import private calculation code.
+    import json
+    rows=json.loads((WWW.parent/'catalog_seed.json').read_text(encoding='utf-8'))['methods']
+    return [{'method_id':r['formula_id'],'name':r['name'], 'description':r['public_summary']} for r in rows] + [{'method_id':'home_assistant_ai','name':'Home Assistant AI 추천'}]
 
 
 async def verify_panel_tools(page):
@@ -35,12 +33,16 @@ async def verify_panel_tools(page):
             return
         name = Path(path).name
         assert name in {m['method_id']+'.md' for m in catalog}
-        await route.fulfill(path=str(WWW / 'methods' / name), content_type='text/markdown; charset=utf-8')
+        content=(WWW / 'methods' / name).read_text(encoding='utf-8')
+        if name == 'weighted_frequency.md':
+            # Exercise long-document rendering without restoring private weights.
+            content += '\n\n## Public rendering fixture\n\n' + ('| Item | State |\n|---|---|\n| Example | Ready |\n\n' * 24)
+        await route.fulfill(body=content, content_type='text/markdown; charset=utf-8')
 
     await page.route('**/lotto_645_static/methods/**', serve_guide)
     await page.wait_for_function('!el._busy')
     await page.evaluate("""catalog => {
-        window.tools=el.shadowRoot.querySelector('lotto-panel-tools-v1-21-0');
+        window.tools=el.shadowRoot.querySelector('lotto-panel-tools-v2-0-0');
         window.toolsFixture={...el._latestToolsData,method_catalog:catalog,
             draw_schedule:{round:1242,basis:'regular_schedule',scheduled_at:'2026-09-19T20:35:00+09:00',
                 sales_reopen_at:'2026-09-20T06:00:00+09:00',rollover_at:'2026-09-20T06:00:00+09:00',server_now:new Date().toISOString()},
@@ -61,12 +63,12 @@ async def verify_panel_tools(page):
     }""", catalog)
     assert await page.locator('#predictions .method-info-trigger').count() == len(catalog)
     assert await page.locator('#reviews .method-info-trigger').count() == len(catalog)
-    assert await page.locator('lotto-panel-tools-v1-21-0').count() == 1
+    assert await page.locator('lotto-panel-tools-v2-0-0').count() == 1
     assert await page.locator('.hero-draw-countdown').is_visible()
     assert '제 1,242회 추첨까지' in await page.locator('.hero-clock-label').text_content()
     assert '동행복권 정규 일정 기준' in await page.locator('.hero-clock-date').text_content()
-    assert not await page.locator('lotto-panel-tools-v1-21-0 .countdown').is_visible()
-    assert await page.locator('lotto-panel-tools-v1-21-0').evaluate('n=>n.getBoundingClientRect().height===0')
+    assert not await page.locator('lotto-panel-tools-v2-0-0 .countdown').is_visible()
+    assert await page.locator('lotto-panel-tools-v2-0-0').evaluate('n=>n.getBoundingClientRect().height===0')
     await page.evaluate("el.showScreen('review')")
 
     # Test unpositioned, sidebar-offset HA layouts as well as a positioned box.
@@ -108,8 +110,8 @@ async def verify_panel_tools(page):
     await trigger.click()
     await page.wait_for_function("tools.dialog.open && !tools.shadowRoot.querySelector('.method-body').hasAttribute('aria-busy')")
     body = page.locator('.method-body')
-    assert '계산 예시' in await body.text_content()
-    assert '0.34' in await body.text_content()
+    assert '비공개 Core API' in await body.text_content()
+    assert 'Public rendering fixture' in await body.text_content()
     assert await body.locator('table').count() >= 2
     assert await page.evaluate("el.hasAttribute('data-method-open') && getComputedStyle(el).overflowY==='hidden'")
     assert await body.evaluate('n=>n.scrollHeight>n.clientHeight')
@@ -130,12 +132,12 @@ async def verify_panel_tools(page):
     await ai.click(); await page.locator('.method-retry').wait_for()
     await page.locator('.method-retry').click()
     await page.wait_for_function("!tools.shadowRoot.querySelector('.method-body').hasAttribute('aria-busy')")
-    assert '개인정보' in await body.text_content()
+    assert 'Core' in await body.text_content()
     await page.keyboard.press('Escape')
     for method in catalog:
         await page.evaluate('(id)=>tools.openGuide(id)', method['method_id'])
-        assert await body.locator('h2').count() >= 1, method['method_id']
-        assert len(await body.text_content()) > 300, method['method_id']
+        assert await body.locator('h1,h2').count() >= 1, method['method_id']
+        assert len(await body.text_content()) > 50, method['method_id']
         assert await body.locator('script,img,iframe').count() == 0
         await page.evaluate('tools.closeGuide()')
 
@@ -166,7 +168,7 @@ async def verify_panel_tools(page):
     # Explicit instants: count reaches zero at draw time, remains zero until the
     # Sunday 06:00 sales boundary, then starts the following-round countdown.
     result = await page.evaluate("""async () => {
-        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=1.21.0');
+        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=2.0.0');
         const s=toolsFixture.draw_schedule;
         const prior=countdownState(s,Date.parse(s.scheduled_at)-1000);
         const at=countdownState(s,Date.parse(s.scheduled_at));

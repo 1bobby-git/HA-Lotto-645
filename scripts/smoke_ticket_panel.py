@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import hashlib
 import struct
 import tempfile
@@ -30,7 +31,7 @@ async def run():
     assert logo_size[0] > logo_size[1] > 0
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
-            **({'executable_path': '/usr/bin/chromium'} if Path('/usr/bin/chromium').exists() else {}),
+            **({'executable_path': os.environ['LOTTO_BROWSER_EXECUTABLE']} if os.environ.get('LOTTO_BROWSER_EXECUTABLE') else {'executable_path':'/usr/bin/chromium'} if Path('/usr/bin/chromium').exists() else {}),
             args=['--no-sandbox'],
         )
         page = await browser.new_page(viewport={'width': 1440, 'height': 1000}, reduced_motion='reduce')
