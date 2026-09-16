@@ -15,6 +15,7 @@ from itertools import combinations
 from math import comb
 from secrets import SystemRandom
 from typing import Protocol
+from .formula_settings import CUSTOM_IDS
 
 NUMBERS = tuple(range(1, 46))
 UNIFORM_IDS = (
@@ -55,7 +56,7 @@ def ac_value(values: Iterable[int]) -> int:
 
 def validate_sampled_ticket(formula_id: str, values: Iterable[int]) -> tuple[int, ...]:
     """Validate generated AND restored tickets against the formula contract."""
-    if formula_id not in SAMPLERS and formula_id not in (BAYESIAN_ID, AC_FILTER_ID):
+    if formula_id not in SAMPLERS and formula_id not in (BAYESIAN_ID, AC_FILTER_ID, *CUSTOM_IDS):
         raise ValueError("Unknown sampling formula")
     ticket = validate_fixed(values)
     if len(ticket) != 6:
@@ -249,8 +250,17 @@ def generate_ticket(formula_id: str, fixed_numbers: Iterable[int] = (), *,
     with many exclusions; there is no lexicographic/score-based fallback bias.
     AC adds an explicit shape restriction and never uses unrestricted fallback.
     """
-    if formula_id not in SAMPLERS and formula_id not in (BAYESIAN_ID, AC_FILTER_ID):
+    if formula_id not in SAMPLERS and formula_id not in (BAYESIAN_ID, AC_FILTER_ID, *CUSTOM_IDS):
         raise ValueError("Unknown sampling formula")
+    if formula_id in CUSTOM_IDS:
+        if formula_id == "constraint_uniform":
+            from .constraints import generate
+            return generate({"fixed": list(fixed_numbers)}, previous=history[-1] if history else (),
+                            blocked=excluded_combinations, rng=rng)
+        from .personal_lucky import generate
+        if tuple(fixed_numbers):
+            raise ValueError("개인 행운 번호는 고정번호를 사용하지 않습니다")
+        return generate(target_round=len(history)+1, blocked=excluded_combinations, rng=rng)
     fixed = validate_fixed(fixed_numbers)
     fixed_set = set(fixed)
     pool = tuple(n for n in NUMBERS if n not in fixed_set)

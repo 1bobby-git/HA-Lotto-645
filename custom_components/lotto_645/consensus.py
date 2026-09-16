@@ -51,7 +51,7 @@ def select_near_medians(
     return best, centers
 
 
-def refresh_consensus(
+def _refresh_median(
     analysis: AnalysisResult,
     selected_ids: Sequence[str],
     history: Iterable[LottoDraw],
@@ -153,3 +153,19 @@ def refresh_consensus(
     if rows == analysis.recommendations and summary == analysis.summary:
         return analysis
     return replace(analysis, recommendations=rows, summary=summary)
+
+
+def refresh_consensus(analysis, selected_ids, history, *, updated_at=None, excluded_combinations=()):
+    """Refresh both explicit aggregate IDs without changing the median rule."""
+    from .voting_consensus import VOTE_ID, refresh_vote
+    history = tuple(history)
+    # Remove the old vote before median calculation; it is derived, not a source.
+    clean = replace(analysis, recommendations=tuple(r for r in analysis.recommendations if r.method_id != VOTE_ID))
+    result = _refresh_median(clean, selected_ids, history, updated_at=updated_at,
+                             excluded_combinations=excluded_combinations)
+    prior = analysis.recommendation_by_method(VOTE_ID)
+    if prior is not None:
+        result = replace(result, recommendations=(*result.recommendations, prior))
+    result = refresh_vote(result, selected_ids, history, updated_at=updated_at,
+                          excluded_combinations=excluded_combinations)
+    return analysis if result == analysis else result

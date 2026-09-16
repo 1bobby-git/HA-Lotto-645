@@ -46,7 +46,7 @@ from .const import (
     UPDATE_INTERVAL,
 )
 from .history import LottoHistoryError, load_bundled_history
-from .methods import DEFAULT_METHOD_IDS, METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, normalize_method_ids
+from .methods import DEFAULT_METHOD_IDS, METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE, normalize_method_ids
 from .models import AnalysisResult, Lotto645Data, LottoDraw, Recommendation
 from .myungri import extract_saju_profile, has_complete_saju_profile
 from .fast_result_state import FastResultState, evaluate_saved
@@ -389,7 +389,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 "details": {},
                 "source": item.source,
             }
-            if item.method_id == METHOD_SELECTED_MEDIAN:
+            if item.method_id in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE):
                 # A reactive aggregate can be newer than the source batch. Never
                 # attribute it to an earlier, potentially pre-draw timestamp.
                 result["generated_at"] = item.details.get("consensus_updated_at")
@@ -490,7 +490,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 self.data.ai_generated_at,
             )
         elif (self._prediction_snapshot is None and self.history
-              and METHOD_SELECTED_MEDIAN not in self.selected_method_ids
+              and not any(key in self.selected_method_ids for key in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE))
               and not any(METHODS_BY_ID[key].sampling for key in self.selected_method_ids)):
             # Upgrade compatibility: v1.7 and older did not persist recommendation
             # snapshots.  Reconstruct the currently displayed target round from
@@ -621,7 +621,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         if cached_ai is not None and cached_ai.details.get("target_round") == self.history[-1].round + 1:
             excluded = (*excluded, cached_ai.numbers)
         restored = restore_tickets(getattr(self, "_sampling_cache", {}), self.history,
-                                   self.selected_method_ids, self._local_generation_nonce)
+                                   self.selected_method_ids, self._local_generation_nonce, dict(self.entry.options))
         try:
             profile = self.saju_profile if self.saju_profile_ready else None
             analysis = await self.hass.async_add_executor_job(
@@ -632,6 +632,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 profile,
                 excluded,
                 restored,
+                dict(self.entry.options),
             )
         except ValueError as err:
             raise UpdateFailed(f"로또 분석 실패: {err}") from err
@@ -641,7 +642,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             updated_at=datetime.now(UTC).isoformat(),
         )
         self._sampling_cache = store_tickets(analysis, self.history, self.selected_method_ids,
-                                            self._local_generation_nonce)
+                                            self._local_generation_nonce, dict(self.entry.options))
         if self._local_generated_at is None or not restored:
             self._local_generated_at = datetime.now(UTC)
             self._needs_storage_save = True

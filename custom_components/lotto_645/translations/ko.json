@@ -19,7 +19,9 @@
         "menu_options": {
           "recommendations": "추첨 공식 · AI · 데이터 소스",
           "saju": "명리 사주정보 입력·수정",
-          "purchases": "직접 구매번호 입력·수정"
+          "purchases": "직접 구매번호 입력·수정",
+          "generation_rules": "조건 지정 생성 설정",
+          "personal_lucky": "개인 행운 번호 설정"
         }
       },
       "recommendations": {
@@ -83,6 +85,32 @@
           "game_e": "게임 E · 번호 6개",
           "clear_round": "이 회차 구매번호 삭제 (입력값 대신 삭제)"
         }
+      },
+      "generation_rules": {
+        "title": "조건 지정 생성 설정",
+        "description": "선택한 조건을 반드시 지키며 임의로 완화하지 않습니다. 범위는 2-4 또는 3처럼 입력하세요. 고정·제외번호는 공백 또는 쉼표로 구분합니다. 이 설정만 저장해도 공식이 자동 선택되지는 않습니다. 추천 설정에서 조건 지정 균등 생성을 선택하세요.\n\n{detail}",
+        "data": {
+          "fixed": "고정번호 (최대 6개)",
+          "excluded": "제외번호",
+          "total": "번호 합계 (21-255)",
+          "odd": "홀수 개수 (0-6)",
+          "low": "1~22 번호 개수 (0-6)",
+          "carryover": "직전 본번호와 일치 수 (0-6)",
+          "neighbors": "직전 본번호의 ±1 · 이월수 제외 (0-6)",
+          "primes": "소수 개수 · 1 제외 (0-6)",
+          "multiples3": "3의 배수 개수 (0-6)",
+          "max_same_ending": "같은 끝수 최대 개수 (1-5)",
+          "max_run": "최대 연속 길이 (1-6)",
+          "ac_min": "AC 최솟값 (0-10)"
+        }
+      },
+      "personal_lucky": {
+        "title": "개인 행운 번호 설정",
+        "description": "80자 이내 별명·키워드를 로컬에서 번호로 바꾸는 재미 기능입니다. 꿈·소망 테마도 자체 문자열 변환이며 전통 해몽 사전이 아닙니다. 생년월일은 필요하지 않습니다. 키워드는 로그·AI에 전달하지 않으며 다시 생성하면 새 번호가 나옵니다. 추천 설정에서 개인 행운 번호를 선택하세요.",
+        "data": {
+          "lucky_keyword": "별명 또는 키워드",
+          "lucky_theme": "테마"
+        }
       }
     },
     "error": {
@@ -90,13 +118,15 @@
       "saju_profile_required": "명리 권장을 사용하려면 먼저 이전 메뉴의 '명리 사주정보 입력·수정'에서 개인 사주정보를 저장하세요.",
       "invalid_saju_profile": "출생일·시간(HH:MM/미상)·음력 기준/윤달·시간대·경도를 확인하세요. 절입일 또는 서머타임 중복 시각은 확정된 시간이 필요합니다.",
       "options_error": "설정 처리 중 오류가 발생했습니다. 입력값을 확인한 뒤 다시 시도하세요.",
-      "consensus_sources_required": "'합의 추천 · 선택 공식 중앙값'을 사용하려면 다른 추첨 공식을 2개 이상 함께 선택하세요.",
+      "consensus_sources_required": "합의 추천에는 합의·AI를 제외한 다른 로컬 공식이 2개 이상 필요합니다.",
       "invalid_purchase_round": "복권에 인쇄된 회차를 숫자로 입력하세요.",
       "invalid_purchase_numbers": "1~45의 서로 다른 정수 6개를 쉼표/공백으로 구분하세요. 두 자리씩 12자리도 가능합니다.",
       "purchase_games_required": "A~E 중 한 게임 이상을 입력하세요. 삭제하려면 삭제 항목을 켜세요.",
       "purchase_storage_unavailable": "저장하지 못했습니다. 기존 구매번호는 유지됩니다.",
       "purchase_game_limit": "한 회차에 최대 5게임(A~E)을 입력할 수 있습니다.",
-      "select_korean_birthplace": "출생지는 대한민국 17개 시·도 중 하나를 선택하세요."
+      "select_korean_birthplace": "출생지는 대한민국 17개 시·도 중 하나를 선택하세요.",
+      "invalid_generation_rules": "조건이 서로 충돌하거나 입력 범위가 올바르지 않습니다. 위 안내를 확인하세요.",
+      "invalid_lucky_keyword": "80자 이내의 일반 문자열과 지원되는 테마를 선택하세요."
     },
     "abort": {
       "purchase_integration_not_ready": "통합 초기화 후 다시 구성하세요.",

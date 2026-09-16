@@ -72,7 +72,7 @@ def _profile():
 
 
 def test_catalog_and_default_gating():
-    assert len(methods.METHODS) == 19
+    assert len(methods.METHODS) == 22
     assert len(methods.PUBLIC_METHOD_IDS) == 10
     assert methods.METHOD_MYUNGRI_HETU not in methods.DEFAULT_METHOD_IDS
     myungri_method = methods.METHODS_BY_ID[methods.METHOD_MYUNGRI_HETU]
@@ -116,7 +116,7 @@ def test_every_non_saju_method_runs_individually_without_birth_profile():
     history = _history(120)
     past = {draw.numbers for draw in history}
     for method in methods.METHODS:
-        if method.method_id in {methods.METHOD_MYUNGRI_HETU, methods.METHOD_SELECTED_MEDIAN}:
+        if method.method_id in {methods.METHOD_MYUNGRI_HETU, methods.METHOD_SELECTED_MEDIAN, methods.METHOD_SELECTED_VOTE}:
             continue
         result = analysis.build_analysis(history, (method.method_id,), 0)
         assert len(result.recommendations) == 1, method.method_id

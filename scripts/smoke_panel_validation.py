@@ -76,7 +76,7 @@ async def verify_panel_validation(page):
     assert await page.locator('#validation-results > .prediction-row').count() == 3
     # Pure ranking ties and spreadsheet-formula escaping execute in the real module.
     assert await page.evaluate('''async()=>{
-      const m=await import('/lotto_645_static/lotto-panel-validation.js?v=1.19.0');
+      const m=await import('/lotto_645_static/lotto-panel-validation.js?v=1.20.0');
       const rows=m.rankedRows([],[{method_id:'a',points:2},{method_id:'b',points:2},{method_id:'c',points:1}]);
       return rows.map(r=>r.rank).join(',')==='1,1,3' && rows[0].tied && m.csvCell('=SUM(1)').startsWith('"\\\'');
     }''')
@@ -158,12 +158,12 @@ async def verify_panel_validation(page):
     assert '검증 테스트 오류' in await page.locator('#validation-status').text_content()
     await page.evaluate('el._clearSmartSync()')
     assert await page.evaluate('''async()=>{
-      const m=await import('/lotto_645_static/lotto-panel-validation.js?v=1.19.0');
+      const m=await import('/lotto_645_static/lotto-panel-validation.js?v=1.20.0');
       const stale=el._historicalValidation;
       stale.runtimeVersion='1.18.1';
       m.applyHistoricalValidation(el);
       return el._historicalValidation!==stale
-        && el._historicalValidation.runtimeVersion==='1.19.0'
+        && el._historicalValidation.runtimeVersion==='1.20.0'
         && el._historicalValidation.form===el.node('validation-form')
         && el.shadowRoot.querySelectorAll('#validation-sort').length===1
         && el.shadowRoot.querySelectorAll('#validation-total').length===1

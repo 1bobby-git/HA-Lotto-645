@@ -35,6 +35,7 @@ from .methods import (
     METHOD_PHASE_RESIDUAL,
     METHOD_PUBLIC_ENSEMBLE,
     METHOD_SELECTED_MEDIAN,
+    METHOD_SELECTED_VOTE,
     METHOD_RECENCY_DECAY,
     METHOD_TRANSITION_GAP,
     METHOD_TRIPLET_COOCCURRENCE,
@@ -581,6 +582,7 @@ def build_analysis(
     saju_profile: dict[str, Any] | None = None,
     excluded_combinations: Sequence[tuple[int, ...]] = (),
     restored_tickets: dict[str, tuple[int, ...]] | None = None,
+    formula_options: dict[str, Any] | None = None,
     *, rng=None, progress_callback=None,
 ) -> AnalysisResult:
     """Build one recommendation per selected method.
@@ -618,18 +620,22 @@ def build_analysis(
     past_combos = {tuple(draw.numbers) for draw in history}
     quads, quints = _build_seen_subset_counts(history)
 
+    from .formula_settings import CUSTOM_IDS, settings
+    from .constraints import RULES_KEY, Rules, generate as generate_constrained, violations
+    from .personal_lucky import generate as generate_lucky, KEYWORD_KEY, THEME_KEY
+    custom = settings(formula_options) if set(selected_method_ids) & set(CUSTOM_IDS) else None
     restored_tickets = restored_tickets or {}
     selected: list[tuple[int, ...]] = []
     recommendations: list[Recommendation] = []
     execution_method_ids = tuple(
         method_id for method_id in selected_method_ids
-        if method_id != METHOD_SELECTED_MEDIAN
-    ) + ((METHOD_SELECTED_MEDIAN,) if METHOD_SELECTED_MEDIAN in selected_method_ids else ())
+        if method_id not in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE)
+    ) + tuple(key for key in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE) if key in selected_method_ids)
     for index, method_id in enumerate(execution_method_ids, start=1):
         method = METHODS_BY_ID[method_id]
         if progress_callback:
             progress_callback({"phase": "method_start", "method_id": method_id, "index": index})
-        if method_id == METHOD_SELECTED_MEDIAN:
+        if method_id in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE):
             if progress_callback:
                 progress_callback({"phase": "method_complete", "method_id": method_id, "index": index})
             continue
@@ -641,6 +647,18 @@ def build_analysis(
                 combo = validate_sampled_ticket(method.sampling, restored_tickets[method_id])
                 if len(combo) != 6 or combo in blocked:
                     raise ValueError("저장된 추첨 공식 번호가 현재 제외 조건과 충돌합니다")
+                if method_id == "constraint_uniform" and violations(combo, Rules.parse(custom[RULES_KEY]), history[-1].numbers):
+                    raise ValueError("저장된 번호가 현재 조건과 일치하지 않습니다")
+            elif method_id == "constraint_uniform":
+                def checkpoint(done, total):
+                    if progress_callback:
+                        progress_callback({"phase": "method_progress", "method_id": method_id,
+                                           "candidates_done": done, "candidates_total": total})
+                combo = generate_constrained(custom[RULES_KEY], previous=history[-1].numbers,
+                                             blocked=blocked, rng=rng, checkpoint=checkpoint)
+            elif method_id == "personal_lucky":
+                combo = generate_lucky(custom[KEYWORD_KEY], theme=custom[THEME_KEY],
+                                       target_round=history[-1].round+1, blocked=blocked, rng=rng)
             else:
                 combo = generate_ticket(method.sampling, excluded_combinations=blocked,
                                         history=[d.numbers for d in history], rng=rng)
@@ -665,6 +683,15 @@ def build_analysis(
                 "first_prize_odds": FIRST_PRIZE_ODDS, "disclaimer": DISCLAIMER,
             }
             reason = method.description
+            if method_id == "constraint_uniform":
+                details.update({"uniformity": "uniform_over_configured_allowed_combinations",
+                                "eligible_combination_count": None, "constraints_satisfied": True,
+                                "applied_rules": custom[RULES_KEY], "predictive_evidence": "not_established"})
+            elif method_id == "personal_lucky":
+                details.update({"uniformity": "keyword_personalization_not_prediction",
+                                "rng": "sha256_counter_stream_with_fresh_system_nonce",
+                                "lucky_theme": custom[THEME_KEY], "personal_input_exposed": False,
+                                "predictive_evidence": "not_established", "entertainment_only": True})
             if method_id == METHOD_AC_FILTER:
                 value = ac_value(combo)
                 details.update({

@@ -58,6 +58,9 @@ METHOD_UNIFORM_SEQUENTIAL: Final = "uniform_sequential"
 METHOD_CALIBRATED_STRATIFIED: Final = "calibrated_stratified"
 METHOD_UNIFORM_COMBINATION_RANK: Final = "uniform_combination_rank"
 METHOD_AC_FILTER: Final = "ac_range_filter"
+METHOD_CONSTRAINT_UNIFORM: Final = "constraint_uniform"
+METHOD_PERSONAL_LUCKY: Final = "personal_lucky"
+METHOD_SELECTED_VOTE: Final = "selected_vote_consensus"
 
 METHODS: Final[tuple[MethodDefinition, ...]] = (
     MethodDefinition(
@@ -233,6 +236,20 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         {}, pool_size=45, sampling="ac_range_filter",
     ),
     MethodDefinition(
+        METHOD_CONSTRAINT_UNIFORM,
+        "조건 공식 · 조건 지정 균등 생성",
+        "조합 조건 생성",
+        "고정·제외번호, 합계·홀짝·저고·끝수·연속수·AC·이월수·이웃수·소수·3배수 조건 안에서 균등 추출합니다. 조건 충돌과 탐색 한도를 구분하며 임의 완화하지 않습니다. 통합 설정의 조건 지정 생성에서 조건을 저장하세요.",
+        {}, pool_size=45, sampling="constraint_uniform",
+    ),
+    MethodDefinition(
+        METHOD_PERSONAL_LUCKY,
+        "재미 공식 · 개인 행운 번호",
+        "재미·개인화",
+        "별명·소원·꿈 키워드를 로컬 SHA-256 규칙과 새 난수로 변환합니다. 생년월일이 필요 없으며 새로고침마다 다시 생성합니다. 입력은 AI나 로또 미러로 전송하지 않습니다. 꿈해몽·당첨 예측이 아닌 재미용입니다.",
+        {}, pool_size=45, sampling="personal_lucky",
+    ),
+    MethodDefinition(
         METHOD_SELECTED_MEDIAN,
         "합의 추천 · 선택 공식 중앙값",
         "선택 공식 집계",
@@ -244,6 +261,13 @@ METHODS: Final[tuple[MethodDefinition, ...]] = (
         {},
         pool_size=0,
         formula_version=2,
+    ),
+    MethodDefinition(
+        METHOD_SELECTED_VOTE,
+        "합의 추천 · 계열별 다수결",
+        "선택 공식 집계",
+        "선택한 다른 로컬 공식의 번호별 표를 같은 계열의 공식 수로 나누어 집계합니다. 균등 구현·빈도 프리셋의 중복 투표를 줄이며 AI·집계 공식은 제외합니다. 원본 번호 변경 시 자동 갱신하고 기존 중앙값은 변경하지 않습니다.",
+        {}, pool_size=0,
     ),
 )
 
@@ -314,7 +338,7 @@ def method_catalog() -> list[dict[str, str]]:
                 "생년월일, 출생시간, 양력/음력, 성별, 출생지, 시간대"
                 if method.method_id == METHOD_MYUNGRI_HETU
                 else "다른 로컬 추첨 공식 2개 이상 (균등·실험 포함, AI 제외)"
-                if method.method_id == METHOD_SELECTED_MEDIAN
+                if method.method_id in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE)
                 else "없음"
             ),
         }
@@ -336,10 +360,10 @@ def resolve_formula(data: dict, default: str) -> str:
 
 
 def is_score_formula(method_id: str) -> bool:
-    return method_id != METHOD_SELECTED_MEDIAN and (method_id == METHOD_BAYESIAN_SHRINKAGE or not METHODS_BY_ID[method_id].sampling)
+    return method_id not in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE) and (method_id == METHOD_BAYESIAN_SHRINKAGE or not METHODS_BY_ID[method_id].sampling)
 
 
 def consensus_source_ids(method_ids) -> tuple[str, ...]:
     """All explicitly selected local formulas with actual tickets can contribute."""
     return tuple(dict.fromkeys(key for key in method_ids
-                               if key in METHODS_BY_ID and key != METHOD_SELECTED_MEDIAN))
+                               if key in METHODS_BY_ID and key not in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE)))

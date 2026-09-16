@@ -1,6 +1,6 @@
 # 균등 공식 · 조합보정 층화 CCSS
 
-[추첨 공식 목록](../../README.md#추첨-공식-19종) · [공통 계산 원리](../FORMULAS.md)
+[추첨 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: calibrated_stratified` · 분류: 균등 추첨 공식 · 후보 풀: **45개**
 

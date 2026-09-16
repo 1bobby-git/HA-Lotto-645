@@ -1,6 +1,6 @@
 # 합의 추천 · 선택 공식 중앙값
 
-[추첨 공식 목록](../../README.md#추첨-공식-19종) · [공통 계산 원리](../FORMULAS.md)
+[추첨 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: selected_median_consensus` · 분류: 선택 공식 집계 · 후보 풀: **0개** (점수형 후보 풀 미사용)
 

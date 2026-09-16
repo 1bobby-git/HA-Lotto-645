@@ -86,3 +86,4 @@ jobs:
         run: |
           python scripts/smoke_ticket_panel.py
           python scripts/smoke_research_panel.py
+          python scripts/smoke_portfolio_panel.py

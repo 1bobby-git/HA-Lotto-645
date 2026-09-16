@@ -56,7 +56,7 @@ def catalog() -> list[dict]:
             assert features == {}, 'Median is dynamically calculated, not a static feature blend'
             assert params['formula_version'] == 2
             features = {}
-        weights = {} if params.get('sampling') or method_id == 'selected_median_consensus' else {'individual': individual}
+        weights = {} if params.get('sampling') or method_id in ('selected_median_consensus', 'selected_vote_consensus') else {'individual': individual}
         weights.update({key.removesuffix('_weight'): value for key, value in params.items()
                         if key.endswith('_weight') and value})
         assert not (features.keys() & weights.keys())
@@ -73,7 +73,7 @@ DOCUMENTS = [ROOT / 'README.md', ROOT / 'docs/FORMULAS.md',
 def test_readme_has_no_changelog_or_version_history():
     text = (ROOT / 'README.md').read_text(encoding='utf-8')
     assert not re.search(r'^#{1,6}\s+v?\d+\.\d+\.\d+', text, re.MULTILINE)
-    assert '## 추첨 공식 19종' in text
+    assert '## 추첨 공식 24종' in text
     assert 'changelog' not in text.lower()
     assert not list(ROOT.glob('CHANGELOG*.md'))
     assert not (ROOT / 'docs/RELEASE_V110_CHECKLIST.md').exists()
@@ -82,7 +82,7 @@ def test_readme_has_no_changelog_or_version_history():
 def test_readme_and_formula_index_link_all_methods_in_catalog_order():
     expected = [(str(index), method['label'], method['id'])
                 for index, method in enumerate(CATALOG, 1)]
-    assert len(expected) == 19
+    assert len(expected) == 22
     for path, prefix in ((ROOT / 'README.md', 'docs/methods/'),
                          (ROOT / 'docs/FORMULAS.md', 'methods/')):
         text = path.read_text(encoding='utf-8')
@@ -106,7 +106,7 @@ def test_method_metadata_and_weight_tables_match_source(method):
     for key, value in method['weights'].items():
         assert actual[key] == pytest.approx(value), (path, key)
     assert '계산 예시' in text and '확률' in text and '구현 근거' in text
-    assert '../../README.md#추첨-공식-19종' in text
+    assert '../../README.md#추첨-공식-24종' in text
     assert '../FORMULAS.md' in text
 
 

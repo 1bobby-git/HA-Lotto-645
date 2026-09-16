@@ -25,7 +25,8 @@ def test_install_is_additive_idempotent_and_defaults_stay_uniform():
     assert methods.DEFAULT_METHOD_IDS == ("uniform_fisher_yates",)
     assert "crowd_pattern_avoidance" in methods.METHODS_BY_ID
     assert "portfolio_triplet_coverage" in methods.METHODS_BY_ID
-    assert after[-1] == methods.METHOD_SELECTED_MEDIAN
+    assert after[-2:] == (methods.METHOD_SELECTED_MEDIAN, methods.METHOD_SELECTED_VOTE)
+    assert len(after) == 24
 
 
 def test_research_sampling_is_valid_reproducible_and_strictly_excludes():

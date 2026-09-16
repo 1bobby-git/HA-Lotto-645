@@ -17,7 +17,7 @@ def test_retired_profiles_are_not_selectable_or_generated():
 def test_base_menu_and_advanced_variants_form_exact_catalogue():
     basic={row['value'] for row in m.method_selector_options()}
     advanced={row['value'] for row in m.method_selector_options(advanced=True)}
-    assert len(basic)==12 and len(advanced)==7
+    assert len(basic)==15 and len(advanced)==7
     assert basic.isdisjoint(advanced) and basic|advanced==set(m.METHODS_BY_ID)
     assert m.DEFAULT_METHOD_IDS==('uniform_fisher_yates',)
     assert m.METHOD_MYUNGRI_HETU in basic and m.METHOD_SELECTED_MEDIAN in basic

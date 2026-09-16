@@ -51,8 +51,8 @@ def install_research_extensions() -> None:
         {}, pool_size=45, sampling=COVERAGE_ID, formula_version=1,
     )
 
-    # Keep selected-median last in the selector while build_analysis already
-    # executes it last regardless of catalog position.
+    # Keep independent research sources before the two aggregate formulas;
+    # build_analysis evaluates sources first, then median and voting.
     catalog = list(methods.METHODS)
     median_index = next(
         (i for i, item in enumerate(catalog) if item.method_id == methods.METHOD_SELECTED_MEDIAN),

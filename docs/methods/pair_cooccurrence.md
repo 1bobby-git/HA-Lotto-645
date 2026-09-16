@@ -1,6 +1,6 @@
 # 공개 공식 · 동반출현쌍
 
-[추첨 공식 목록](../../README.md#추첨-공식-19종) · [공통 계산 원리](../FORMULAS.md)
+[추첨 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: pair_cooccurrence` · 분류: 공개 분석식 · 후보 풀: **22개**
 

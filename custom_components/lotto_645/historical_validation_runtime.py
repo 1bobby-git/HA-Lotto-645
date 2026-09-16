@@ -37,6 +37,7 @@ async def async_validate_history(hass, coordinator, target_round, method_ids):
     blocked = previous[2] if previous and previous[0] is coordinator and previous[1] == target_round else ()
     worker = hass.async_add_executor_job(partial(
         run_historical_validation, history, target_round, tuple(method_ids), profile, previous_tickets=blocked,
+        formula_options=deepcopy(dict(getattr(coordinator.entry, "options", {}))),
     ))
     workers[key] = worker
 

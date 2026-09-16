@@ -1,3 +1,4 @@
+import { installPortfolioTools } from './lotto-panel-portfolio.js?v=1.20.0';
 /* UI entry point: two-tier Home Assistant header plus demand-driven panel synchronization. */
 import './lotto-panel-core.js?v=1.15.0';
 import { installResearchTools } from './lotto-panel-research.js?v=1.18.0';
@@ -316,3 +317,5 @@ Panel.prototype.render = function (...args) {
 };
 
 installResearchTools(Panel);
+
+installPortfolioTools(Panel);
