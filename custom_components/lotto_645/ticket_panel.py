@@ -16,6 +16,7 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN, VERSION
 from .panel_metadata import panel_metadata
+from .review_selection import review_method_ids, selected_round_review
 from .const import AI_METHOD_ID
 from .methods import METHODS_BY_ID, RETIRED_METHOD_LABELS
 from .purchased_tickets import PurchaseInputError, parse_round, parse_games
@@ -23,7 +24,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-0-4'
+PANEL_TAG = 'lotto-ticket-panel-v2-0-5'
 WWW = Path(__file__).parent / 'www'
 FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
 # The user-supplied PNG and locally verified pixel-identical lossless encodings.
@@ -56,10 +57,7 @@ def _review_rows(coordinator) -> list[dict]:
     from .const import AI_METHOD_ID
     from .methods import METHODS_BY_ID, RETIRED_METHOD_LABELS
     from .review import review_name
-    ids = list(getattr(coordinator, 'configured_method_ids', ()))
-    ids.extend(key for key in getattr(coordinator, '_review_summaries', {}) if key not in ids)
-    if getattr(coordinator, 'ai_enabled', False) and AI_METHOD_ID not in ids:
-        ids.append(AI_METHOD_ID)
+    ids = review_method_ids(coordinator)
     rows = []
     for method_id in ids:
         summary = coordinator.review_for_method(method_id) if hasattr(coordinator, 'review_for_method') else {}
@@ -78,14 +76,18 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
     active_round = panel['draw_schedule']['round']
     review = coordinator.review_for_round(active_round) if hasattr(coordinator, 'review_for_round') else {}
     review = review or {'round': active_round, 'status': 'waiting', 'methods': [], 'peer_count': 0}
+    visible_ids = review_method_ids(coordinator)
+    visible = frozenset(visible_ids)
+    review = selected_round_review(review, visible_ids)
     recommendations = []
     if coordinator.data and coordinator.data.analysis.target_round == active_round:
         source_rows = [*coordinator.data.analysis.recommendations]
         if coordinator.data.ai_recommendation:
             source_rows.append(coordinator.data.ai_recommendation)
         recommendations = [row.as_attributes() for row in source_rows
-                           if row.details.get('target_round', active_round) == active_round]
+                           if row.method_id in visible and row.details.get('target_round', active_round) == active_round]
     return {**panel,
+            'selected_method_ids': list(visible_ids),
             'reviews': _review_rows(coordinator),
             'review_round': review,
             'review_storage_error': getattr(coordinator, 'review_storage_error', False),
@@ -107,7 +109,7 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
             'recommendations': recommendations,
             'recommendation_generated_at': coordinator.data.generated_at.isoformat() if coordinator.data else None,
             'generation_sequence': getattr(coordinator, 'local_generation_sequence', 0),
-            'generation_matches':[{'ticket_id':t['ticket_id'],'formula_id':r.method_id,'generation_id':r.details.get('generation_id')} for t in book.tickets.values() if t['round']==round_no for r in (coordinator.data.analysis.recommendations if coordinator.data and coordinator.data.analysis.target_round==round_no else []) if any(tuple(g['numbers'])==r.numbers for g in t['games'])]}
+            'generation_matches':[{'ticket_id':t['ticket_id'],'formula_id':r.method_id,'generation_id':r.details.get('generation_id')} for t in book.tickets.values() if t['round']==round_no for r in (coordinator.data.analysis.recommendations if coordinator.data and coordinator.data.analysis.target_round==round_no else []) if r.method_id in visible if any(tuple(g['numbers'])==r.numbers for g in t['games'])]}
 
 
 @websocket_api.websocket_command({'type': 'lotto_645/purchases_get', vol.Required('entry_id'): str,

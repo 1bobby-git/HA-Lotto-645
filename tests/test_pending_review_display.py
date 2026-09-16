@@ -44,7 +44,8 @@ def view_for(target):
         result_round=1241,data=SimpleNamespace(analysis=models.AnalysisResult(target,target-1,(rec,),{}),
         generated_at=NOW,ai_recommendation=None),result_history=[],winning_summary={'round':1241,'results':[]},
         entry=SimpleNamespace(entry_id='example'),purchase_storage_error=False,
-        review_for_round=pending().round_review,local_generation_sequence=1)
+        review_for_round=pending().round_review,local_generation_sequence=1,
+        configured_method_ids=('uniform_floyd',),ai_enabled=False)
     namespace={'Any':object,'_review_rows':lambda _:[],
                'panel_metadata':lambda *args:{'draw_schedule':{'round':1242}}}
     return production_function('_view',namespace)(owner)
