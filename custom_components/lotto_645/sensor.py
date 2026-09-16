@@ -64,7 +64,7 @@ def _prune_stale_optional_sensor_entities(
         if registry_entry.domain != "sensor" or registry_entry.platform != DOMAIN:
             continue
         unique_id = registry_entry.unique_id
-        managed = unique_id.startswith(method_prefix) or unique_id in optional_singletons
+        managed = (unique_id.startswith(method_prefix) and unique_id != f"{entry.entry_id}_method_guide") or unique_id in optional_singletons
         if managed and unique_id not in active:
             registry.async_remove(registry_entry.entity_id)
 

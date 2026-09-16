@@ -1,6 +1,6 @@
 # 조건 공식 · 조건 지정 균등 생성
 
-[추첨 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
+[추첨 공식 목록](../../README.md#추첨-공식-22종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: constraint_uniform` · 후보 풀: **45개**
 

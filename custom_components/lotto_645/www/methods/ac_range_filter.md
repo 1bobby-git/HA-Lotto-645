@@ -1,6 +1,6 @@
 # 형태 공식 · AC값 7 이상
 
-[추첨 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
+[추첨 공식 목록](../../README.md#추첨-공식-22종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: ac_range_filter` · 분류: 조합 형태 필터 · 후보 풀: **45개**
 

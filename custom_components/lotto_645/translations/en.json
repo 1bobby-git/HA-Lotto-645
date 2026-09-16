@@ -20,8 +20,7 @@
           "recommendations": "Draw formulas, AI, and data source",
           "saju": "Personal Four Pillars profile",
           "purchases": "Purchased tickets: enter / edit",
-          "generation_rules": "Strict generation rules",
-          "personal_lucky": "Personal lucky numbers"
+          "generation_rules": "Strict generation rules"
         }
       },
       "recommendations": {
@@ -105,14 +104,6 @@
           "max_run": "Maximum consecutive run (1-6)",
           "ac_min": "Minimum AC (0-10)"
         }
-      },
-      "personal_lucky": {
-        "title": "Personal lucky numbers",
-        "description": "An entertainment-only local keyword transformation, not prediction or a traditional dream dictionary. No birth date is required. Raw input is not sent to logs or AI. Refresh creates new numbers. Enable Personal lucky numbers under Recommendations.",
-        "data": {
-          "lucky_keyword": "Nickname or keyword (up to 80 characters)",
-          "lucky_theme": "Theme"
-        }
       }
     },
     "error": {
@@ -126,8 +117,7 @@
       "purchase_games_required": "Enter at least one game, or select delete explicitly.",
       "purchase_storage_unavailable": "Could not save. Existing tickets are preserved.",
       "purchase_game_limit": "Enter at most five games (A–E) per draw.",
-      "invalid_generation_rules": "Conflicting or invalid rules. Check the explanation above.",
-      "invalid_lucky_keyword": "Enter a supported theme and a plain keyword of up to 80 characters."
+      "invalid_generation_rules": "Conflicting or invalid rules. Check the explanation above."
     },
     "abort": {
       "purchase_integration_not_ready": "Wait for the integration to finish setup.",

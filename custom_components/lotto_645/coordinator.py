@@ -135,6 +135,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                         self._async_save_consensus(), "lotto-consensus-save",
                     )
         super().async_update_listeners()
+        self.hass.bus.async_fire(DOMAIN + '_updated', {'entry_id': self.entry.entry_id})
 
     async def _async_save_consensus(self) -> None:
         """Coalesce source publications, including updates during a disk write."""

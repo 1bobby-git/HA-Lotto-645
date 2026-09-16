@@ -28,7 +28,7 @@ def _load(name: str) -> types.ModuleType:
     module = importlib.util.module_from_spec(spec)
     sys.modules[full_name] = module
     spec.loader.exec_module(module)
-    return module
+    return sys.modules[full_name]
 
 
 const = _load("const")

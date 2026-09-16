@@ -47,18 +47,15 @@ async def main():
         flow.hass=hass;flow.handler='synthetic-config-entry';flow.flow_id='synthetic-flow'
         menu=await flow.async_step_init()
         assert menu['type']==FlowResultType.MENU
-        assert menu['menu_options']==['recommendations','generation_rules','personal_lucky','saju','purchases']
+        assert menu['menu_options']==['recommendations','generation_rules','saju','purchases']
         serialize_form(await flow.async_step_recommendations())
         serialize_form(await flow.async_step_generation_rules())
-        serialize_form(await flow.async_step_personal_lucky())
         good_rules=await flow.async_step_generation_rules({'fixed':'7', 'excluded':'13', 'odd':'2-4'})
         assert good_rules['type']==FlowResultType.CREATE_ENTRY
         assert good_rules['data']['generation_rules']['fixed']==(7,)
         assert 'selected_methods' not in good_rules['data']
         bad_rules=await flow.async_step_generation_rules({'fixed':'7', 'excluded':'7'})
         assert bad_rules['errors']['base']=='invalid_generation_rules'
-        lucky=await flow.async_step_personal_lucky({'lucky_keyword':'  나의  소망 ', 'lucky_theme':'wish'})
-        assert lucky['data']['lucky_keyword']=='나의 소망'
         bad_vote=await flow.async_step_recommendations({const.CONF_SELECTED_METHODS:['selected_vote_consensus']})
         assert bad_vote['errors']['base']=='consensus_sources_required'
         saju_form=await flow.async_step_saju()
@@ -366,8 +363,6 @@ async def main():
         obj._review_store=actual_review_store
         await obj._save_storage()
         assert not obj._review_dirty and not obj._review_save_error
-        from smoke_historical_validation import verify_historical_validation
-        await verify_historical_validation(hass, obj)
         await hass.async_stop(force=True)
     print('PASS: real HA options menu/forms; Korea-only birthplace dropdown + implicit Asia/Seoul; deselected formula sensor registry pruning; profile save/gating; coordinator manual/AI contracts; purchased ticket storage and draw checks')
 
