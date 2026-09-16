@@ -1,6 +1,6 @@
 # 합의 추천 · 계열별 다수결
 
-[추첨 공식 목록](../../README.md#추첨-공식-24종) · [공통 계산 원리](../FORMULAS.md)
+[추첨 공식 목록](../../README.md#추첨-공식-22종) · [공통 계산 원리](../FORMULAS.md)
 
 `method_id: selected_vote_consensus` · 후보 풀: **0개**
 

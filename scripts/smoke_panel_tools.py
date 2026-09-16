@@ -14,7 +14,7 @@ WWW = ROOT / 'custom_components/lotto_645/www'
 
 def guide_catalog():
     # Import the actual pure catalog, not the HA integration initializer.
-    spec = importlib.util.spec_from_file_location('panel_tools_catalog', WWW.parent / 'methods.py')
+    spec = importlib.util.spec_from_file_location('panel_tools_catalog', WWW.parent / 'lotto_core/methods.py')
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -40,24 +40,33 @@ async def verify_panel_tools(page):
     await page.route('**/lotto_645_static/methods/**', serve_guide)
     await page.wait_for_function('!el._busy')
     await page.evaluate("""catalog => {
-        window.tools=el.shadowRoot.querySelector('lotto-panel-tools');
+        window.tools=el.shadowRoot.querySelector('lotto-panel-tools-v1-21-0');
         window.toolsFixture={...el._latestToolsData,method_catalog:catalog,
             draw_schedule:{round:1242,basis:'regular_schedule',scheduled_at:'2026-09-19T20:35:00+09:00',
                 sales_reopen_at:'2026-09-20T06:00:00+09:00',rollover_at:'2026-09-20T06:00:00+09:00',server_now:new Date().toISOString()},
             winning:{status:'evaluated',round:1241,winning_game_count:0,results:catalog.map(m=>({method_id:m.method_id,sensor_name:m.name,source:'local',recommended_numbers:[1,7,15,24,33,45],prize:'미당첨'}))},
             reviews:catalog.map(m=>({method_id:m.method_id,display_name:'★1.0 · '+m.name,reviewed_rounds:1})),
             review_round:{},result_verification:{status:'official_confirmed'},result_round:1241};
+        // Reconnection refreshes use the same fixture, so layout changes cannot
+        // replace the deliberately populated guide/review tables with old data.
+        const previousWS=el._hass.callWS;
+        el.hass={...el._hass,callWS:async msg=>{
+            if(msg.type==='lotto_645/purchases_get'){
+                requests.push(structuredClone(msg));return structuredClone(toolsFixture);
+            }
+            return previousWS(msg);
+        }};
         el.updateResults(toolsFixture);el._clearSmartSync();el.showScreen('home');
         window.wsBeforeTools=requests.length;
     }""", catalog)
     assert await page.locator('#predictions .method-info-trigger').count() == len(catalog)
     assert await page.locator('#reviews .method-info-trigger').count() == len(catalog)
-    assert await page.locator('lotto-panel-tools').count() == 1
+    assert await page.locator('lotto-panel-tools-v1-21-0').count() == 1
     assert await page.locator('.hero-draw-countdown').is_visible()
     assert '제 1,242회 추첨까지' in await page.locator('.hero-clock-label').text_content()
     assert '동행복권 정규 일정 기준' in await page.locator('.hero-clock-date').text_content()
-    assert not await page.locator('lotto-panel-tools .countdown').is_visible()
-    assert await page.locator('lotto-panel-tools').evaluate('n=>n.getBoundingClientRect().height===0')
+    assert not await page.locator('lotto-panel-tools-v1-21-0 .countdown').is_visible()
+    assert await page.locator('lotto-panel-tools-v1-21-0').evaluate('n=>n.getBoundingClientRect().height===0')
     await page.evaluate("el.showScreen('review')")
 
     # Test unpositioned, sidebar-offset HA layouts as well as a positioned box.
@@ -72,6 +81,11 @@ async def verify_panel_tools(page):
         document.body.append(viewport);inline.append(el);
         el._clearSmartSync();el.showScreen('review');
     }""")
+    # The two fixture moves above run real disconnect/connect callbacks.
+    # Allow their read-only refreshes, then keep the no-layout/no-timer-I/O gate.
+    await page.wait_for_function('!el._busy && !el._livePending && !el._liveQueued')
+    assert await page.evaluate("requests.slice(wsBeforeTools).every(r=>r.type==='lotto_645/purchases_get')")
+    await page.evaluate('wsBeforeTools=requests.length;el._clearSmartSync()')
     for width in (320,390,560,615,870,871,1366):
         await page.set_viewport_size({'width':width,'height':900})
         await page.evaluate('(narrow)=>{el.narrow=narrow;el.scrollTop=0}', width <= 870)
@@ -152,7 +166,7 @@ async def verify_panel_tools(page):
     # Explicit instants: count reaches zero at draw time, remains zero until the
     # Sunday 06:00 sales boundary, then starts the following-round countdown.
     result = await page.evaluate("""async () => {
-        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=1.11.10');
+        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=1.21.0');
         const s=toolsFixture.draw_schedule;
         const prior=countdownState(s,Date.parse(s.scheduled_at)-1000);
         const at=countdownState(s,Date.parse(s.scheduled_at));

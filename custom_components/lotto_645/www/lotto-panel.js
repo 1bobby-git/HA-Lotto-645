@@ -1,7 +1,5 @@
-import { installPortfolioTools } from './lotto-panel-portfolio.js?v=1.20.0';
 /* UI entry point: two-tier Home Assistant header plus demand-driven panel synchronization. */
-import './lotto-panel-core.js?v=1.15.0';
-import { installResearchTools } from './lotto-panel-research.js?v=1.18.0';
+import { PANEL_TAG } from './lotto-panel-core.js?v=1.21.0';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const PANEL_SYNC_INTERVAL = 60_000;
@@ -126,7 +124,7 @@ function msUntilPublicationWindow(now = Date.now()) {
   return Math.max(1000, target - shifted.getTime());
 }
 
-const Panel = customElements.get('lotto-ticket-panel');
+const Panel = customElements.get(PANEL_TAG);
 if (!Panel) throw new Error('lotto-ticket-panel controller did not register');
 
 Panel.prototype._hasPendingFutureDraw = function () {
@@ -231,9 +229,7 @@ Panel.prototype._start = function (...args) {
   return value;
 };
 
-const baseConnected = Panel.prototype.connectedCallback;
-Panel.prototype.connectedCallback = function (...args) {
-  const value = baseConnected.apply(this, args);
+Panel.prototype._onLottoConnected = function () {
   if (!this._smartVisibilityHandler) {
     this._smartVisibilityHandler = () => {
       if (!document.hidden) this._resumePanelSync();
@@ -244,11 +240,9 @@ Panel.prototype.connectedCallback = function (...args) {
     window.addEventListener('focus', this._smartFocusHandler);
     window.addEventListener('pageshow', this._smartPageShowHandler);
   }
-  return value;
 };
 
-const baseDisconnected = Panel.prototype.disconnectedCallback;
-Panel.prototype.disconnectedCallback = function (...args) {
+Panel.prototype._onLottoDisconnected = function () {
   if (this._smartVisibilityHandler) {
     document.removeEventListener('visibilitychange', this._smartVisibilityHandler);
     window.removeEventListener('focus', this._smartFocusHandler);
@@ -258,7 +252,6 @@ Panel.prototype.disconnectedCallback = function (...args) {
     this._smartPageShowHandler = null;
   }
   this._clearSmartSync();
-  return baseDisconnected.apply(this, args);
 };
 
 const baseUpdateResults = Panel.prototype.updateResults;
@@ -316,6 +309,8 @@ Panel.prototype.render = function (...args) {
   return value;
 };
 
-installResearchTools(Panel);
 
-installPortfolioTools(Panel);
+
+// Keep subscriptions independent of Saturday result polling.
+import { installLiveSync } from './lotto-panel-live.js?v=1.21.0';
+installLiveSync(Panel);

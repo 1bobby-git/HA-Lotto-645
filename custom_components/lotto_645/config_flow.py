@@ -253,7 +253,7 @@ class Lotto645OptionsFlow(OptionsFlow):
         del user_input
         return self.async_show_menu(
             step_id="init",
-            menu_options=["recommendations", "generation_rules", "personal_lucky", "saju", "purchases"],
+            menu_options=["recommendations", "generation_rules", "saju", "purchases"],
         )
 
     async def async_step_recommendations(
@@ -345,37 +345,6 @@ class Lotto645OptionsFlow(OptionsFlow):
             errors=errors, description_placeholders={"detail": detail},
         )
 
-    async def async_step_personal_lucky(self, user_input=None) -> ConfigFlowResult:
-        """Keyword stays in local options; no date of birth or external AI required."""
-        from .personal_lucky import KEYWORD_KEY, THEME_KEY, normalize_keyword, THEMES
-
-        values = {KEYWORD_KEY: self._options.get(KEYWORD_KEY, "행운"),
-                  THEME_KEY: self._options.get(THEME_KEY, "keyword")}
-        errors = {}
-        if user_input is not None:
-            values.update(user_input)
-            try:
-                keyword = normalize_keyword(values[KEYWORD_KEY])
-                if values[THEME_KEY] not in THEMES:
-                    raise ValueError("Unknown theme")
-                pending = dict(self._options)
-                pending.update({KEYWORD_KEY: keyword, THEME_KEY: values[THEME_KEY]})
-                return self.async_create_entry(title="", data=pending)
-            except (TypeError, ValueError):
-                # Never log or echo the user's raw keyword in an exception.
-                errors["base"] = "invalid_lucky_keyword"
-        return self.async_show_form(
-            step_id="personal_lucky",
-            data_schema=vol.Schema({
-                vol.Required(KEYWORD_KEY, default=str(values[KEYWORD_KEY])): selector.TextSelector(),
-                vol.Required(THEME_KEY, default=str(values[THEME_KEY])): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=[
-                        {"value": "keyword", "label": "별명·키워드"},
-                        {"value": "dream", "label": "꿈 키워드 (재미용)"},
-                        {"value": "wish", "label": "소망 키워드 (재미용)"},
-                    ], mode=selector.SelectSelectorMode.DROPDOWN)),
-            }), errors=errors,
-        )
 
     async def async_step_saju(
         self, user_input: dict[str, Any] | None = None

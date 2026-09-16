@@ -1,8 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows } from './lotto-panel-view.js?v=1.15.0';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows } from './lotto-panel-view.js?v=1.21.0';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
+export const PANEL_TAG = 'lotto-ticket-panel-v1-21-0';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -20,7 +21,7 @@ class LottoTicketPanel extends HTMLElement {
     this._visibleGames=1; this._walletData=null; this._cameraGeneration=0;
   }
   set hass(value) { this._hass=value; this.syncTheme(); this._start(); }
-  set panel(value) { this._panel=value; this._start(); }
+  set panel(value) { this._panel=value; this._start(); this._syncEntryOptions?.(); }
   connectedCallback() {
     this._visibility=()=>{if(document.hidden)this.stopCamera();};
     this._beforeUnload=e=>{if(this._editing&&this.node('editor')?.open){e.preventDefault();e.returnValue='';}};
@@ -28,13 +29,14 @@ class LottoTicketPanel extends HTMLElement {
     window.addEventListener('beforeunload',this._beforeUnload);
     this._themeMedia=window.matchMedia('(prefers-color-scheme: dark)');
     this._themeListener=()=>this.syncTheme(); this._themeMedia.addEventListener('change',this._themeListener);
-    this.syncTheme(); this._start();
+    this.syncTheme(); this._start(); this._onLottoConnected?.();
   }
   disconnectedCallback() {
+    this._onLottoDisconnected?.();
     document.removeEventListener('visibilitychange',this._visibility);
     window.removeEventListener('beforeunload',this._beforeUnload);
     this._themeMedia?.removeEventListener('change',this._themeListener);
-    this.stopCamera(); clearInterval(this._poll); this._poll=null;
+    this.stopCamera(); clearInterval(this._poll); this._poll=null; this._requestEpoch=(this._requestEpoch||0)+1;
     // Never retain an invisible top-layer dialog after HA navigates elsewhere.
     if(this.node('editor')?.open)this.node('editor').close();
     this.removeAttribute('data-editor-open');
@@ -60,7 +62,12 @@ class LottoTicketPanel extends HTMLElement {
   async request(type,extra={}) {
     const entry=this.node('entry').value;
     if(!entry)throw new Error('사용할 로또 통합이 없어요. 통합 설정을 확인해 주세요.');
-    return this._hass.callWS({type:`lotto_645/${type}`,entry_id:entry,...extra});
+    const epoch=this._requestEpoch||0;
+    const data=await this._hass.callWS({type:`lotto_645/${type}`,entry_id:entry,...extra});
+    if(!this.isConnected || epoch!==(this._requestEpoch||0) || entry!==this.node('entry')?.value) {
+      const error=new Error('이전 통합의 응답입니다.');error.code='stale_response';throw error;
+    }
+    return data;
   }
   async operation(action,background=false) {
     if(this._busy)return;
@@ -71,12 +78,14 @@ class LottoTicketPanel extends HTMLElement {
     if(!background)this.node('editor')?.setAttribute('aria-busy','true');
     try { await action(); }
     catch(error) {
+      if(error?.code==='stale_response')return;
       this.message(error?.message||'작업을 완료하지 못했어요. 다시 시도해 주세요.',true);
-      if(background){this.node('connection').dataset.online='false';this.node('connection').textContent='연결 확인 필요';this.node('sync-status').textContent='자동 확인 실패 · 다시 확인해 주세요';}
+      if(background){if(error?.code==='unavailable')this._scheduleLiveRetry?.();this.node('connection').dataset.online='false';this.node('connection').textContent='연결 확인 필요';this.node('sync-status').textContent='자동 확인 실패 · 다시 확인해 주세요';}
     } finally {
       this._busy=false;controls.forEach((n,i)=>n.disabled=disabled[i]);
       this.node('editor')?.removeAttribute('aria-busy');this.syncAvailability();
       if(this._focusAfter){const id=this._focusAfter;this._focusAfter=null;this.node(id)?.focus();}
+      this._drainLiveRefresh?.();
       if(this._returnFocusPending){this._returnFocusPending=false;this._opener?.focus();}
     }
   }
@@ -98,8 +107,9 @@ class LottoTicketPanel extends HTMLElement {
     for(const button of this.shadowRoot.querySelectorAll('[data-register]'))button.onclick=()=>this.openEditor('import');
     this.node('entry').onchange=()=>{
       if(this._editing&&!window.confirm('저장하지 않은 번호를 버리고 로또 통합을 변경할까요?')){this.node('entry').value=this._activeEntry;return;}
-      this._activeEntry=this.node('entry').value;this.stopCamera();
-      this.operation(async()=>{this._editing=false;this._walletData=null;this._walletRound=null;this._loadedRound=null;await this.load();});
+      this._activeEntry=this.node('entry').value;this._requestEpoch=(this._requestEpoch||0)+1;this.stopCamera();this._ensureLiveSubscription?.();
+      this._editing=false;this._walletData=null;this._walletRound=null;this._loadedRound=null;
+      this._queueLiveRefresh?.(true);
     };
     this.node('check').onclick=()=>this.operation(async()=>{
       this.message('새 추첨 결과를 확인하고 있어요.');this.updateResults(await this.request('result_check'));
@@ -162,12 +172,12 @@ class LottoTicketPanel extends HTMLElement {
     this.node('wallet-round').disabled=!this._walletData||this._busy;
   }
   showScreen(name,focus=false) {
-    if(!['home','wallet','review','validation'].includes(name))return;
-    for(const key of ['home','wallet','review','validation']){const selected=key===name;const tab=this.node(`tab-${key}`);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;this.node(`screen-${key}`).hidden=!selected;}
+    if(!['home','wallet','review'].includes(name))return;
+    for(const key of ['home','wallet','review']){const selected=key===name;const tab=this.node(`tab-${key}`);tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;this.node(`screen-${key}`).hidden=!selected;}
     this._screen=name;this.scrollTop=0;if(focus)this.node(`tab-${name}`).focus();
   }
   onTabKey(e) {
-    const keys=['home','wallet','review','validation'],index=keys.indexOf(e.currentTarget.dataset.screen);
+    const keys=['home','wallet','review'],index=keys.indexOf(e.currentTarget.dataset.screen);
     let next;if(e.key==='ArrowRight')next=(index+1)%keys.length;else if(e.key==='ArrowLeft')next=(index+keys.length-1)%keys.length;else if(e.key==='Home')next=0;else if(e.key==='End')next=keys.length-1;else return;
     e.preventDefault();this.showScreen(keys[next],true);
   }
@@ -262,6 +272,12 @@ class LottoTicketPanel extends HTMLElement {
   }
   updateResults(data) {
     const draw=data.draw,meta=data.result_verification||{};
+    const currentRows=(data.recommendations||[]).map(row=>({method_id:row.method_id,
+      sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[],prize:'추첨 대기'}));
+    renderPredictionRows(this.node('current-recommendations'),currentRows,['생성된 추천번호가 없어요.','설정에서 공식을 선택하고 번호를 생성하세요.']);
+    this.node('current-title').textContent=data.recommendation_target?`${data.recommendation_target}회 추천번호`:'이번 회차 추천번호';
+    this.node('current-count').textContent=`${currentRows.length}개 공식`;
+    this.node('current-meta').textContent=currentRows.length?'선택한 공식의 최신 생성번호 · 내 복권 등록 및 이전 회차 결과와 별도':'추천번호 생성 후 자동으로 표시됩니다.';
     this._targetRound=Number(data.recommendation_target)||this._targetRound;
     this.node('drawtitle').textContent=data.result_round?formatRound(data.result_round):'결과 발표 대기';
     const numbers=this.node('numbers');numbers.removeAttribute('role');numbers.removeAttribute('aria-label');
@@ -356,4 +372,6 @@ class LottoTicketPanel extends HTMLElement {
   }
   stopCamera(){this._cameraGeneration=(this._cameraGeneration||0)+1;clearTimeout(this._scanTimer);if(this._stream){this._stream.getTracks().forEach(t=>t.stop());this._stream=null;}if(this.node('video'))this.node('video').srcObject=null;if(this.node('camera'))this.node('camera').hidden=true;}
 }
-if(!customElements.get('lotto-ticket-panel')) customElements.define('lotto-ticket-panel',LottoTicketPanel);
+if(!customElements.get(PANEL_TAG)) customElements.define(PANEL_TAG,LottoTicketPanel);
+// Compatibility alias only on fresh pages. HA uses the versioned element.
+if(!customElements.get('lotto-ticket-panel')) customElements.define('lotto-ticket-panel', class extends customElements.get(PANEL_TAG) {});

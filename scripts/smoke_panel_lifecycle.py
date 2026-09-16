@@ -13,7 +13,7 @@ async def check_panel_lifecycle(hass):
     registry=SimpleNamespace(async_get_entry=lambda key:entries.get(key))
     expected_handlers = {
         p.purchases_get, p.qr_preview, p.purchases_save, p.result_check,
-        p.historical_validate, p.historical_validation_state, p.historical_validation_import,
+        p.subscribe_updates,
     }
     with patch.object(hass,'http',http,create=True), patch.object(hass,'config_entries',registry), patch.object(p.websocket_api,'async_register_command',Mock()) as register:
         await asyncio.gather(*(p.async_register_ticket_panel(hass,entries['one']) for _ in range(2)))
@@ -43,7 +43,7 @@ async def check_panel_lifecycle(hass):
         assert http.async_register_static_paths.await_count==2
         assert register.call_count == len(expected_handlers)
         p.async_remove_ticket_panel(hass,'two',permanent=True)
-    print('PASS: real HA panel survives reload, registers all seven commands once including confirmed validation import, keeps admin access and avoids duplicate HTTP routes')
+    print('PASS: real HA panel survives reload, registers all five commands once including live subscription, keeps admin access and avoids duplicate HTTP routes')
 
 
 if __name__ == '__main__':

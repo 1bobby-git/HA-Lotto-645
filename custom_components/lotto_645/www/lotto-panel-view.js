@@ -17,27 +17,6 @@ export const icons = {
   check: svg('<path d="m5 12 4 4L19 6"/>'),
 };
 
-export const validationTemplate = `
-<section id="screen-validation" class="screen" role="tabpanel" aria-labelledby="tab-validation" tabindex="0" hidden>
- <div class="page-heading"><div><div class="kicker">HISTORICAL VALIDATION</div><h1>과거 회차 검증</h1><p>그 회차의 결과를 모르는 조건으로 다시 생성하고 대조합니다.</p></div></div>
- <div class="validation-notice"><strong>검증용 결과입니다. 실제 추천과 리뷰는 그대로 유지됩니다.</strong>선택한 회차와 이후 회차의 당첨번호는 생성에 사용하지 않습니다. 현재 버전 공식을 다시 실행하는 시뮬레이션이며, 그때 실제로 저장한 추천을 바꾸지 않습니다.</div>
- <form id="validation-form" class="validation-form">
-  <div class="validation-fields"><div><label for="validation-round">검증할 과거 회차</label><input id="validation-round" type="number" inputmode="numeric" min="31" max="31" step="1" required aria-describedby="validation-range validation-cutoff"><p id="validation-range" class="validation-help">공식 이력을 확인하고 있습니다.</p></div></div>
-  <p id="validation-cutoff" class="validation-help"></p>
-  <details class="validation-settings"><summary>검증할 추첨 공식 <span id="validation-method-count"></span></summary><button id="validation-defaults" class="validation-defaults" type="button">현재 통합 설정으로 선택</button><p class="validation-help">이곳의 선택은 검증에만 적용됩니다. 합의 추천은 여기서 선택한 다른 로컬 공식 2개 이상으로 계산합니다. AI는 CCSS 번호만 검증하며 AI를 호출하지 않습니다.</p><div id="validation-choices" class="validation-choices"></div></details>
-  <button id="validation-run" class="primary" type="submit" disabled>검증번호 생성·당첨 확인</button>
-  <p id="validation-status" class="validation-status" role="status" aria-live="polite" aria-atomic="true"></p>
- </form>
- <section id="validation-output" class="validation-output" aria-labelledby="validation-title" hidden>
-  <h2 id="validation-title" tabindex="-1"></h2><p id="validation-meta" class="validation-help"></p>
-  <div class="validation-draw"><span class="validation-help">해당 회차 당첨번호</span><span id="validation-draw" class="draw-numbers"></span></div>
-  <p id="validation-summary" class="review-note"></p>
-  <div class="table-scroll"><table class="mobile-table" role="table"><caption class="sr-only">과거 검증용 추첨 공식, 새로 생성한 번호와 당첨 비교. 실제 추천 및 리뷰와 별도입니다.</caption><thead role="rowgroup"><tr role="row"><th scope="col">추첨 공식</th><th scope="col">검증번호</th><th scope="col">검증 결과</th></tr></thead><tbody id="validation-results" role="rowgroup"></tbody></table></div>
-  <details class="validation-audit"><summary>데이터 경계·실행 정보</summary><p id="validation-audit-text"></p><code id="validation-hash"></code></details>
-  <p id="validation-notice" class="validation-help"></p>
- </section>
-</section>`;
-
 export const panelTemplate = `<style>
 :host {
   /* handle_safe_area=true: this panel owns the insets. HA values (including
@@ -210,7 +189,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
       <span class="header-label">나의 로또, 한곳에</span>
       <div class="header-tools"><span id="connection" class="connection" data-online="false">연결 확인 중</span><div id="entry-field" class="entry-field" hidden><label for="entry" class="sr-only">로또 통합 선택</label><select id="entry"></select></div><a class="settings" href="/config/integrations/integration/lotto_645" aria-label="로또 통합 및 센서 설정">${icons.settings}</a></div>
     </div>
-    <div class="wrap"><div class="main-tabs" role="tablist" aria-label="로또 관리 화면"><button id="tab-home" type="button" role="tab" aria-selected="true" aria-controls="screen-home" data-screen="home">한눈에</button><button id="tab-wallet" type="button" role="tab" aria-selected="false" aria-controls="screen-wallet" tabindex="-1" data-screen="wallet">내 복권</button><button id="tab-review" type="button" role="tab" aria-selected="false" aria-controls="screen-review" tabindex="-1" data-screen="review">추천 리뷰</button><button id="tab-validation" type="button" role="tab" aria-selected="false" aria-controls="screen-validation" tabindex="-1" data-screen="validation">과거 검증</button></div></div>
+    <div class="wrap"><div class="main-tabs" role="tablist" aria-label="로또 관리 화면"><button id="tab-home" type="button" role="tab" aria-selected="true" aria-controls="screen-home" tabindex="0" data-screen="home">한눈에</button><button id="tab-wallet" type="button" role="tab" aria-selected="false" aria-controls="screen-wallet" tabindex="-1" data-screen="wallet">내 복권</button><button id="tab-review" type="button" role="tab" aria-selected="false" aria-controls="screen-review" tabindex="-1" data-screen="review">추천 리뷰</button></div></div>
   </header>
   <main class="wrap">
     <section id="screen-home" class="screen" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
@@ -220,7 +199,12 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
         <div class="draw-foot"><div class="result-copy"><span class="caption">구매·추천번호 대조</span><strong id="result">저장한 번호를 확인하고 있어요.</strong></div><button id="check" type="button">${icons.refresh}다시 확인</button></div>
         <details class="draw-details"><summary>결과 확인 기준과 출처</summary><p>속보 결과는 공식 이력이 확인되면 다시 대조합니다. 출처가 서로 다르면 판정을 보류합니다. 결과 발표나 수신이 늦어질 수 있습니다.</p><div id="sources"></div></details>
       </section>
-      <div class="dashboard-grid">
+     <section class="review-section" aria-labelledby="current-title">
+ <div class="section-head"><h2 id="current-title">이번 회차 추천번호</h2><span id="current-count" class="pill"></span></div>
+ <p id="current-meta" class="review-note" role="status" aria-live="polite"></p>
+ <div class="table-scroll"><table class="mobile-table"><caption class="sr-only">현재 선택한 공식의 추천번호. 구매번호 및 이전 회차 당첨 대조와 별도입니다.</caption><thead><tr><th scope="col">추첨 공식</th><th scope="col">번호</th><th scope="col">상태</th></tr></thead><tbody id="current-recommendations"></tbody></table></div>
+</section>
+ <div class="dashboard-grid">
         <section aria-labelledby="home-wallet-heading"><div class="section-heading"><h2 id="home-wallet-heading">내 복권</h2><button type="button" data-go="wallet">전체 보기${icons.arrow}</button></div>
           <div class="ticket-paper"><div class="paper-top"><span class="paper-label">${icons.ticket}<span id="mini-round">보관한 복권</span></span><span id="mini-count" class="paper-meta">불러오는 중</span></div><div id="mini-games" class="ticket-list"></div><div class="paper-bottom"><span>등록한 번호는 결과 발표 후 자동 대조해요.</span><button type="button" data-go="wallet">복권 관리${icons.arrow}</button></div></div>
           <p class="small-print">${icons.lock}<span>내 번호는 Home Assistant에 보관해요. 실제 복권은 별도로 보관해 주세요.</span></p>
@@ -240,7 +224,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
       <section class="review-block" aria-labelledby="reviews-heading"><div class="section-heading"><h2 id="reviews-heading">공식별 누적 리뷰</h2></div><p id="reviewstatus" class="review-note"></p><div class="table-scroll"><table class="mobile-table" role="table"><caption class="sr-only">추첨 공식별 누적 별점, 평가 회차, 이번 점수, 정확 일치와 인접 번호, 순위</caption><thead role="rowgroup"><tr role="row"><th scope="col">추첨 공식 / 누적 별점</th><th scope="col">평가 회차</th><th scope="col">이번 점수</th><th scope="col">정확 / ±1</th><th scope="col">순위</th></tr></thead><tbody id="reviews" role="rowgroup"></tbody></table></div></section>
       <details class="review-footnote"><summary>리뷰 점수는 이렇게 해석해 주세요</summary><p>공식 확인 회차의 평균 점수 ÷ 20이 누적 별점입니다. ±1은 비슷한 번호일 뿐 당첨이 아닙니다. 속보 점수는 잠정이며 누적 평균과 분리합니다. 표본이 적은 별점이나 과거 결과는 미래 당첨 가능성을 뜻하지 않습니다.</p></details></div>
     </section>
-    ${validationTemplate}
+
     <footer class="footer"><span>이 화면은 번호 관리·대조용입니다. 실제 구매나 당첨금 지급을 인증하지 않습니다.</span><span id="sync-status" class="sync">Home Assistant 연결 확인 중</span></footer>
   </main>
 </div>

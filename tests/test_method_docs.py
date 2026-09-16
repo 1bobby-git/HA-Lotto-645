@@ -17,11 +17,11 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENT = ROOT / 'custom_components/lotto_645'
 GUIDES = ROOT / 'docs/methods'
-ANALYSIS = ast.parse((COMPONENT / 'analysis.py').read_text(encoding='utf-8'))
+ANALYSIS = ast.parse((COMPONENT / 'lotto_core/analysis.py').read_text(encoding='utf-8'))
 
 
 def catalog() -> list[dict]:
-    tree = ast.parse((COMPONENT / 'methods.py').read_text(encoding='utf-8'))
+    tree = ast.parse((COMPONENT / 'lotto_core' / 'methods.py').read_text(encoding='utf-8'))
     constants = {
         node.target.id: ast.literal_eval(node.value)
         for node in tree.body
@@ -73,7 +73,7 @@ DOCUMENTS = [ROOT / 'README.md', ROOT / 'docs/FORMULAS.md',
 def test_readme_has_no_changelog_or_version_history():
     text = (ROOT / 'README.md').read_text(encoding='utf-8')
     assert not re.search(r'^#{1,6}\s+v?\d+\.\d+\.\d+', text, re.MULTILINE)
-    assert '## 추첨 공식 24종' in text
+    assert '## 추첨 공식 22종' in text
     assert 'changelog' not in text.lower()
     assert not list(ROOT.glob('CHANGELOG*.md'))
     assert not (ROOT / 'docs/RELEASE_V110_CHECKLIST.md').exists()
@@ -106,7 +106,7 @@ def test_method_metadata_and_weight_tables_match_source(method):
     for key, value in method['weights'].items():
         assert actual[key] == pytest.approx(value), (path, key)
     assert '계산 예시' in text and '확률' in text and '구현 근거' in text
-    assert '../../README.md#추첨-공식-24종' in text
+    assert '../../README.md#추첨-공식-22종' in text
     assert '../FORMULAS.md' in text
 
 
@@ -135,7 +135,7 @@ def load_pure_function(name: str):
     module = ast.Module(body=[ast.ImportFrom(module='__future__',
                          names=[ast.alias(name='annotations')], level=0), node], type_ignores=[])
     namespace = {'math': math, 'Counter': Counter, 'DRAW_SIZE': 6, 'NUMBER_PROBABILITY': 6 / 45}
-    exec(compile(ast.fix_missing_locations(module), str(COMPONENT / 'analysis.py'), 'exec'), namespace)
+    exec(compile(ast.fix_missing_locations(module), str(COMPONENT / 'lotto_core/analysis.py'), 'exec'), namespace)
     return namespace[name]
 
 

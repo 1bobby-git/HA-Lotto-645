@@ -3,7 +3,7 @@ import importlib.util
 from pathlib import Path
 import sys
 ROOT=Path(__file__).resolve().parents[1]
-spec=importlib.util.spec_from_file_location('cleanup_methods',ROOT/'custom_components/lotto_645/methods.py')
+spec=importlib.util.spec_from_file_location('cleanup_methods',ROOT/'custom_components/lotto_645/lotto_core/methods.py')
 m=importlib.util.module_from_spec(spec);sys.modules[spec.name]=m;spec.loader.exec_module(m)
 
 

@@ -13,12 +13,10 @@ from test_analysis_engine import methods, models, analysis, _history
 from test_consensus import row, payload, sample
 
 rules = importlib.import_module('custom_components.lotto_645.constraints')
-portfolio = importlib.import_module('custom_components.lotto_645.portfolio')
-lucky = importlib.import_module('custom_components.lotto_645.personal_lucky')
 vote = importlib.import_module('custom_components.lotto_645.voting_consensus')
 consensus = importlib.import_module('custom_components.lotto_645.consensus')
 cache = importlib.import_module('custom_components.lotto_645.formula_cache')
-CID, LID, VID = 'constraint_uniform', 'personal_lucky', 'selected_vote_consensus'
+CID, VID = 'constraint_uniform', 'selected_vote_consensus'
 A, B = 'uniform_fisher_yates', 'uniform_floyd'
 
 
@@ -82,8 +80,6 @@ def test_cooperative_cancel_does_not_return_partial_success():
     def stop(*_): raise RuntimeError('cancelled')
     with pytest.raises(RuntimeError,match='cancelled'):
         rules.generate(checkpoint=stop)
-    with pytest.raises(RuntimeError,match='cancelled'):
-        portfolio.generate_portfolio(list(range(1,10)),3,mode='wheel9',checkpoint=stop)
 
 
 @pytest.mark.parametrize('seed',range(8))
@@ -96,70 +92,16 @@ def test_constraints_always_apply_and_blocked_combos_not_reused(seed):
     assert again!=ticket
 
 
-def test_portfolio_counts_exclusions_rules_and_coverage_metrics():
-    r=rules.Rules.parse({'fixed':[7],'excluded':[13],'odd':[2,4]})
-    out=portfolio.generate_portfolio(range_list:=list(range(1,16)),5,rules=r,max_overlap=4,rng=random.Random(2))
-    tickets=[tuple(t) for t in out['tickets']]
-    assert len(tickets)==5 and len(set(tickets))==5
-    assert all(not rules.violations(t,r) for t in tickets)
-    assert all(len(set(a)&set(b))<=4 for a,b in combinations(tickets,2))
-    assert out['triple_coverage']==len({t for row in tickets for t in combinations(row,3)})
-    assert not out['saved_as_purchase'] and not out['global_optimality_proven']
-    assert range_list==list(range(1,16))
 
 
-@pytest.mark.parametrize('mode',['balanced','coverage'])
-def test_large_pool_does_not_claim_exact_conditional_verification(mode):
-    out=portfolio.generate_portfolio(list(range(1,46)),2,mode=mode,rng=random.Random(7))
-    assert len(out['tickets'])==2
-    assert out['verification_complete'] is False
-    assert out['conditional_min_match']=={} and out['counterexample_count'] is None
 
 
-@pytest.mark.parametrize('seed',range(6))
-def test_wheel9_exact_conditional_minima_independent_check(seed):
-    pool=[1,5,10,15,20,25,30,35,45]
-    out=portfolio.generate_portfolio(pool,3,mode='wheel9',max_overlap=3,rng=random.Random(seed))
-    assert out['maximum_overlap']==3 and out['verification_complete']
-    assert set(out['number_usage'].values())=={2}
-    assert out['conditional_min_match']['4']==3
-    assert out['conditional_min_match']['6']==4
-    for k,total,want in [(4,126,3),(6,84,4)]:
-        seen=0
-        for subset in combinations(pool,k):
-            assert max(len(set(subset)&set(row)) for row in out['tickets']) >= want
-            seen+=1
-        assert seen==total
 
 
-@pytest.mark.parametrize('kwargs,code',[
-    ({'ticket_count':6},'invalid_count'), ({'ticket_count':True},'invalid_count'),
-    ({'ticket_count':5,'mode':'wheel9'},'invalid_wheel'),
-    ({'ticket_count':3,'mode':'wheel9','max_overlap':2},'infeasible_rules'),
-    ({'ticket_count':3,'mode':'wheel9','rules':{'fixed':[1]}},'infeasible_rules'),
-    ({'ticket_count':2,'rules':{'fixed':[1,2]},'max_overlap':1},'conflicting_rules'),
-])
-def test_portfolio_invalid_constraints_never_change_budget(kwargs,code):
-    with pytest.raises(rules.ConstraintError) as e:
-        portfolio.generate_portfolio(list(range(1,10)),**kwargs)
-    assert e.value.code==code
 
 
-def test_fully_blocked_wheel_does_not_emit_altered_unverified_tickets():
-    pool=list(range(1,10));blocked=list(combinations(pool,6))
-    with pytest.raises(rules.ConstraintError) as e:
-        portfolio.generate_portfolio(pool,3,mode='wheel9',blocked=blocked)
-    assert e.value.code=='infeasible_rules'
 
 
-def test_keyword_normalization_fresh_nonce_and_reproducible_test_rng():
-    assert lucky.normalize_keyword('  나의   소망 ')== '나의 소망'
-    first=lucky.generate('행운',target_round=100,rng=random.Random(1))
-    assert lucky.generate('행운',target_round=100,rng=random.Random(1))==first
-    assert lucky.generate('행운',target_round=100,rng=random.Random(2))!=first
-    assert lucky.generate('행운',target_round=100,rng=random.Random(1),blocked=[first])!=first
-    with pytest.raises(ValueError): lucky.normalize_keyword('x'*81)
-    with pytest.raises(ValueError): lucky.normalize_keyword('x\x00y')
 
 
 def test_family_weighting_and_optimal_allowed_vote_sum():
@@ -187,35 +129,8 @@ def test_votes_are_reactive_and_do_not_change_legacy_median():
     assert waiting.summary[VID]['status']=='waiting_for_sources'
 
 
-def test_new_sampling_build_cache_rules_and_no_raw_keyword_leak():
-    history=_history(30);ids=(CID,LID,A,VID);options={'generation_rules':{'fixed':[7],'excluded':[13],'odd':[2,4]},'lucky_keyword':'PRIVATE_KEYWORD_TEST','lucky_theme':'dream'}
-    out=analysis.build_analysis(history,ids,formula_options=options,rng=random.Random(9))
-    assert len(out.recommendations)==4
-    assert not rules.violations(out.recommendation_by_method(CID).numbers,rules.Rules.parse(options['generation_rules']),history[-1].numbers)
-    assert 'PRIVATE_KEYWORD_TEST' not in json.dumps([r.as_attributes() for r in out.recommendations])
-    assert 'PRIVATE_KEYWORD_TEST' not in json.dumps(out.summary)
-    stored=cache.store_tickets(out,history,ids,0,options)
-    restored=cache.restore_tickets(stored,history,ids,0,options)
-    assert set(restored)=={CID,LID,A}
-    assert cache.restore_tickets(stored,history,ids,0,{**options,'lucky_keyword':'changed'})=={}
-    assert cache.restore_tickets(stored,history,ids,0,{**options,'generation_rules':{'fixed':[8]}})=={}
-    corrupted=json.loads(json.dumps(stored));corrupted['tickets'][CID]=[1,2,3,4,5,6]
-    assert cache.restore_tickets(corrupted,history,ids,0,options)=={}
-    assert 'formula_options_digest' not in cache.cache_key(history,(A,),0,options)
-    again=analysis.build_analysis(history,ids,restored_tickets=restored,formula_options=options,rng=random.Random(10))
-    assert [r.numbers for r in again.recommendations]==[r.numbers for r in out.recommendations]
 
 
-def test_target_and_future_never_influence_new_formula_generation():
-    hv=importlib.import_module('custom_components.lotto_645.historical_validation')
-    history=_history(33);ids=(CID,LID,A,VID)
-    options={'generation_rules':{'fixed':[7],'carryover':[0,1]},'lucky_keyword':'prefix_only'}
-    first=hv.run_historical_validation(history,31,ids,formula_options=options,rng=random.Random(12))
-    altered=history[:30]+[replace(d,numbers=(1,2,3,4,5,6),bonus=45) for d in history[30:]]
-    second=hv.run_historical_validation(altered,31,ids,formula_options=options,rng=random.Random(12))
-    assert first['training_sha256']==second['training_sha256']
-    assert [r['recommended_numbers'] for r in first['results']]==[r['recommended_numbers'] for r in second['results']]
-    assert not first['persisted'] and not first['counts_toward_reviews']
 
 
 def test_vote_timestamp_filled_once_and_corrupted_self_is_not_a_source():

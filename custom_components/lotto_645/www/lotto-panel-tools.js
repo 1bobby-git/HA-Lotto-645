@@ -1,5 +1,5 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '1.15.0';
+const VERSION = '1.21.0';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
 const REPO = `https://github.com/1bobby-git/HA-Lotto-645/blob/v${VERSION}/`;
@@ -231,6 +231,7 @@ class LottoPanelTools extends HTMLElement {
     this.schedule = data.draw_schedule;
     const serverNow = Date.parse(this.schedule?.server_now);
     this._clockOffset = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
+    this.decorate('current-recommendations', data.recommendations || []);
     this.decorate('predictions', (data.winning?.results || []).filter(r => r.source !== 'purchased'));
     this.decorate('reviews', data.reviews || []);
     this.startClock();
@@ -324,18 +325,18 @@ class LottoPanelTools extends HTMLElement {
     else if (!event.shiftKey && active === last) { event.preventDefault(); first?.focus(); }
   }
 }
-if (!customElements.get('lotto-panel-tools')) customElements.define('lotto-panel-tools', LottoPanelTools);
+if (!customElements.get('lotto-panel-tools-v1-21-0')) customElements.define('lotto-panel-tools-v1-21-0', LottoPanelTools);
 
 export function applyPanelTools(panel) {
   const root = panel.shadowRoot, main = root?.querySelector('main'); if (!main) return;
-  if (!root.querySelector('style[data-lotto-panel-tools]')) {
+  if (!root.querySelector('style[data-lotto-panel-tools-v1-21-0]')) {
     const style = element('style'); style.dataset.lottoPanelTools = VERSION; style.textContent = PANEL_STYLE; root.append(style);
   }
-  if (!root.querySelector('lotto-panel-tools')) {
-    const tools = document.createElement('lotto-panel-tools'); tools.panel = panel; main.prepend(tools);
+  if (!root.querySelector('lotto-panel-tools-v1-21-0')) {
+    const tools = document.createElement('lotto-panel-tools-v1-21-0'); tools.panel = panel; main.prepend(tools);
     if (panel._latestToolsData) tools.setData(panel._latestToolsData);
   }
-  for (const id of ['predictions', 'reviews']) {
+  for (const id of ['current-recommendations', 'predictions', 'reviews']) {
     const block = panel.node(id)?.closest('.review-block');
     if (block && !block.querySelector('.method-help-hint')) {
       const hint = element('p', '추첨 공식 이름을 누르면 계산 원리·가중치·예시를 확인할 수 있어요.', 'method-help-hint'); block.insertBefore(hint, block.querySelector('.table-scroll'));
@@ -346,7 +347,7 @@ export function applyPanelTools(panel) {
     const update = panel.updateResults;
     panel.updateResults = function (data, ...args) {
       const result = update.call(this, data, ...args); this._latestToolsData = data;
-      this.shadowRoot.querySelector('lotto-panel-tools')?.setData(data); return result;
+      this.shadowRoot.querySelector('lotto-panel-tools-v1-21-0')?.setData(data); return result;
     };
   }
 }
