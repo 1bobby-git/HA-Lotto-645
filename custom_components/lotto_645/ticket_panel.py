@@ -23,7 +23,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-0-0'
+PANEL_TAG = 'lotto-ticket-panel-v2-0-2'
 WWW = Path(__file__).parent / 'www'
 # The user-supplied PNG and locally verified pixel-identical lossless encodings.
 # Never display the old quantized replacement as the supplied original.
@@ -73,9 +73,20 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
     round_no = round_no or book.selected_round or (coordinator.data.analysis.target_round if coordinator.data else None)
     record = book.ticket_record(round_no,ticket_id)
     metadata = coordinator.result_metadata
-    return {**panel_metadata(coordinator.result_round, metadata.get('status', 'waiting')),
+    panel = panel_metadata(coordinator.result_round, metadata.get('status', 'waiting'))
+    active_round = panel['draw_schedule']['round']
+    review = coordinator.review_for_round(active_round) if hasattr(coordinator, 'review_for_round') else {}
+    review = review or {'round': active_round, 'status': 'waiting', 'methods': [], 'peer_count': 0}
+    recommendations = []
+    if coordinator.data and coordinator.data.analysis.target_round == active_round:
+        source_rows = [*coordinator.data.analysis.recommendations]
+        if coordinator.data.ai_recommendation:
+            source_rows.append(coordinator.data.ai_recommendation)
+        recommendations = [row.as_attributes() for row in source_rows
+                           if row.details.get('target_round', active_round) == active_round]
+    return {**panel,
             'reviews': _review_rows(coordinator),
-            'review_round': coordinator.review_for_round(coordinator.result_round) if hasattr(coordinator, 'review_for_round') else {},
+            'review_round': review,
             'review_storage_error': getattr(coordinator, 'review_storage_error', False),
             'review_save_pending': getattr(coordinator, '_review_save_error', False),
             'round': round_no, 'revision': record.get('saved_at', ''),
@@ -90,10 +101,9 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
             'result_verification': metadata, 'winning': coordinator.winning_summary,
             'storage_error': coordinator.purchase_storage_error,
             'entry_id': coordinator.entry.entry_id,
-            'recommendation_target': coordinator.data.analysis.target_round if coordinator.data else None,
-            'recommendations': ([row.as_attributes() for row in coordinator.data.analysis.recommendations]
-                + ([coordinator.data.ai_recommendation.as_attributes()] if coordinator.data.ai_recommendation else []))
-                if coordinator.data else [],
+            'recommendation_target': active_round,
+            'recommendation_record_target': coordinator.data.analysis.target_round if coordinator.data else None,
+            'recommendations': recommendations,
             'recommendation_generated_at': coordinator.data.generated_at.isoformat() if coordinator.data else None,
             'generation_sequence': getattr(coordinator, 'local_generation_sequence', 0),
             'generation_matches':[{'ticket_id':t['ticket_id'],'formula_id':r.method_id,'generation_id':r.details.get('generation_id')} for t in book.tickets.values() if t['round']==round_no for r in (coordinator.data.analysis.recommendations if coordinator.data and coordinator.data.analysis.target_round==round_no else []) if any(tuple(g['numbers'])==r.numbers for g in t['games'])]}
@@ -204,7 +214,7 @@ def _publish_panel(hass: HomeAssistant, shared: dict) -> None:
     existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
     if existing is not None:
         config = getattr(existing, 'config', None) or {}
-        if config.get('_panel_custom', {}).get('name') not in {'lotto-ticket-panel', PANEL_TAG}:
+        if config.get('_panel_custom', {}).get('name') not in {'lotto-ticket-panel','lotto-ticket-panel-v2-0-0','lotto-ticket-panel-v2-0-1',PANEL_TAG}:
             raise HomeAssistantError('로또 페이지 경로를 다른 패널이 사용 중입니다')
     frontend.async_register_built_in_panel(
         hass, component_name='custom', frontend_url_path=PATH,
@@ -265,5 +275,5 @@ def async_remove_ticket_panel(hass: HomeAssistant, entry_id: str, *, permanent: 
         _publish_panel(hass, shared)
     else:
         existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
-        if existing and (getattr(existing, 'config', None) or {}).get('_panel_custom', {}).get('name') in {'lotto-ticket-panel', PANEL_TAG}:
+        if existing and (getattr(existing, 'config', None) or {}).get('_panel_custom', {}).get('name') in {'lotto-ticket-panel','lotto-ticket-panel-v2-0-0','lotto-ticket-panel-v2-0-1',PANEL_TAG}:
             frontend.async_remove_panel(hass, PATH)

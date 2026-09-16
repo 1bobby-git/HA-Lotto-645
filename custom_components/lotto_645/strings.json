@@ -4,12 +4,11 @@
     "step": {
       "user": {
         "title": "Lotto 6/45 Analysis",
-        "description": "Lotto 6/45를 추가합니다. Core 연결은 서비스가 관리하며 API 주소나 토큰을 입력하지 않습니다. 복권과 QR 기록은 이 기기에 보관합니다."
+        "description": "Lotto 6/45를 추가합니다. 별도 연결 설정 없이 이용할 수 있습니다. 복권과 QR 기록은 이 기기에 보관합니다."
       }
     },
     "abort": {
-      "single_instance_allowed": "Only one Lotto 6/45 Analysis instance can be configured.",
-      "reauth_successful": "Core API 재인증이 완료되었습니다."
+      "single_instance_allowed": "Only one Lotto 6/45 Analysis instance can be configured."
     },
     "error": {
       "service_connection_failed": "서버 연결 또는 인증을 확인하세요."
@@ -58,7 +57,7 @@
           "saju_true_solar_time": "Use true solar time correction",
           "saju_longitude": "Birth longitude (optional)",
           "saju_lunar_standard": "Lunar calendar standard",
-          "saju_remote_consent": "사주 계산에 필요한 출생정보를 연결한 Core API로 전송하는 데 동의 (서버 원문 비저장)"
+          "saju_remote_consent": "사주 계산에 필요한 출생정보를 계산 서버로 전송하는 데 동의 (입력 원문은 서버에 저장하지 않음)"
         },
         "data_description": {
           "saju_birth_date": "Example: 1982-03-15",

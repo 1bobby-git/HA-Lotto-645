@@ -220,7 +220,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
     </section>
     <section id="screen-review" class="screen" role="tabpanel" aria-labelledby="tab-review" tabindex="0" hidden>
       <div class="page-heading"><div><div class="kicker">RECOMMENDATION REVIEW</div><h1>추천을 돌아보는 시간.</h1><p>추첨 공식의 실제 결과를 차곡차곡 비교해 보세요.</p></div><span id="method-count" class="review-count"></span></div>
-      <div class="review-grid"><section class="review-block" aria-labelledby="predictions-heading"><div class="section-heading"><h2 id="predictions-heading">이번 추첨, 추천번호 결과</h2></div><p class="review-note">추첨 전에 저장된 추천과 발표된 당첨번호를 비교합니다. 당첨 게임은 본번호 일치를 테두리로, 보너스 일치를 점선 테두리로 강조하고 미일치 번호는 흐리게 표시합니다.</p><div class="table-scroll"><table class="mobile-table" role="table"><caption class="sr-only">추첨 공식별 번호와 이번 추첨 판정</caption><thead role="rowgroup"><tr role="row"><th scope="col">추첨 공식</th><th scope="col">번호</th><th scope="col">결과</th></tr></thead><tbody id="predictions" role="rowgroup"></tbody></table></div></section>
+      <div class="review-grid"><section class="review-block" aria-labelledby="predictions-heading"><div class="section-heading"><h2 id="predictions-heading">이번 추첨, 추천번호 결과</h2></div><p id="predictions-note" class="review-note">추첨 전에 저장된 추천과 발표된 당첨번호를 비교합니다. 당첨 게임은 본번호 일치를 테두리로, 보너스 일치를 점선 테두리로 강조하고 미일치 번호는 흐리게 표시합니다.</p><div class="table-scroll"><table class="mobile-table" role="table"><caption class="sr-only">추첨 공식별 번호와 이번 추첨 판정</caption><thead role="rowgroup"><tr role="row"><th scope="col">추첨 공식</th><th scope="col">번호</th><th scope="col">결과</th></tr></thead><tbody id="predictions" role="rowgroup"></tbody></table></div></section>
       <section class="review-block" aria-labelledby="reviews-heading"><div class="section-heading"><h2 id="reviews-heading">공식별 누적 리뷰</h2></div><p id="reviewstatus" class="review-note"></p><div class="table-scroll"><table class="mobile-table" role="table"><caption class="sr-only">추첨 공식별 누적 별점, 평가 회차, 이번 점수, 정확 일치와 인접 번호, 순위</caption><thead role="rowgroup"><tr role="row"><th scope="col">추첨 공식 / 누적 별점</th><th scope="col">평가 회차</th><th scope="col">이번 점수</th><th scope="col">정확 / ±1</th><th scope="col">순위</th></tr></thead><tbody id="reviews" role="rowgroup"></tbody></table></div></section>
       <details class="review-footnote"><summary>리뷰 점수는 이렇게 해석해 주세요</summary><p>공식 확인 회차의 평균 점수 ÷ 20이 누적 별점입니다. ±1은 비슷한 번호일 뿐 당첨이 아닙니다. 속보 점수는 잠정이며 누적 평균과 분리합니다. 표본이 적은 별점이나 과거 결과는 미래 당첨 가능성을 뜻하지 않습니다.</p></details></div>
     </section>
@@ -274,6 +274,15 @@ export function ticketRows(root, games, limit=Infinity) {
   root.replaceChildren();root.setAttribute('role','list');
   if(!games?.length){root.removeAttribute('role');const empty=document.createElement('div');empty.className='empty';empty.innerHTML=`${icons.ticket}<strong>아직 보관한 복권이 없어요.</strong><p>복권 등록을 눌러 QR이나 사진으로 가져오세요.<br>번호를 직접 입력해도 좋아요.</p>`;root.append(empty);return;}
   for(const g of games.slice(0,limit)) {const row=document.createElement('div');row.className='ticket-row';row.setAttribute('role','listitem');const slot=document.createElement('span');slot.className='game-label';slot.textContent=g.slot||'';slot.setAttribute('aria-label',`${g.slot||''} 게임`);const nums=document.createElement('span');nums.className='ticket-balls result-balls';const isWinner=Number.isInteger(g.prize_rank)&&g.prize_rank>=1&&g.prize_rank<=5;numberBalls(nums,g.numbers||g.recommended_numbers||[],null,g);const prize=document.createElement('span');prize.className='prize';prize.textContent=g.prize||'추첨 대기';prize.dataset.winning=String(isWinner);row.append(slot,nums,prize);root.append(row);}
+}
+
+export function reviewPresentation(data) {
+  const report=data.review_round||{}, round=Number(report.round||data.draw_schedule?.round||data.recommendation_target);
+  const evaluated=['confirmed','provisional'].includes(report.status);
+  const methods=(report.methods||[]).filter(row=>!row.target_round||Number(row.target_round)===round);
+  const rows=methods.map(row=>evaluated?{...row,sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[]}:
+    {method_id:row.method_id,sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[],prize:'추첨 대기'});
+  return {report,round,rows,evaluated};
 }
 
 export function renderPredictionRows(root, rows, empty) {
