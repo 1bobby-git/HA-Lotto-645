@@ -10,6 +10,9 @@ from test_analysis_engine import ROOT, models
 
 
 def production_function(name, namespace):
+    from custom_components.lotto_645.review_selection import review_method_ids, selected_round_review
+    namespace.update(review_method_ids=review_method_ids, selected_round_review=selected_round_review)
+    namespace.setdefault("__package__", "custom_components.lotto_645")
     tree=ast.parse((ROOT/'custom_components/lotto_645/ticket_panel.py').read_text(encoding="utf-8"))
     node=next(n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==name)
     node.decorator_list=[]
@@ -30,7 +33,7 @@ def test_view_includes_current_sensor_records_separate_from_last_draw():
     owner=SimpleNamespace(result_draw=None,purchase_book=book,result_metadata={'status':'waiting'},result_round=30,
         data=SimpleNamespace(analysis=current,generated_at=datetime.now(UTC),ai_recommendation=None),
         result_history=[],winning_summary={'round':30,'results':[]},entry=SimpleNamespace(entry_id='entry'),purchase_storage_error=False,
-        local_generation_sequence=4)
+        local_generation_sequence=4,configured_method_ids=('uniform_fisher_yates',),ai_enabled=False)
     view=production_function('_view',{'Any':object,'_review_rows':lambda c:[], 'panel_metadata':lambda *args:{'draw_schedule':{'round':31}}})(owner)
     assert view['recommendation_target']==31 and view['winning']['round']==30 and view['round']==29
     assert view['recommendations'][0]['numbers']==list(rec.numbers)
