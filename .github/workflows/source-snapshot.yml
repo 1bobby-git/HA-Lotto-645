@@ -1,0 +1,22 @@
+name: Pinned public source snapshot
+on:
+  push:
+    branches: [codex/source-snapshot]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2e68bfbeaf8e19331b2b60a4a3f26f5c8bbba238
+          persist-credentials: false
+      - name: Archive only the existing public commit
+        run: git archive --format=tar.gz --output="$RUNNER_TEMP/ha-source.tar.gz" HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ha-public-source-2e68bfb
+          path: ${{ runner.temp }}/ha-source.tar.gz
+          retention-days: 2
