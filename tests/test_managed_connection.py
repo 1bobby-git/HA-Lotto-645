@@ -49,27 +49,36 @@ def test_failed_private_save_does_not_mark_migration_done():
         assert manager.state is None and LEGACY==original
     asyncio.run(case())
 
-def test_new_installation_uses_persisted_unique_identity_and_idempotent_enrollment():
+def test_unapproved_installation_never_enrolls_anonymously():
     async def case():
         store=MemoryStore();m=ManagedConnection(store);await m.load()
-        first=copy.deepcopy(store.value);assert first['enrolled'] is False
-        other=ManagedConnection(MemoryStore());await other.load();assert other.values[TOKEN]!=m.values[TOKEN]
-        again=ManagedConnection(store);await again.load();assert again.values==m.values
-        session=Session();await again.ensure_enrolled(session);await again.ensure_enrolled(session)
-        assert len(session.calls)==1 and store.value['enrolled'] is True
-        url,kw=session.calls[0]
-        assert url=='https://lottolab.toiss.kr/v1/ha/installations'
-        assert kw['ssl'] is True and kw['allow_redirects'] is False
-        assert set(kw['json'])=={'installation_id','credential'}
+        original=copy.deepcopy(store.value);session=Session()
+        with pytest.raises(LabServiceError,match='member_link_required'):
+            await m.ensure_enrolled(session)
+        assert not session.calls and store.value==original
     asyncio.run(case())
 
-def test_failure_preserves_identity_and_backs_off_without_token_form():
+
+def test_member_refresh_preserves_identity_and_recovers_lost_response(monkeypatch):
+    from custom_components.lotto_645.member_link import state_from_tokens
+    import custom_components.lotto_645.member_link as link
     async def case():
-        store=MemoryStore();m=ManagedConnection(store);await m.load();old=copy.deepcopy(store.value);s=Session(503)
-        for _ in range(2):
-            with pytest.raises(LabServiceError):await m.ensure_enrolled(s)
-        assert len(s.calls)==1 and store.value==old
+        old={'version':1,'source':'operator','credentials':LEGACY,'enrolled':True}
+        tokens={'access_token':'a'*43,'refresh_token':'b'*64,'device_id':'c'*32,'expires_in':900}
+        saved=state_from_tokens(tokens,old);saved['access_expires_at']=0
+        store=MemoryStore(saved);m=ManagedConnection(store);await m.load();scope=m.journal_scope;secret=m.context_secret;calls=[]
+        async def exchange(session,path,body):
+            calls.append(dict(body))
+            if len(calls)==1:raise LabServiceError('member_service_unavailable')
+            return {**tokens,'token_type':'Bearer','access_token':'d'*43,'refresh_token':'e'*64}
+        monkeypatch.setattr(link,'request',exchange)
+        with pytest.raises(LabServiceError):await m.ensure_enrolled(None)
+        restarted=ManagedConnection(store);await restarted.load();await restarted.ensure_enrolled(None)
+        assert calls[0]['rotation_id']==calls[1]['rotation_id']
+        assert restarted.journal_scope==scope and restarted.context_secret==secret
+        assert restarted.values[TOKEN]=='d'*43 and 'pending_rotation' not in store.value
     asyncio.run(case())
+
 
 def test_corrupt_store_is_not_replaced_by_new_identity():
     async def case():
@@ -89,7 +98,7 @@ def test_user_menus_have_no_transport_or_json_or_rule_steps():
     names={n.name for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
     assert not names & {'async_step_service','async_step_formula_options','async_step_generation_rules','async_step_reauth_confirm'}
     menus=[ast.literal_eval(k.value) for n in ast.walk(tree) if isinstance(n,ast.Call) for k in n.keywords if k.arg=='menu_options']
-    assert menus==[['recommendations','saju','purchases']]
+    assert menus==[['account','recommendations','saju','purchases']]
     for p in [R/'strings.json',*(R/'translations').glob('*.json')]:
         text=json.loads(p.read_text(encoding='utf-8'))
         assert not set(text.get('options',{}).get('step',{})) & {'service','formula_options','generation_rules'}
@@ -102,7 +111,7 @@ def test_old_request_journal_scope_is_unchanged():
         'LottoLabClient':lambda *a,**k:object(),'async_get_clientsession':lambda _:None,
         'Store':lambda h,v,key:key,'RemoteGeneration':lambda client,store:store}
     exec(compile(ast.Module(body=[method],type_ignores=[]),'<actual-runtime>','exec'),namespace)
-    owner=SimpleNamespace(client=None,connection={},hass=None,entry=SimpleNamespace(entry_id='entry'))
+    owner=SimpleNamespace(client=None,connection={},hass=None,entry=SimpleNamespace(entry_id='entry'),connection_manager=SimpleNamespace(journal_scope=hashlib.sha256((LEGACY[URL]+'\0'+LEGACY[TOKEN]).encode()).hexdigest()[:24]))
     namespace['_configure_connection'](owner,LEGACY)
     old_scope=hashlib.sha256((LEGACY[URL]+'\0'+LEGACY[TOKEN]).encode()).hexdigest()[:24]
     assert owner.generator=='lotto_645.remote.entry.'+old_scope

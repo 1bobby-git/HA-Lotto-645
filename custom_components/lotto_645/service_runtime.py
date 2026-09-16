@@ -43,7 +43,7 @@ class ServiceRuntime:
         self.client = LottoLabClient(async_get_clientsession(self.hass),
             values[CONF_SERVICE_URL], values[CONF_SERVICE_TOKEN],
             certificate_sha256=values.get(CONF_SERVICE_CERT))
-        scope=hashlib.sha256((values[CONF_SERVICE_URL]+'\0'+values[CONF_SERVICE_TOKEN]).encode()).hexdigest()[:24]
+        scope=self.connection_manager.journal_scope
         self.generator=RemoteGeneration(self.client,Store(self.hass,1,f'{DOMAIN}.remote.{self.entry.entry_id}.{scope}'))
         self.ai_generator=RemoteGeneration(self.client,Store(self.hass,1,f'{DOMAIN}.remote_ai.{self.entry.entry_id}.{scope}'))
 
@@ -109,7 +109,7 @@ class ServiceRuntime:
         # Local digest is keyed so it does not become a public birth-date oracle.
         content=json.dumps({'options':options,'profile':profile,'origin':self.connection.get(CONF_SERVICE_URL),
                             'device':self.info.get('device_id')},sort_keys=True,ensure_ascii=False).encode()
-        return hmac.new(self.connection[CONF_SERVICE_TOKEN].encode(),content,hashlib.sha256).hexdigest()
+        return hmac.new(self.connection_manager.context_secret.encode(),content,hashlib.sha256).hexdigest()
 
     @staticmethod
     def analysis_from_saved(saved, ids, nonce, status):
@@ -160,6 +160,8 @@ class ServiceRuntime:
             return await self._analysis()
 
     async def _analysis(self):
+        if self.connection_manager.needs_refresh:
+            await self.prepare()
         if not self.client:
             await self.prepare()
         if not self.client:
@@ -247,6 +249,8 @@ class ServiceRuntime:
         return self.legacy_analysis()
 
     async def ai_ticket(self,target):
+        if self.connection_manager.needs_refresh:
+            await self.prepare()
         if not self.client:
             raise LabServiceError('not_connected')
         from .ai_formula import AI_BASE_FORMULA
