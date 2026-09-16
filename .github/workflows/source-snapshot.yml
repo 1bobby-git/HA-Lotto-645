@@ -13,10 +13,13 @@ jobs:
         with:
           ref: 2e68bfbeaf8e19331b2b60a4a3f26f5c8bbba238
           persist-credentials: false
-      - name: Archive only the existing public commit
-        run: git archive --format=tar.gz --output="$RUNNER_TEMP/ha-source.tar.gz" HEAD
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download declared public dependencies only
+        run: python -m pip download --no-deps --dest "$RUNNER_TEMP/dependencies" lunar_python==1.4.8 korean-lunar-calendar==0.4.0 voluptuous==0.15.2 tzdata==2025.2
       - uses: actions/upload-artifact@v4
         with:
-          name: ha-public-source-2e68bfb
-          path: ${{ runner.temp }}/ha-source.tar.gz
+          name: lotto-public-dependencies
+          path: ${{ runner.temp }}/dependencies/
           retention-days: 2
