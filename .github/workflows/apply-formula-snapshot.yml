@@ -1,0 +1,86 @@
+name: Apply tested formula snapshot
+on:
+  push:
+    branches: ['feat/recommended-formulas-1.20.0']
+    paths: ['.github/workflows/apply-formula-snapshot.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.repository == '1bobby-git/HA-Lotto-645' && github.ref == 'refs/heads/feat/recommended-formulas-1.20.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: apply-tested-lotto-formulas
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate and apply exact locally tested source bytes
+        run: |
+          python - <<'PY'
+          import base64, hashlib, json, lzma
+          from pathlib import Path, PurePosixPath
+
+          root = Path.cwd()
+          text = ''.join((root / f'.github/formula-transport/part{i}.b64').read_text() for i in range(4))
+          data = lzma.decompress(base64.b64decode(''.join(text.split()), validate=True))
+          expected = '41ea8fb85395acfac48b7dbb52a60f00329f452b52852087ed91fa8b6064b0e3'
+          assert hashlib.sha256(data).hexdigest() == expected, 'Snapshot digest mismatch'
+          manifest = json.loads(data)
+          assert manifest['version'] == 1 and len(manifest['changes']) == 97
+          pending, seen = [], set()
+          for change in manifest['changes']:
+              name = change['path']
+              p = PurePosixPath(name)
+              assert not p.is_absolute() and '..' not in p.parts and str(p) == name
+              assert name not in seen
+              seen.add(name)
+              assert name in {'README.md', '.github/workflows/validate.yml'} or name.startswith(('custom_components/lotto_645/', 'docs/', 'scripts/', 'tests/'))
+              path = root / name
+              assert not any(parent.is_symlink() for parent in [path, *path.parents])
+              if change['before'] is None:
+                  assert not path.exists(), name
+                  source = b''
+              else:
+                  source = path.read_bytes()
+                  assert hashlib.sha256(source).hexdigest() == change['before'], name
+              lines = source.decode('utf-8').splitlines(keepends=True)
+              last = 0
+              for start, end, replacement in change['edits']:
+                  assert type(start) is int and type(end) is int and last <= start <= end <= len(lines)
+                  assert isinstance(replacement, str)
+                  last = end
+              for start, end, replacement in reversed(change['edits']):
+                  lines[start:end] = [replacement]
+              result = ''.join(lines).encode('utf-8')
+              assert hashlib.sha256(result).hexdigest() == change['after'], name
+              pending.append((path, result))
+          for path, result in pending:
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_bytes(result)
+          print(f'Verified and applied {len(pending)} source files; SHA256={expected}')
+          PY
+      - name: Compile and commit application changes only on the work branch
+        run: |
+          set -euo pipefail
+          python -m compileall -q custom_components/lotto_645 scripts
+          git diff --check
+          # Workflow updates are finalized separately through the authorized connector.
+          git restore .github/workflows/validate.yml
+          git rm .github/formula-transport/part0.b64 .github/formula-transport/part1.b64 .github/formula-transport/part2.b64 .github/formula-transport/part3.b64
+          git add README.md custom_components docs scripts tests
+          git config user.name '1bobby-git'
+          git config user.email '66291955+1bobby-git@users.noreply.github.com'
+          git commit -m 'feat: add tested recommended formulas and portfolio tools (v1.20.0)'
+          git push origin HEAD:refs/heads/feat/recommended-formulas-1.20.0
+          git rev-parse HEAD > /tmp/lotto-source-sha.txt
+          git archive --format=tar HEAD > /tmp/lotto-recommended-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recommended-formulas-source
+          path: |
+            /tmp/lotto-source-sha.txt
+            /tmp/lotto-recommended-source.tar
+          retention-days: 1
