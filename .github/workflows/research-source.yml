@@ -8,16 +8,15 @@ permissions:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Prepare isolated Python test dependencies
+        run: python -m pip wheel --no-deps --wheel-dir /tmp/test-wheels lunar_python==1.4.8 korean-lunar-calendar==0.4.0 voluptuous==0.15.2
       - uses: actions/upload-artifact@v4
         with:
-          name: research-source
+          name: test-wheels
           retention-days: 1
-          include-hidden-files: true
-          path: |
-            .
-            !.git
+          path: /tmp/test-wheels
