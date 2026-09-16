@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows, reviewPresentation } from './lotto-panel-view.js?v=2.0.2';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows, reviewPresentation } from './lotto-panel-view.js?v=2.0.3';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-0-2';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-0-3';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -285,12 +285,13 @@ class LottoTicketPanel extends HTMLElement {
   }
   updateResults(data) {
     const draw=data.draw,meta=data.result_verification||{};
-    const currentRows=(data.recommendations||[]).filter(row=>!row.target_round||Number(row.target_round)===Number(data.recommendation_target)).map(row=>({method_id:row.method_id,
-      sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[],prize:'추첨 대기'}));
-    renderPredictionRows(this.node('current-recommendations'),currentRows,['생성된 추천번호가 없어요.','설정에서 공식을 선택하고 번호를 생성하세요.']);
-    this.node('current-title').textContent=data.recommendation_target?`${data.recommendation_target}회 추천번호`:'이번 회차 추천번호';
-    this.node('current-count').textContent=`${currentRows.length}개 공식`;
-    this.node('current-meta').textContent=data.service_status&&data.service_status!=='ready'?`번호 생성 연결을 확인하고 있어요. 저장된 번호는 유지됩니다.`:currentRows.length?'이번 회차에 저장된 번호 · 추천 리뷰에서 추첨 대기 상태로 확인할 수 있어요.':'추천번호 생성 후 자동으로 표시됩니다.';
+    const presentation=reviewPresentation(data),rr=presentation.report;
+    const awaiting=!presentation.evaluated;
+    this.node('current-title').textContent=data.recommendation_target?`${formatRound(data.recommendation_target)} 추천`:'이번 회차 추천';
+    this.node('current-count').textContent=`${presentation.rows.length}개 공식 저장`;
+    this.node('current-meta').textContent=data.service_status&&data.service_status!=='ready'
+      ? '번호 생성 연결을 확인하고 있어요. 저장된 번호는 추천 리뷰에서 볼 수 있어요.'
+      : presentation.rows.length?`${formatRound(presentation.round)} ${awaiting?'추첨 대기':'결과 확인'} · 저장한 번호는 추천 리뷰에서 확인하세요.`:'번호를 생성하면 추천 리뷰에 자동으로 등록돼요.';
     this._targetRound=Number(data.recommendation_target)||this._targetRound;
     this.node('drawtitle').textContent=data.result_round?formatRound(data.result_round):'결과 발표 대기';
     const numbers=this.node('numbers');numbers.removeAttribute('role');numbers.removeAttribute('aria-label');
@@ -300,10 +301,8 @@ class LottoTicketPanel extends HTMLElement {
     this.node('verification').dataset.state=meta.status==='conflict'?'conflict':meta.status?.startsWith('official')?'verified':'pending';
     const w=data.winning;
     this.node('result').textContent=w?.status==='evaluated'?`${w.round}회 · 당첨 ${w.winning_game_count}게임${Number(w.winning_game_count)>0?` · 최고 ${w.highest_prize}`:' · 당첨 없음'}`:w?.status==='conflict'?'출처 확인 후 다시 대조해요.':'대조할 추첨 전 추천 또는 구매번호가 아직 없어요.';
-    const presentation=reviewPresentation(data),rr=presentation.report;
     renderPredictionRows(this.node('predictions'),presentation.rows,['아직 이번 회차에 저장된 추천번호가 없어요.','공식을 선택해 번호를 생성하면 추첨 대기 상태로 여기에 등록됩니다.']);
     const current=new Map((rr.methods||[]).map(r=>[r.method_id,r]));
-    const awaiting=!presentation.evaluated;
     this.node('predictions-heading').textContent=`${formatRound(presentation.round)} · ${awaiting?'추첨 대기':'추천번호 결과'}`;
     this.node('predictions-note').textContent=awaiting?'추첨 전에 저장한 번호입니다. 같은 회차의 당첨번호가 발표되면 자동으로 대조합니다. 결과 발표 전에는 점수·등수·당첨 여부를 매기지 않습니다.':'추첨 전에 저장된 번호와 같은 회차의 당첨번호를 비교합니다. 본번호 일치는 실선, 보너스 일치는 점선으로 표시합니다.';
     this.rows('reviews',(data.reviews||[]).map(r=>{
