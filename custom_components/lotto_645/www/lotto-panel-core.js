@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows, reviewPresentation } from './lotto-panel-view.js?v=2.0.3';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows, reviewPresentation } from './lotto-panel-view.js?v=2.0.4';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-0-3';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-0-4';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -287,11 +287,6 @@ class LottoTicketPanel extends HTMLElement {
     const draw=data.draw,meta=data.result_verification||{};
     const presentation=reviewPresentation(data),rr=presentation.report;
     const awaiting=!presentation.evaluated;
-    this.node('current-title').textContent=data.recommendation_target?`${formatRound(data.recommendation_target)} 추천`:'이번 회차 추천';
-    this.node('current-count').textContent=`${presentation.rows.length}개 공식 저장`;
-    this.node('current-meta').textContent=data.service_status&&data.service_status!=='ready'
-      ? '번호 생성 연결을 확인하고 있어요. 저장된 번호는 추천 리뷰에서 볼 수 있어요.'
-      : presentation.rows.length?`${formatRound(presentation.round)} ${awaiting?'추첨 대기':'결과 확인'} · 저장한 번호는 추천 리뷰에서 확인하세요.`:'번호를 생성하면 추천 리뷰에 자동으로 등록돼요.';
     this._targetRound=Number(data.recommendation_target)||this._targetRound;
     this.node('drawtitle').textContent=data.result_round?formatRound(data.result_round):'결과 발표 대기';
     const numbers=this.node('numbers');numbers.removeAttribute('role');numbers.removeAttribute('aria-label');

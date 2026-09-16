@@ -23,7 +23,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-0-3'
+PANEL_TAG = 'lotto-ticket-panel-v2-0-4'
 WWW = Path(__file__).parent / 'www'
 FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
 # The user-supplied PNG and locally verified pixel-identical lossless encodings.
@@ -215,7 +215,7 @@ def _publish_panel(hass: HomeAssistant, shared: dict) -> None:
     existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
     if existing is not None:
         config = getattr(existing, 'config', None) or {}
-        if config.get('_panel_custom', {}).get('name') not in {'lotto-ticket-panel','lotto-ticket-panel-v2-0-0','lotto-ticket-panel-v2-0-1','lotto-ticket-panel-v2-0-2',PANEL_TAG}:
+        if config.get('_panel_custom', {}).get('name') not in {'lotto-ticket-panel','lotto-ticket-panel-v2-0-0','lotto-ticket-panel-v2-0-1','lotto-ticket-panel-v2-0-2','lotto-ticket-panel-v2-0-3',PANEL_TAG}:
             raise HomeAssistantError('로또 페이지 경로를 다른 패널이 사용 중입니다')
     frontend.async_register_built_in_panel(
         hass, component_name='custom', frontend_url_path=PATH,
@@ -280,5 +280,5 @@ def async_remove_ticket_panel(hass: HomeAssistant, entry_id: str, *, permanent: 
         _publish_panel(hass, shared)
     else:
         existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
-        if existing and (getattr(existing, 'config', None) or {}).get('_panel_custom', {}).get('name') in {'lotto-ticket-panel','lotto-ticket-panel-v2-0-0','lotto-ticket-panel-v2-0-1','lotto-ticket-panel-v2-0-2',PANEL_TAG}:
+        if existing and (getattr(existing, 'config', None) or {}).get('_panel_custom', {}).get('name') in {'lotto-ticket-panel','lotto-ticket-panel-v2-0-0','lotto-ticket-panel-v2-0-1','lotto-ticket-panel-v2-0-2','lotto-ticket-panel-v2-0-3',PANEL_TAG}:
             frontend.async_remove_panel(hass, PATH)
