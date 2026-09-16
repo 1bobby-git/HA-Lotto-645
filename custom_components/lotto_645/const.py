@@ -4,7 +4,7 @@ from datetime import timedelta
 
 DOMAIN = "lotto_645"
 NAME = "Lotto 6/45 Analysis"
-VERSION = "1.21.0"
+VERSION = "2.0.0"
 
 PLATFORMS = ["sensor", "button", "binary_sensor"]
 UPDATE_INTERVAL = timedelta(hours=6)
@@ -85,7 +85,7 @@ SAJU_NOTICE = (
     "재현하는 문화적 휴리스틱입니다. 로또 당첨 확률 상승이 과학적으로 검증된 공식은 아닙니다."
 )
 SAJU_PRIVACY_NOTICE = (
-    "사주 입력값은 Home Assistant 구성 항목에 로컬 저장되며 로또 이력 미러로 전송되지 않습니다. "
+    "사주 입력값은 로컬에 저장됩니다. 명시적 원격 계산 동의 시에만 연결된 Core API에 전송하며, 서버는 계산 후 원문을 보관하지 않습니다. "
     "Home Assistant AI 추천에도 원본 생년월일·출생시각·출생지를 전달하지 않습니다."
 )
 COLLECTION_POLICY = (
@@ -93,3 +93,8 @@ COLLECTION_POLICY = (
     "각 Home Assistant 설치가 동행복권 전체 회차를 반복 수집하지 않습니다. "
     "동행복권 직접 증분 확인은 사용자가 옵션으로 허용한 경우에만 제한적으로 수행합니다."
 )
+
+CONF_SERVICE_URL = "service_url"
+CONF_SERVICE_TOKEN = "service_token"
+CONF_SERVICE_CERT = "service_certificate_sha256"
+CONF_PERSONAL_CONSENT = "saju_remote_consent"

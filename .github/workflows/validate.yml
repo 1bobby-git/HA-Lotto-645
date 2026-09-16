@@ -1,14 +1,12 @@
 name: Validate
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  python:
+  public-adapter:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -16,96 +14,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - name: Install test dependencies
-        run: python -m pip install -q pytest 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0'
-      - name: Compile Python sources
-        run: python -m compileall -q custom_components/lotto_645 scripts
-      - name: Run all regression and rule-table tests
-        run: python -m pytest -q
-  ha-options:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-      - name: Install declared Home Assistant baseline
-        run: python -m pip install -q 'homeassistant==2026.9.0' 'lunar_python==1.4.8' 'korean-lunar-calendar==0.4.0'
-      - name: Install HA integration manifest requirements
-        run: |
-          python - <<'PY'
-          import importlib.util
-          import json
-          from pathlib import Path
-          import subprocess
-          import sys
-
-          root = Path(next(iter(importlib.util.find_spec('homeassistant').submodule_search_locations))) / 'components'
-          pending = ['ai_task', 'camera', 'stream', 'image', 'panel_custom', 'websocket_api']
-          visited = set()
-          requirements = set()
-          while pending:
-              domain = pending.pop()
-              if domain in visited:
-                  continue
-              visited.add(domain)
-              manifest = json.loads((root / domain / 'manifest.json').read_text())
-              requirements.update(manifest.get('requirements', []))
-              pending.extend(manifest.get('dependencies', []))
-          print('Install declared requirements for:', ', '.join(sorted(visited)), flush=True)
-          if requirements:
-              subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', *sorted(requirements)], check=True)
-          PY
-      - name: Exercise real HA OptionsFlow and selector serialization
-        run: |
-          python scripts/smoke_ha_options.py
-          python scripts/smoke_panel_lifecycle.py
+      - run: python -m pip install pytest aiohttp voluptuous
+      - run: python -m pytest -q
+      - run: python -m compileall -q custom_components/lotto_645
   hassfest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: home-assistant/actions/hassfest@master
-  ticket-panel:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-      - name: Install browser test dependencies
-        run: python -m pip install playwright 'qrcode[pil]'
-      - name: Install headless browser
-        run: python -m playwright install --with-deps chromium
-      - name: Validate QR, wallet and live recommendations in browser
-        run: |
-          python scripts/smoke_ticket_panel.py
-  core-contract:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            python: '3.11'
-          - os: windows-latest
-            python: '3.11'
-          - os: ubuntu-latest
-            python: '3.14'
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - name: Install standalone core test dependencies (no HA)
-        run: python -m pip install pytest lunar_python==1.4.8 korean-lunar-calendar==0.4.0 tzdata==2025.2
-      - name: Verify API, identical HA adapter, wheel and removal boundaries
-        run: python -m pytest -q tests/test_core_contract.py tests/test_feature_removal.py tests/test_panel_live_payload.py

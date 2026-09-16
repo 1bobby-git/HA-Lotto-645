@@ -11,6 +11,8 @@ _REMOVED_MODULES = (
     'research_extension', 'research_formulas', 'historical_validation',
     'historical_validation_runtime', 'historical_validation_scores',
     'validation_hit_history', 'validation_lifecycle',
+    'analysis', 'sampling', 'consensus', 'voting_consensus', 'saju_rules',
+    'formula_settings', 'formula_cache', 'generation_runtime',
 )
 _REMOVED_SCRIPTS = (
     'lotto-panel-portfolio.js', 'lotto-panel-research.js',
@@ -39,6 +41,14 @@ def cleanup_files(root: Path) -> None:
     cache = root / '__pycache__'
     for name in _REMOVED_MODULES:
         paths.extend(cache.glob(name + '.*.pyc'))
+    core = root / 'lotto_core'
+    core_modules = ('__init__','analysis','api','cli','consensus','const','constraints',
+                    'formula_settings','methods','models','myungri','preference',
+                    'saju_calendar','saju_rules','sampling','voting_consensus')
+    if not core.is_symlink():
+        for name in core_modules:
+            paths.extend((core/(name+'.py'),core/(name+'.pyc')))
+            paths.extend((core/'__pycache__').glob(name+'.*.pyc'))
     for path in paths:
         # Only unlink a shipped basename; never traverse a symlink into another folder.
         if any(parent.is_symlink() for parent in path.parents if parent == root or root in parent.parents):

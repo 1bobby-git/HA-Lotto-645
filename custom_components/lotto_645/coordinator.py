@@ -20,12 +20,12 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .methods import METHODS_BY_ID
-from .analysis import build_analysis
-from .consensus import refresh_consensus
-from .ai_formula import (AI_BASE_FORMULA, make_ai_ticket, explanation_prompt,
+from .ai_formula import (AI_BASE_FORMULA, explanation_prompt,
                          validate_explanation, validate_backend_ticket)
-from .formula_cache import restore_tickets, store_tickets
-from .sampling import FORMULA_VERSION
+from .service_runtime import ServiceRuntime
+from .lab_client import LabServiceError
+from .const import CONF_PERSONAL_CONSENT
+FORMULA_VERSION = "server"
 from .api import LottoApiClient, LottoApiError
 from .const import (
     AI_MAX_ATTEMPTS,
@@ -84,7 +84,8 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         self._needs_storage_save = False
         self._cached_ai_recommendation: Recommendation | None = None
         self._cached_ai_generated_at: datetime | None = None
-        self._sampling_cache: dict[str, Any] = {}
+        self.service = ServiceRuntime(self)
+        self._history_storage_error = False
         self._consensus_save_task: asyncio.Task | None = None
         self._consensus_dirty = False
         self._local_generation_nonce = 0
@@ -111,29 +112,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
 
     @callback
     def async_update_listeners(self) -> None:
-        """Publish derived consensus atomically with every source-data change.
-
-        The source sensors and panel share these records. Watching the coordinator
-        instead of re-reading rendered HA states avoids partial batches, entity-ID
-        renames, self-feedback and a second network/AI/regeneration request.
-        """
-        if self.data is not None:
-            analysis = refresh_consensus(
-                self.data.analysis, self.selected_method_ids, self.history,
-                updated_at=datetime.now(UTC).isoformat(),
-            )
-            if analysis is not self.data.analysis:
-                self.data = replace(self.data, analysis=analysis)
-                self._set_prediction_snapshot(
-                    analysis, self.data.ai_recommendation, self.data.ai_generated_at,
-                )
-                self._needs_storage_save = True
-                self._consensus_dirty = True
-                task = getattr(self, "_consensus_save_task", None)
-                if task is None or task.done():
-                    self._consensus_save_task = self.hass.async_create_task(
-                        self._async_save_consensus(), "lotto-consensus-save",
-                    )
+        """Publish persisted server results; never calculate aggregates in HA."""
         super().async_update_listeners()
         self.hass.bus.async_fire(DOMAIN + '_updated', {'entry_id': self.entry.entry_id})
 
@@ -174,7 +153,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
     def saju_profile_status(self) -> str:
         if METHOD_MYUNGRI_HETU not in self.configured_method_ids:
             return "not_selected"
-        return "ready" if self.saju_profile_ready else "profile_required"
+        return "ready" if self.saju_profile_ready else ("remote_consent_required" if not self.entry.options.get(CONF_PERSONAL_CONSENT) else "profile_required")
 
     @property
     def selected_method_ids(self) -> tuple[str, ...]:
@@ -226,17 +205,17 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
 
     async def async_save_purchase_record(
         self, round_no: int, values: dict[str, Any], *, clear: bool = False,
-        expected_revision: str | None = None
+        expected_revision: str | None = None, ticket_id: str | None = None, new_ticket: bool = False
     ) -> None:
         """Save all five lines atomically without network, AI or regeneration."""
         if self.purchase_storage_error:
             raise HomeAssistantError("purchase_storage_unavailable")
         async with self._purchase_lock:
             if expected_revision is not None:
-                current = self.purchase_book.records.get(str(round_no), {}).get("saved_at", "")
+                current = "" if new_ticket else self.purchase_book.ticket_record(round_no,ticket_id).get("saved_at", "")
                 if current != expected_revision:
                     raise HomeAssistantError("purchase_revision_conflict")
-            updated = self.purchase_book.updated(round_no, values, clear=clear)
+            updated = self.purchase_book.updated(round_no, values, clear=clear,ticket_id=ticket_id,new_ticket=new_ticket)
             await self._purchase_store.async_save(updated.to_storage())
             # Do not replace the in-memory copy before a successful durable write.
             self.purchase_book = updated
@@ -255,10 +234,16 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             # Keep the bad file untouched and block writes; recommendations still work.
             self.purchase_storage_error = True
             _LOGGER.error("구매번호 저장소를 읽지 못했습니다. 원본 파일을 보존하며 덮어쓰지 않습니다")
-        self._saju_profile_valid = await self.hass.async_add_executor_job(
+        self._saju_profile_valid = bool(self.entry.options.get(CONF_PERSONAL_CONSENT)) and await self.hass.async_add_executor_job(
             has_complete_saju_profile, self.saju_profile
         )
-        payload = await self._store.async_load()
+        await self.service.prepare()
+        try:
+            payload = await self._store.async_load()
+        except (ValueError, OSError, HomeAssistantError):
+            payload = None
+            self._history_storage_error = True
+            _LOGGER.error("기존 저장소 오류: 원본을 덮어쓰지 않습니다")
         if payload:
             try:
                 self._restore_fast_state(payload)
@@ -267,7 +252,6 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 self._fast_result = None
                 self._frozen_result_snapshot = None
             try:
-                self._sampling_cache = payload.get("sampling_cache", {})
                 prediction_snapshot = payload.get("prediction_snapshot")
                 if isinstance(prediction_snapshot, dict):
                     self._prediction_snapshot = prediction_snapshot
@@ -339,13 +323,14 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                     self._review_save_error = False
                     # A snapshot may have changed while the write yielded.
                     self._review_dirty = payload != self.review_book.to_storage()
+        if self._history_storage_error:
+            return
         await self._store.async_save(
             {
                 "fast_result": getattr(self, "_fast_result", None),
                 "frozen_result_snapshot": getattr(self, "_frozen_result_snapshot", None),
                 "latest_round": self.history[-1].round if self.history else 0,
                 "draws": [draw.to_storage() for draw in self.history],
-                "sampling_cache": getattr(self, "_sampling_cache", {}),
                 "local_generation_sequence": self._local_generation_nonce,
                 "local_excluded_combinations": [list(item) for item in self._regeneration_exclusions],
                 "local_generated_at": (
@@ -387,7 +372,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 "numbers": list(item.numbers),
                 "reason": "",
                 "score": None,
-                "details": {},
+                "details": {k:v for k,v in item.details.items() if k in ("formula_version","core_version","generation_id","generated_at")},
                 "source": item.source,
             }
             if item.method_id in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE):
@@ -490,30 +475,6 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 self.data.ai_recommendation,
                 self.data.ai_generated_at,
             )
-        elif (self._prediction_snapshot is None and self.history
-              and not any(key in self.selected_method_ids for key in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE))
-              and not any(METHODS_BY_ID[key].sampling for key in self.selected_method_ids)):
-            # Upgrade compatibility: v1.7 and older did not persist recommendation
-            # snapshots.  Reconstruct the currently displayed target round from
-            # the cached pre-draw history before accepting a newer mirror round.
-            try:
-                profile = self.saju_profile if self.saju_profile_ready else None
-                cached_analysis = await self.hass.async_add_executor_job(
-                    build_analysis,
-                    self.history,
-                    self.selected_method_ids,
-                    self._local_generation_nonce,
-                    profile,
-                    self._regeneration_exclusions,
-                )
-            except ValueError as err:
-                _LOGGER.debug("기존 추천 스냅샷 재구성 생략: %s", err)
-            else:
-                self._set_prediction_snapshot(
-                    cached_analysis,
-                    self._cached_ai_recommendation,
-                    self._cached_ai_generated_at,
-                )
         changed = False
         source_status = self._startup_source or "cache"
         old_latest_round = self.history[-1].round if self.history else 0
@@ -596,57 +557,17 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             self._cached_ai_generated_at = None
             self._local_generation_nonce = 0
             self._regeneration_exclusions = ()
-            self._local_generated_at = datetime.now(UTC)
+            self._local_generated_at = None
             self._needs_storage_save = True
 
         if changed or self._needs_storage_save or self._review_dirty:
             await self._save_storage()
 
-        if self.data is not None and not changed:
-            configured = tuple(
-                self.data.analysis.summary.get("selected_method_ids", [])
-            )
-            generated_sequence = int(
-                self.data.analysis.summary.get("generation_sequence", 0)
-            )
-            if (
-                configured == self.selected_method_ids
-                and generated_sequence == self._local_generation_nonce
-            ):
-                if self.data.source_status == source_status:
-                    return self.data
-                return replace(self.data, source_status=source_status)
-
-        excluded = self._regeneration_exclusions
-        cached_ai = self._cached_ai_recommendation
-        if cached_ai is not None and cached_ai.details.get("target_round") == self.history[-1].round + 1:
-            excluded = (*excluded, cached_ai.numbers)
-        restored = restore_tickets(getattr(self, "_sampling_cache", {}), self.history,
-                                   self.selected_method_ids, self._local_generation_nonce, dict(self.entry.options))
         try:
-            profile = self.saju_profile if self.saju_profile_ready else None
-            analysis = await self.hass.async_add_executor_job(
-                build_analysis,
-                self.history,
-                self.selected_method_ids,
-                self._local_generation_nonce,
-                profile,
-                excluded,
-                restored,
-                dict(self.entry.options),
-            )
-        except ValueError as err:
-            raise UpdateFailed(f"로또 분석 실패: {err}") from err
-
-        analysis = refresh_consensus(
-            analysis, self.selected_method_ids, self.history,
-            updated_at=datetime.now(UTC).isoformat(),
-        )
-        self._sampling_cache = store_tickets(analysis, self.history, self.selected_method_ids,
-                                            self._local_generation_nonce, dict(self.entry.options))
-        if self._local_generated_at is None or not restored:
-            self._local_generated_at = datetime.now(UTC)
-            self._needs_storage_save = True
+            analysis = await self.service.analysis()
+        except (LabServiceError, ValueError, OSError) as exc:
+            self.service.status = exc.code if isinstance(exc,LabServiceError) else "storage_error"
+            analysis = self.service.legacy_analysis()
 
         ai_recommendation = self._cached_ai_recommendation if self.ai_enabled else None
         ai_generated_at = self._cached_ai_generated_at if self.ai_enabled else None
@@ -667,7 +588,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 ai_recommendation = await self._async_create_ai_recommendation(
                     analysis, self.configured_ai_entity_id
                 )
-                ai_generated_at = datetime.now(UTC)
+                ai_generated_at = datetime.fromisoformat(ai_recommendation.details["generated_at"])
                 self._cached_ai_recommendation = ai_recommendation
                 self._cached_ai_generated_at = ai_generated_at
                 ai_status = "ready"
@@ -711,7 +632,6 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 previous += (self.data.ai_recommendation.numbers,)
             self._regeneration_exclusions = previous
             self._local_generation_nonce += 1
-            self._local_generated_at = datetime.now(UTC)
             self._needs_storage_save = True
             self._suppress_ai_generation_once = True
             await self.async_request_refresh()
@@ -776,8 +696,22 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
     ) -> Recommendation:
         # Freeze a CSPRNG ticket before invoking the language model. Retries can
         # only change explanation, never use the LLM as a random-number source.
-        numbers = await self.hass.async_add_executor_job(
-            make_ai_ticket, self.history, analysis.recommendations, self._cached_ai_recommendation)
+        try:
+            base_result = await self.service.ai_ticket(analysis.target_round)
+            numbers = base_result.games[0].numbers
+        except LabServiceError as exc:
+            raise AiRecommendationError(exc.code) from exc
+        # Preserve a valid backend ticket even if the optional language model fails.
+        backend = self._parse_ai_result({"formula_id":AI_BASE_FORMULA,
+            "reason":"비공개 Core에서 생성했습니다. AI 설명은 아직 없습니다.","basis":"서버 CCSS"},
+            analysis,numbers,entity_id)
+        backend.details.update(core_version=base_result.core_version,
+            formula_version=base_result.games[0].formula_version,
+            generation_id=base_result.generation_id,generated_at=base_result.generated_at)
+        self._cached_ai_recommendation = backend
+        self._cached_ai_generated_at = datetime.fromisoformat(base_result.generated_at)
+        self._needs_storage_save = True
+        await self._save_storage()
         last_error: Exception | None = None
         for attempt in range(1, AI_MAX_ATTEMPTS + 1):
             try:
@@ -788,7 +722,9 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                     instructions=self._ai_prompt(analysis, attempt, numbers),
                     structure=self._ai_structure(),
                 )
-                return self._parse_ai_result(result.data, analysis, numbers, entity_id)
+                parsed = self._parse_ai_result(result.data, analysis, numbers, entity_id)
+                parsed.details.update(backend.details)
+                return parsed
             except (AiRecommendationError, HomeAssistantError, KeyError) as err:
                 last_error = err
                 _LOGGER.debug(
@@ -797,9 +733,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                     AI_MAX_ATTEMPTS,
                     err,
                 )
-        raise AiRecommendationError(
-            f"유효한 AI 추천을 생성하지 못했습니다: {last_error}"
-        ) from last_error
+        return replace(backend,reason="번호 생성 완료. AI 설명을 가져오지 못했습니다.")
 
     async def async_generate_ai_recommendation(
         self, entity_id: str | None = None
@@ -830,7 +764,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             self.data = replace(self.data, ai_status="error", ai_error=str(err))
             self.async_update_listeners()
             raise AiRecommendationError(str(err)) from err
-        generated_at = datetime.now(UTC)
+        generated_at = datetime.fromisoformat(recommendation.details["generated_at"])
         self._cached_ai_recommendation = recommendation
         self._cached_ai_generated_at = generated_at
         self.data = replace(

@@ -5,10 +5,21 @@
       "user": {
         "title": "로또 6/45 분석",
         "description": "릴리스 이력 스냅샷과 공유 GitHub 미러를 이용해 전체 회차를 분석하고 선택한 공식별 추천번호를 생성합니다."
+      },
+      "reauth_confirm": {
+        "title": "Core API 재인증",
+        "description": "새 기기 토큰을 입력하세요. 로컬 복권은 삭제되지 않습니다.",
+        "data": {
+          "service_token": "기기 전용 토큰"
+        }
       }
     },
     "abort": {
-      "single_instance_allowed": "로또 6/45 분석은 하나만 설정할 수 있습니다."
+      "single_instance_allowed": "로또 6/45 분석은 하나만 설정할 수 있습니다.",
+      "reauth_successful": "Core API 재인증이 완료되었습니다."
+    },
+    "error": {
+      "service_connection_failed": "서버 연결 또는 인증을 확인하세요."
     }
   },
   "options": {
@@ -20,7 +31,9 @@
           "recommendations": "추첨 공식 · AI · 데이터 소스",
           "saju": "명리 사주정보 입력·수정",
           "purchases": "직접 구매번호 입력·수정",
-          "generation_rules": "조건 지정 생성 설정"
+          "generation_rules": "조건 지정 생성 설정",
+          "service": "Core API 연결",
+          "formula_options": "공식 추가 설정"
         }
       },
       "recommendations": {
@@ -54,7 +67,8 @@
           "saju_lunar_leap_month": "음력 윤달",
           "saju_true_solar_time": "진태양시 보정 사용",
           "saju_longitude": "출생지 경도 (선택 사항)",
-          "saju_lunar_standard": "음력 기준"
+          "saju_lunar_standard": "음력 기준",
+          "saju_remote_consent": "사주 계산에 필요한 출생정보를 연결한 Core API로 전송하는 데 동의 (서버 원문 비저장)"
         },
         "data_description": {
           "saju_birth_date": "예: 1982-03-15",
@@ -102,6 +116,23 @@
           "max_run": "최대 연속 길이 (1-6)",
           "ac_min": "AC 최솟값 (0-10)"
         }
+      },
+      "service": {
+        "title": "비공개 Core API 연결",
+        "description": "운영자가 발급한 기기 전용 토큰을 사용합니다. QR·구매번호는 전송하지 않습니다. 기존 토큰을 유지하려면 비워 두세요. 사설 인증서는 별도로 확인한 SHA-256 지문을 입력하세요.",
+        "data": {
+          "service_url": "HTTPS 서버 주소",
+          "service_token": "기기 전용 토큰 (변경 시 입력)",
+          "service_certificate_sha256": "서버 인증서 SHA-256 지문 (공인 인증서는 비워 두기)",
+          "disconnect": "연결 해제 (내 복권은 유지)"
+        }
+      },
+      "formula_options": {
+        "title": "공식의 추가 공개 옵션",
+        "description": "연결된 공식 안내의 options_schema에 정의된 JSON 옵션만 입력하세요. 계산 코드나 내부 가중치는 입력할 수 없습니다.",
+        "data": {
+          "formula_options": "공개 옵션"
+        }
       }
     },
     "error": {
@@ -116,7 +147,8 @@
       "purchase_storage_unavailable": "저장하지 못했습니다. 기존 구매번호는 유지됩니다.",
       "purchase_game_limit": "한 회차에 최대 5게임(A~E)을 입력할 수 있습니다.",
       "select_korean_birthplace": "출생지는 대한민국 17개 시·도 중 하나를 선택하세요.",
-      "invalid_generation_rules": "조건이 서로 충돌하거나 입력 범위가 올바르지 않습니다. 위 안내를 확인하세요."
+      "invalid_generation_rules": "조건이 서로 충돌하거나 입력 범위가 올바르지 않습니다. 위 안내를 확인하세요.",
+      "service_connection_failed": "서버 주소·토큰·인증서 또는 입력 조건을 확인하세요. 기존 기록은 유지됩니다."
     },
     "abort": {
       "purchase_integration_not_ready": "통합 초기화 후 다시 구성하세요.",

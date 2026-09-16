@@ -112,7 +112,10 @@ class ReviewBook:
                     "label": str(prediction.get("label", method_id))[:180],
                     "generated_at": when.isoformat(), "based_on_round": based_on,
                     "source": str(prediction.get("source", "analysis"))[:40],
+                    **{k:str(prediction[k])[:128] for k in ('formula_version','core_version','generation_id') if prediction.get(k) is not None},
                 }
+            row['result_revision']=max(0,int(raw.get('result_revision',0)))
+            row['result_changes']=deepcopy(raw.get('result_changes',[])) if isinstance(raw.get('result_changes',[]),list) else []
             book.rounds[key] = row
             result = raw.get("result")
             if result is not None:
@@ -127,6 +130,8 @@ class ReviewBook:
                     raise ValueError("Invalid review result")
                 draw = LottoDraw(int(key), str(draw_raw.get("draw_date", "")), numbers, bonus)
                 book.set_result(draw, confirmed=result["confirmed"], status=str(result.get("status", "")))
+                row['result_revision']=max(1,int(raw.get('result_revision',1)))
+                row['result_changes']=deepcopy(raw.get('result_changes',[]))
         return book
 
     def to_storage(self) -> dict:
@@ -162,7 +167,8 @@ class ReviewBook:
                 continue
             accepted[method_id] = {"numbers": list(numbers), "label": str(raw.get("label", method_id))[:180],
                                    "generated_at": when.isoformat(), "based_on_round": based,
-                                   "source": str(raw.get("source", "analysis"))[:40]}
+                                   "source": str(raw.get("source", "analysis"))[:40],
+                                   **{k:str(raw.get('details',{}).get(k))[:128] for k in ('formula_version','core_version','generation_id') if raw.get('details',{}).get(k) is not None}}
         if not accepted:
             return False
         row = self.rounds.setdefault(str(r), {"predictions": {}, "result": None})
@@ -192,6 +198,10 @@ class ReviewBook:
                   "confirmed": confirmed, "status": status}
         if result == old:
             return False
+        if old:
+            row.setdefault('result_changes',[]).append(deepcopy(old))
+            row['result_changes']=row['result_changes'][-20:]
+        row['result_revision']=row.get('result_revision',0)+1
         row["result"] = result
         return True
 

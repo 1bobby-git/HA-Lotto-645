@@ -18,12 +18,12 @@ from .const import DOMAIN, VERSION
 from .panel_metadata import panel_metadata
 from .const import AI_METHOD_ID
 from .methods import METHODS_BY_ID, RETIRED_METHOD_LABELS
-from .purchased_tickets import PurchaseInputError, parse_round
+from .purchased_tickets import PurchaseInputError, parse_round, parse_games
 from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v1-21-0'
+PANEL_TAG = 'lotto-ticket-panel-v2-0-0'
 WWW = Path(__file__).parent / 'www'
 # The user-supplied PNG and locally verified pixel-identical lossless encodings.
 # Never display the old quantized replacement as the supplied original.
@@ -67,11 +67,11 @@ def _review_rows(coordinator) -> list[dict]:
     return rows
 
 
-def _view(coordinator: Any, round_no: int | None = None) -> dict:
+def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None = None) -> dict:
     draw = coordinator.result_draw
     book = coordinator.purchase_book
     round_no = round_no or book.selected_round or (coordinator.data.analysis.target_round if coordinator.data else None)
-    record = book.records.get(str(round_no), {})
+    record = book.ticket_record(round_no,ticket_id)
     metadata = coordinator.result_metadata
     return {**panel_metadata(coordinator.result_round, metadata.get('status', 'waiting')),
             'reviews': _review_rows(coordinator),
@@ -79,9 +79,12 @@ def _view(coordinator: Any, round_no: int | None = None) -> dict:
             'review_storage_error': getattr(coordinator, 'review_storage_error', False),
             'review_save_pending': getattr(coordinator, '_review_save_error', False),
             'round': round_no, 'revision': record.get('saved_at', ''),
-            'values': book.form_values(round_no) if round_no else {},
+            'ticket_id':record.get('ticket_id'),
+            'tickets':[{'ticket_id':r['ticket_id'],'saved_at':r['saved_at'],'game_count':len(r['games'])} for r in book.tickets.values() if r['round']==round_no],
+            'service_status':getattr(getattr(coordinator,'service',None),'status','unknown'),
+            'values': book.form_values(round_no,record.get('ticket_id')) if round_no else {},
             'stored_rounds': sorted(map(int, book.records), reverse=True),
-            'purchased': book.report(coordinator.result_history, round_no),
+            'purchased': book.report(coordinator.result_history, round_no,record.get('ticket_id')),
             'draw': draw.to_storage() if draw and metadata['status'] != 'conflict' else None,
             'result_round': coordinator.result_round,
             'result_verification': metadata, 'winning': coordinator.winning_summary,
@@ -92,20 +95,32 @@ def _view(coordinator: Any, round_no: int | None = None) -> dict:
                 + ([coordinator.data.ai_recommendation.as_attributes()] if coordinator.data.ai_recommendation else []))
                 if coordinator.data else [],
             'recommendation_generated_at': coordinator.data.generated_at.isoformat() if coordinator.data else None,
-            'generation_sequence': getattr(coordinator, 'local_generation_sequence', 0)}
+            'generation_sequence': getattr(coordinator, 'local_generation_sequence', 0),
+            'generation_matches':[{'ticket_id':t['ticket_id'],'formula_id':r.method_id,'generation_id':r.details.get('generation_id')} for t in book.tickets.values() if t['round']==round_no for r in (coordinator.data.analysis.recommendations if coordinator.data and coordinator.data.analysis.target_round==round_no else []) if any(tuple(g['numbers'])==r.numbers for g in t['games'])]}
 
 
 @websocket_api.websocket_command({'type': 'lotto_645/purchases_get', vol.Required('entry_id'): str,
-                                 vol.Optional('round'): vol.All(int, vol.Range(min=1, max=999999))})
+                                 vol.Optional('round'): vol.All(int, vol.Range(min=1, max=999999)), vol.Optional('ticket_id'):vol.All(str,vol.Length(max=80))})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def purchases_get(hass, connection, msg):
     try:
-        result = _view(_coordinator(hass, msg), msg.get('round'))
+        result = _view(_coordinator(hass, msg), msg.get('round'),msg.get('ticket_id'))
     except (ValueError, HomeAssistantError):
         connection.send_error(msg['id'], 'unavailable', '로또 통합 또는 회차를 확인하세요')
     else:
         connection.send_result(msg['id'], result)
+
+
+@websocket_api.websocket_command({'type':'lotto_645/purchases_export',vol.Required('entry_id'):str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def purchases_export(hass,connection,msg):
+    try:
+        coordinator=_coordinator(hass,msg)
+        connection.send_result(msg['id'],coordinator.purchase_book.to_storage())
+    except HomeAssistantError:
+        connection.send_error(msg['id'],'unavailable','복권 기록을 사용할 수 없습니다.')
 
 
 @websocket_api.websocket_command({'type': 'lotto_645/qr_preview', vol.Required('entry_id'): str,
@@ -117,8 +132,9 @@ async def qr_preview(hass, connection, msg):
         coordinator = _coordinator(hass, msg)
         preview = parse_ticket_qr(msg['qr'])
         # Do not retain/log raw QR, receipt identifier, or an image.
-        preview['revision'] = coordinator.purchase_book.records.get(str(preview['round']), {}).get('saved_at', '')
-        preview['will_replace'] = bool(preview['revision'])
+        preview['revision'] = ''
+        preview['will_replace'] = False
+        preview['duplicate_candidate'] = any(r['round']==preview['round'] and {tuple(g['numbers']) for g in r['games']} == {tuple(g['numbers']) for g in parse_games(preview['values'])} for r in coordinator.purchase_book.tickets.values())
     except (PurchaseInputError, ValueError, HomeAssistantError):
         connection.send_error(msg['id'], 'invalid_ticket_qr', '지원하는 로또 6/45 QR 주소가 아닙니다. A~E 번호를 직접 입력할 수 있습니다.')
     else:
@@ -129,14 +145,17 @@ async def qr_preview(hass, connection, msg):
                                  vol.Required('round'): vol.All(int, vol.Range(min=1, max=999999)),
                                  vol.Required('revision'): vol.All(str, vol.Length(max=100)),
                                  vol.Required('values'): {vol.Optional(f'game_{s}'): vol.All(str, vol.Length(max=150)) for s in 'abcde'},
-                                 vol.Optional('clear', default=False): bool})
+                                 vol.Optional('clear', default=False): bool,
+                                 vol.Optional('ticket_id'):vol.All(str,vol.Length(max=80)),
+                                 vol.Optional('new_ticket',default=False):bool})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def purchases_save(hass, connection, msg):
     try:
         coordinator = _coordinator(hass, msg)
         await coordinator.async_save_purchase_record(parse_round(msg['round']), msg['values'],
-                                                      clear=msg['clear'], expected_revision=msg['revision'])
+                                                      clear=msg['clear'], expected_revision=msg['revision'],
+                                                      ticket_id=msg.get('ticket_id'),new_ticket=msg['new_ticket'])
         result = _view(coordinator, msg['round'])
     except PurchaseInputError as err:
         connection.send_error(msg['id'], err.code, f'{err.field}: 1~45의 중복 없는 번호 6개를 입력하세요')
@@ -216,7 +235,7 @@ async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
                 StaticPathConfig('/lotto_645_brand', str(Path(__file__).parent / 'brand'), False)])
             shared['brand_registered'] = True
         if not shared.get('commands_registered', shared.get('registered', False)):
-            for handler in (purchases_get, qr_preview, purchases_save, result_check, subscribe_updates):
+            for handler in (purchases_get, purchases_export, qr_preview, purchases_save, result_check, subscribe_updates):
                 websocket_api.async_register_command(hass, handler)
             shared['commands_registered'] = True
         shared['source_logo_verified'] = await hass.async_add_executor_job(_source_logo_available)

@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows } from './lotto-panel-view.js?v=1.21.0';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows } from './lotto-panel-view.js?v=2.0.0';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v1-21-0';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-0-0';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -18,7 +18,7 @@ class LottoTicketPanel extends HTMLElement {
   constructor() {
     super(); this.attachShadow({mode:'open'});
     this._revision=''; this._editing=false; this._touched=new Set(); this._screen='home';
-    this._visibleGames=1; this._walletData=null; this._cameraGeneration=0;
+    this._ticketId=null;this._newTicket=false;this._newTicketId=null;this._visibleGames=1; this._walletData=null; this._cameraGeneration=0;
   }
   set hass(value) { this._hass=value; this.syncTheme(); this._start(); }
   set panel(value) { this._panel=value; this._start(); this._syncEntryOptions?.(); }
@@ -120,6 +120,12 @@ class LottoTicketPanel extends HTMLElement {
       try{await this.load(Number(this.node('wallet-round').value));}
       catch(error){this.node('wallet-round').value=String(this._walletRound||'');throw error;}
     });
+    this.node('wallet-ticket').onchange=()=>this.operation(()=>this.load(this._walletRound,this.node('wallet-ticket').value));
+    this.node('export-wallet').onclick=()=>this.operation(async()=>{
+      const data=await this.request('purchases_export');
+      const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+      const a=document.createElement('a');a.href=url;a.download='lotto-wallet.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    });
     this.node('edit-wallet').onclick=()=>this.openEditor('edit');
     this.node('delete-wallet').onclick=()=>this.operation(()=>this.deleteWallet());
     this.node('close-editor').onclick=()=>this.closeEditor();
@@ -133,9 +139,9 @@ class LottoTicketPanel extends HTMLElement {
     this.node('manual').onclick=()=>this.operation(async()=>{
       // Returning from number editing must preserve the draft and its revision.
       const target=this._editorMode==='edit'?this._walletRound:(this._targetRound||this._walletRound);
-      if(!this._editing&&target&&target!==this._loadedRound)await this.load(target);
+      if(!this._newTicket&&!this._editing&&target&&target!==this._loadedRound)await this.load(target);
       this.showEditorStep('edit');this._focusAfter='game_a';
-      if(this._revision)this.message('이 회차에 이미 저장된 번호가 있어요. 다시 저장하면 A~E를 교체합니다.');
+      if(this._revision)this.message('선택한 복권의 A~E만 수정합니다. 다른 복권은 유지됩니다.');
     });
     this.node('back-editor').onclick=()=>{this.stopCamera();this.showEditorStep('import');this.node('manual').focus();};
     this.node('save').onclick=()=>this.operation(()=>this.save());
@@ -144,7 +150,7 @@ class LottoTicketPanel extends HTMLElement {
     this.node('photo').onclick=()=>this.node('file').click();
     this.node('file').onchange=()=>this.operation(()=>this.readPhoto());
     this.node('preview').onclick=()=>this.operation(()=>this.preview(this.node('qr').value));
-    this.node('round').oninput=()=>{this._editing=true;this._loadedRound=null;this.updateFormStatus();};
+    this.node('round').oninput=()=>{this._editing=true;this._loadedRound=this._newTicket?Number(this.node('round').value):null;this.updateFormStatus();};
     this.node('load').onclick=()=>{
       if(this._editing&&!window.confirm('저장하지 않은 입력을 버리고 해당 회차를 불러올까요?'))return;
       this.operation(async()=>{await this.load(this.selectedRound());this.message('해당 회차를 불러왔어요. 번호를 확인해 주세요.');this._focusAfter='game_a';});
@@ -185,6 +191,8 @@ class LottoTicketPanel extends HTMLElement {
     if(this.node('editor').open||!this._activeEntry||this._busy)return;
     this._opener=this.shadowRoot.activeElement;this._editorMode=mode;
     if(this._walletData)this.restoreForm(this._walletData);
+    this._newTicket=mode!=='edit';this._newTicketId=globalThis.crypto?.randomUUID?.()||`ticket-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    if(this._newTicket){this._revision='';this._loadedRound=this._targetRound||this._walletRound;this.node('round').value=this._loadedRound||'';slots.forEach(s=>this.node(`game_${s}`).value='');this.showGameSlots(1);}
     this.node('editor-title').textContent=mode==='edit'?'구매번호 수정':'복권 등록';
     this.node('editor-message').textContent='';this.node('message').textContent='';this.node('qr').value='';
     this.node('address-import').open=false;this.showEditorStep(mode==='edit'?'edit':'import');
@@ -247,23 +255,28 @@ class LottoTicketPanel extends HTMLElement {
   selectedRound() {
     const raw=this.node('round').value.trim();if(!/^[0-9]{1,6}$/.test(raw)||Number(raw)<1){this._focusAfter='round';throw new Error('회차를 1~999999 사이의 숫자로 입력해 주세요.');}return Number(raw);
   }
-  async load(round=null) {
-    const data=await this.request('purchases_get',round?{round}:{});
+  async load(round=null,ticket_id=null) {
+    const data=await this.request('purchases_get',{...(round?{round}:{}),...(ticket_id?{ticket_id}:{})});
+    this._newTicket=false;
     this.updateResults(data);this.applyWallet(data);this.restoreForm(data);
     if(data.storage_error)this.message('구매번호 저장소를 확인해야 해요. 기존 파일은 덮어쓰지 않습니다.',true);
   }
   async refreshStatus() {
-    const data=await this.request('purchases_get',this._walletRound?{round:this._walletRound}:{});
+    const data=await this.request('purchases_get',this._walletRound?{round:this._walletRound,...(this._ticketId?{ticket_id:this._ticketId}:{})}:{});
     this.updateResults(data);
     // Update saved records, never the editor's draft or optimistic concurrency revision.
     if(Number(data.round)===this._walletRound||!this._walletRound)this.applyWallet(data);
     if(data.storage_error)this.message('구매번호 저장소 오류가 있어요. 기존 파일은 보존됩니다.',true);
   }
   applyWallet(data) {
-    this._walletData=data;this._walletRound=Number(data.round)||null;
+    this._walletData=data;this._walletRound=Number(data.round)||null;this._ticketId=data.ticket_id||null;
+    const slips=this.node('wallet-ticket');slips.replaceChildren();
+    (data.tickets||[]).forEach((ticket,index)=>{const o=document.createElement('option');o.value=ticket.ticket_id;o.textContent=`복권 ${index+1} · ${ticket.game_count}게임`;slips.append(o);});
+    slips.value=this._ticketId||'';
+    this.node('export-wallet').disabled=!(data.stored_rounds||[]).length;
     const games=data.purchased?.games||[];
     this.node('mini-round').textContent=formatRound(data.round);this.node('ticket-round').textContent=formatRound(data.round);
-    this.node('mini-count').textContent=games.length>3?`${games.length}게임 중 3게임 표시`:`${games.length}게임 보관`;this.node('wallet-count').textContent=`${games.length}게임 · 최대 5게임`;
+    this.node('mini-count').textContent=games.length>3?`${games.length}게임 중 3게임 표시`:`${games.length}게임 보관`;this.node('wallet-count').textContent=`${games.length}게임 · 이번 회차 ${data.tickets?.length||0}장`;
     ticketRows(this.node('mini-games'),games,3);ticketRows(this.node('wallet-games'),games);
     const select=this.node('wallet-round');const rounds=[...new Set([data.round,data.recommendation_target,...(data.stored_rounds||[])].map(Number).filter(n=>Number.isInteger(n)&&n>0))].sort((a,b)=>b-a);
     const signature=rounds.join(',');
@@ -277,7 +290,7 @@ class LottoTicketPanel extends HTMLElement {
     renderPredictionRows(this.node('current-recommendations'),currentRows,['생성된 추천번호가 없어요.','설정에서 공식을 선택하고 번호를 생성하세요.']);
     this.node('current-title').textContent=data.recommendation_target?`${data.recommendation_target}회 추천번호`:'이번 회차 추천번호';
     this.node('current-count').textContent=`${currentRows.length}개 공식`;
-    this.node('current-meta').textContent=currentRows.length?'선택한 공식의 최신 생성번호 · 내 복권 등록 및 이전 회차 결과와 별도':'추천번호 생성 후 자동으로 표시됩니다.';
+    this.node('current-meta').textContent=data.service_status&&data.service_status!=='ready'?`Core 연결 상태: ${data.service_status} · 저장된 번호는 유지됩니다.`:currentRows.length?'선택한 공식의 최신 생성번호 · 내 복권 등록 및 이전 회차 결과와 별도':'추천번호 생성 후 자동으로 표시됩니다.';
     this._targetRound=Number(data.recommendation_target)||this._targetRound;
     this.node('drawtitle').textContent=data.result_round?formatRound(data.result_round):'결과 발표 대기';
     const numbers=this.node('numbers');numbers.removeAttribute('role');numbers.removeAttribute('aria-label');
@@ -309,11 +322,11 @@ class LottoTicketPanel extends HTMLElement {
     if(!String(qr||'').trim()){this._focusAfter='qr';throw new Error('복권 QR 주소를 붙여 넣어 주세요.');}
     const result=await this.request('qr_preview',{qr});
     if(this._editing&&!window.confirm('저장하지 않은 입력을 QR 번호로 바꿀까요?'))return;
-    this.node('round').value=result.round;this._loadedRound=Number(result.round);this._revision=result.revision||'';
+    this.node('round').value=result.round;this._loadedRound=Number(result.round);this._revision='';this._newTicket=true;this._newTicketId=globalThis.crypto?.randomUUID?.()||`ticket-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     slots.forEach(s=>this.node(`game_${s}`).value=result.values?.[`game_${s}`]||'');
     this.node('qr').value='';this._editing=true;this._touched.clear();
     this.showGameSlots(slots.map(s=>!!this.node(`game_${s}`).value.trim()).lastIndexOf(true)+1);this.updateFormStatus();this.showEditorStep('edit');
-    this.message(`${result.round}회 ${result.game_count}게임을 읽었어요. 아직 저장하지 않았어요.`+(result.will_replace?' 이 회차에 저장된 번호가 있어 교체됩니다.':''));this._focusAfter='game_a';
+    this.message(`${result.round}회 ${result.game_count}게임을 읽었어요. 아직 저장하지 않았어요.`+(result.duplicate_candidate?' 같은 번호의 복권이 이미 있습니다. 별도 구매한 복권인지 확인하세요.':' 새 복권으로 추가됩니다.'));this._focusAfter='game_a';
     if(!this._busy){this._focusAfter=null;this.node('game_a').focus();}
   }
   async save() {
@@ -325,14 +338,14 @@ class LottoTicketPanel extends HTMLElement {
     // An explicit save is enough for a new record. Replacements require a second confirmation.
     if(this._revision&&!window.confirm(`${round}회에 저장된 A~E를 지금 확인한 번호로 교체할까요?`))return;
     const values={};slots.forEach(s=>values[`game_${s}`]=this.node(`game_${s}`).value);
-    const data=await this.request('purchases_save',{round,values,revision:this._revision,clear:false});
-    this._editing=false;this.updateResults(data);this.applyWallet(data);this.restoreForm(data);this.finishClose(false);
+    const data=await this.request('purchases_save',{round,values,revision:this._newTicket?'':this._revision,clear:false,new_ticket:this._newTicket,...((this._newTicket?this._newTicketId:this._ticketId)?{ticket_id:this._newTicket?this._newTicketId:this._ticketId}:{})});
+    this._editing=false;this._newTicket=false;this.updateResults(data);this.applyWallet(data);this.restoreForm(data);this.finishClose(false);
     this.showScreen('wallet',true);this.message(`${round}회 ${filled}게임을 저장했어요. 추첨 결과가 확인되면 자동으로 대조합니다.`);
   }
   async deleteWallet() {
     const data=this._walletData;if(!data?.revision)return;
-    const round=Number(data.round);if(!window.confirm(`${round}회 구매번호만 삭제할까요? 다른 회차와 추천 기록은 유지됩니다.`))return;
-    const result=await this.request('purchases_save',{round,values:data.values||{},revision:data.revision,clear:true});
+    const round=Number(data.round);if(!window.confirm(`${round}회에서 선택한 복권 한 장만 삭제할까요? 다른 복권과 추천 기록은 유지됩니다.`))return;
+    const result=await this.request('purchases_save',{round,values:data.values||{},revision:data.revision,clear:true,...(data.ticket_id?{ticket_id:data.ticket_id}:{})});
     this.updateResults(result);this.applyWallet(result);this.restoreForm(result);this.message(`${round}회 구매번호를 삭제했어요.`);
   }
   decode(image,width,height) {

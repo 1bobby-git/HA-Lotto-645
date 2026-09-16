@@ -4,17 +4,10 @@ from __future__ import annotations
 import json
 
 from .const import DISCLAIMER, FIRST_PRIZE_ODDS
-from .sampling import FORMULA_VERSION, generate_ticket, validate_fixed
+from .service_contract import numbers as validate_fixed
+FORMULA_VERSION = "server"
 
 AI_BASE_FORMULA = "calibrated_stratified"
-
-
-def make_ai_ticket(history, local_recommendations, previous=None, *, rng=None, excluded_combinations=()):
-    blocked = {d.numbers for d in history} | {r.numbers for r in local_recommendations}
-    blocked.update(excluded_combinations)
-    if previous is not None:
-        blocked.add(previous.numbers)
-    return generate_ticket(AI_BASE_FORMULA, excluded_combinations=blocked, rng=rng)
 
 
 def explanation_prompt(numbers, target_round, cutoff_round, attempt=1):

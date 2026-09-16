@@ -25,7 +25,8 @@ def production_function(name, namespace):
 def test_view_includes_current_sensor_records_separate_from_last_draw():
     rec=models.Recommendation(1,'uniform_fisher_yates','균등','local',(2,8,17,25,34,43),'reason',None,{})
     current=models.AnalysisResult(31,30,(rec,),{})
-    book=SimpleNamespace(selected_round=29,records={},form_values=lambda n:{},report=lambda h,n:{'round':n})
+    from custom_components.lotto_645.purchased_tickets import PurchaseBook
+    book=PurchaseBook(); book.selected_round=29
     owner=SimpleNamespace(result_draw=None,purchase_book=book,result_metadata={'status':'waiting'},result_round=30,
         data=SimpleNamespace(analysis=current,generated_at=datetime.now(UTC),ai_recommendation=None),
         result_history=[],winning_summary={'round':30,'results':[]},entry=SimpleNamespace(entry_id='entry'),purchase_storage_error=False,

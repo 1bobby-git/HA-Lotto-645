@@ -1,5 +1,5 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '1.21.0';
+const VERSION = '2.0.0';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
 const REPO = `https://github.com/1bobby-git/HA-Lotto-645/blob/v${VERSION}/`;
@@ -325,15 +325,15 @@ class LottoPanelTools extends HTMLElement {
     else if (!event.shiftKey && active === last) { event.preventDefault(); first?.focus(); }
   }
 }
-if (!customElements.get('lotto-panel-tools-v1-21-0')) customElements.define('lotto-panel-tools-v1-21-0', LottoPanelTools);
+if (!customElements.get('lotto-panel-tools-v2-0-0')) customElements.define('lotto-panel-tools-v2-0-0', LottoPanelTools);
 
 export function applyPanelTools(panel) {
   const root = panel.shadowRoot, main = root?.querySelector('main'); if (!main) return;
-  if (!root.querySelector('style[data-lotto-panel-tools-v1-21-0]')) {
+  if (!root.querySelector('style[data-lotto-panel-tools-v2-0-0]')) {
     const style = element('style'); style.dataset.lottoPanelTools = VERSION; style.textContent = PANEL_STYLE; root.append(style);
   }
-  if (!root.querySelector('lotto-panel-tools-v1-21-0')) {
-    const tools = document.createElement('lotto-panel-tools-v1-21-0'); tools.panel = panel; main.prepend(tools);
+  if (!root.querySelector('lotto-panel-tools-v2-0-0')) {
+    const tools = document.createElement('lotto-panel-tools-v2-0-0'); tools.panel = panel; main.prepend(tools);
     if (panel._latestToolsData) tools.setData(panel._latestToolsData);
   }
   for (const id of ['current-recommendations', 'predictions', 'reviews']) {
@@ -347,7 +347,7 @@ export function applyPanelTools(panel) {
     const update = panel.updateResults;
     panel.updateResults = function (data, ...args) {
       const result = update.call(this, data, ...args); this._latestToolsData = data;
-      this.shadowRoot.querySelector('lotto-panel-tools-v1-21-0')?.setData(data); return result;
+      this.shadowRoot.querySelector('lotto-panel-tools-v2-0-0')?.setData(data); return result;
     };
   }
 }
