@@ -4,14 +4,7 @@
     "step": {
       "user": {
         "title": "Lotto 6/45 Analysis",
-        "description": "Analyze Lotto 6/45 history using the release-bundled snapshot and a shared GitHub mirror, then create selectable recommendation games."
-      },
-      "reauth_confirm": {
-        "title": "Core API 재인증",
-        "description": "새 기기 토큰을 입력하세요. 로컬 복권은 삭제되지 않습니다.",
-        "data": {
-          "service_token": "기기 전용 토큰"
-        }
+        "description": "Add Lotto 6/45. The service manages the Core connection; no API address or token input is required. Tickets and QR records stay on this device."
       }
     },
     "abort": {
@@ -30,10 +23,7 @@
         "menu_options": {
           "recommendations": "Draw formulas, AI, and data source",
           "saju": "Personal Four Pillars profile",
-          "purchases": "Purchased tickets: enter / edit",
-          "generation_rules": "Strict generation rules",
-          "service": "Core API 연결",
-          "formula_options": "공식 추가 설정"
+          "purchases": "Purchased tickets: enter / edit"
         }
       },
       "recommendations": {
@@ -99,41 +89,6 @@
           "game_d": "Game D (six numbers)",
           "game_e": "Game E (six numbers)",
           "clear_round": "Delete this round (ignore input lines)"
-        }
-      },
-      "generation_rules": {
-        "title": "Strict generation rules",
-        "description": "Rules are never silently relaxed. Enter ranges such as 2-4 or 3; separate fixed/excluded numbers by spaces or commas. Saving rules does not enable a formula. Select conditional-uniform generation under Recommendations.\n\n{detail}",
-        "data": {
-          "fixed": "Fixed numbers (up to 6)",
-          "excluded": "Excluded numbers",
-          "total": "Sum (21-255)",
-          "odd": "Odd count (0-6)",
-          "low": "Count in 1-22 (0-6)",
-          "carryover": "Previous main-number overlap (0-6)",
-          "neighbors": "Previous +/-1, excluding carryovers (0-6)",
-          "primes": "Prime count, excluding 1 (0-6)",
-          "multiples3": "Multiples of 3 (0-6)",
-          "max_same_ending": "Maximum same ending (1-5)",
-          "max_run": "Maximum consecutive run (1-6)",
-          "ac_min": "Minimum AC (0-10)"
-        }
-      },
-      "service": {
-        "title": "비공개 Core API 연결",
-        "description": "운영자가 발급한 기기 전용 토큰을 사용합니다. QR·구매번호는 전송하지 않습니다. 기존 토큰을 유지하려면 비워 두세요. 사설 인증서는 별도로 확인한 SHA-256 지문을 입력하세요.",
-        "data": {
-          "service_url": "HTTPS 서버 주소",
-          "service_token": "기기 전용 토큰 (변경 시 입력)",
-          "service_certificate_sha256": "서버 인증서 SHA-256 지문 (공인 인증서는 비워 두기)",
-          "disconnect": "연결 해제 (내 복권은 유지)"
-        }
-      },
-      "formula_options": {
-        "title": "공식의 추가 공개 옵션",
-        "description": "연결된 공식 안내의 options_schema에 정의된 JSON 옵션만 입력하세요. 계산 코드나 내부 가중치는 입력할 수 없습니다.",
-        "data": {
-          "formula_options": "공개 옵션"
         }
       }
     },

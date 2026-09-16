@@ -11,10 +11,8 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from .const import CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CERT, CONF_PERSONAL_CONSENT
-from .lab_client import LottoLabClient, LabServiceError
-from .methods import install_catalog
+from .const import CONF_PERSONAL_CONSENT
+from .lab_client import LabServiceError
 
 from .const import (
     CONF_AI_AUTO_GENERATE,
@@ -225,7 +223,7 @@ def _normalize_submitted_methods(raw_methods: object) -> tuple[str, ...]:
 class Lotto645ConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Lotto 6/45 Analysis."""
 
-    VERSION = 2
+    VERSION = 3
 
     @staticmethod
     @callback
@@ -242,28 +240,7 @@ class Lotto645ConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(title=NAME, data={})
         return self.async_show_form(step_id="user", data_schema=vol.Schema({}))
 
-    async def async_step_reauth(self, entry_data):
-        return await self.async_step_reauth_confirm()
 
-    async def async_step_reauth_confirm(self, user_input=None):
-        entry=self._get_reauth_entry()
-        errors={}
-        if user_input is not None:
-            options=dict(entry.options)
-            options[CONF_SERVICE_TOKEN]=user_input[CONF_SERVICE_TOKEN]
-            try:
-                client=LottoLabClient(async_get_clientsession(self.hass),options.get(CONF_SERVICE_URL,""),
-                    options[CONF_SERVICE_TOKEN], certificate_sha256=options.get(CONF_SERVICE_CERT))
-                catalog=await client.async_catalog()
-                install_catalog(catalog)
-            except (LabServiceError,ValueError):
-                errors["base"]="service_connection_failed"
-            else:
-                self.hass.config_entries.async_update_entry(entry,options=options)
-                return self.async_abort(reason="reauth_successful")
-        return self.async_show_form(step_id="reauth_confirm",errors=errors,
-            data_schema=vol.Schema({vol.Required(CONF_SERVICE_TOKEN):selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD))}))
 
 
 class Lotto645OptionsFlow(OptionsFlow):
@@ -281,63 +258,10 @@ class Lotto645OptionsFlow(OptionsFlow):
         del user_input
         return self.async_show_menu(
             step_id="init",
-            menu_options=["service", "recommendations", "generation_rules", "formula_options", "saju", "purchases"],
+            menu_options=["recommendations", "saju", "purchases"],
         )
 
-    async def async_step_service(self, user_input=None):
-        errors = {}
-        if user_input is not None:
-            pending = dict(self._options)
-            if user_input.get("disconnect"):
-                for key in (CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CERT, CONF_PERSONAL_CONSENT):
-                    pending.pop(key, None)
-                return self.async_create_entry(title="", data=pending)
-            pending[CONF_SERVICE_URL] = str(user_input.get(CONF_SERVICE_URL, "")).strip()
-            pending[CONF_SERVICE_CERT] = str(user_input.get(CONF_SERVICE_CERT, "")).strip()
-            if user_input.get(CONF_SERVICE_TOKEN):
-                pending[CONF_SERVICE_TOKEN] = user_input[CONF_SERVICE_TOKEN]
-            try:
-                client = LottoLabClient(async_get_clientsession(self.hass),
-                    pending.get(CONF_SERVICE_URL, ""), pending.get(CONF_SERVICE_TOKEN, ""),
-                    certificate_sha256=pending.get(CONF_SERVICE_CERT))
-                catalog = await client.async_catalog()
-                await client.async_service_info()
-                install_catalog(catalog)
-            except (ValueError, LabServiceError) as exc:
-                errors["base"] = "service_connection_failed"
-            else:
-                return self.async_create_entry(title="", data=pending)
-        return self.async_show_form(step_id="service", errors=errors, data_schema=vol.Schema({
-            vol.Required(CONF_SERVICE_URL,default=str(self._options.get(CONF_SERVICE_URL,""))):selector.TextSelector(),
-            vol.Optional(CONF_SERVICE_TOKEN):selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
-            vol.Optional(CONF_SERVICE_CERT,default=str(self._options.get(CONF_SERVICE_CERT,""))):selector.TextSelector(),
-            vol.Optional("disconnect",default=False):selector.BooleanSelector(),
-        }))
 
-    async def async_step_formula_options(self, user_input=None):
-        """Generic data-only options for compatible future formulas; no new client code."""
-        errors={}
-        values=self._options.get("formula_options",{})
-        if user_input is not None:
-            values=user_input.get("formula_options",{})
-            if not isinstance(values,dict):
-                errors["base"]="invalid_generation_rules"
-            else:
-                owner=getattr(self._entry,"runtime_data",None)
-                client=getattr(getattr(owner,"service",None),"client",None)
-                if not client:
-                    errors["base"]="service_connection_failed"
-                else:
-                    try:
-                        # Validating public options does not send birth information.
-                        await client.async_validate(owner.selected_method_ids,values)
-                    except (ValueError,LabServiceError):
-                        errors["base"]="invalid_generation_rules"
-                    else:
-                        pending=dict(self._options); pending["formula_options"]=values
-                        return self.async_create_entry(title="",data=pending)
-        return self.async_show_form(step_id="formula_options", errors=errors,
-            data_schema=vol.Schema({vol.Optional("formula_options",default=values):selector.ObjectSelector()}))
 
     async def async_step_recommendations(
         self, user_input: dict[str, Any] | None = None
@@ -390,43 +314,6 @@ class Lotto645OptionsFlow(OptionsFlow):
             errors=errors,
         )
 
-    async def async_step_generation_rules(self, user_input=None) -> ConfigFlowResult:
-        """Save independent strict rules without enabling a formula or buying tickets."""
-        from dataclasses import asdict
-        from .constraints import Rules, RULES_KEY, LABELS, ConstraintError
-
-        current = Rules.parse(self._options.get(RULES_KEY))
-        values = asdict(current)
-        values = {key: " ".join(map(str, value)) if key in ("fixed", "excluded")
-                  else f"{value[0]}-{value[1]}" if isinstance(value, tuple) else str(value)
-                  for key, value in values.items()}
-        errors = {}
-        detail = ""
-        if user_input is not None:
-            values.update(user_input)
-            try:
-                submitted = dict(user_input)
-                for key in ("max_same_ending", "max_run", "ac_min"):
-                    value = submitted.get(key, getattr(current, key))
-                    if isinstance(value, str) and value.strip().isdigit():
-                        value = int(value.strip())
-                    submitted[key] = value
-                rules = Rules.parse(submitted)
-                owner = getattr(self._entry, "runtime_data", None)
-                if owner is not None and getattr(owner, "history", None):
-                    rules.check_feasible(owner.history[-1].numbers)
-                pending = dict(self._options)
-                pending[RULES_KEY] = asdict(rules)
-                return self.async_create_entry(title="", data=pending)
-            except (ConstraintError, TypeError, ValueError) as err:
-                errors["base"] = "invalid_generation_rules"
-                detail = str(err)
-        return self.async_show_form(
-            step_id="generation_rules",
-            data_schema=vol.Schema({vol.Optional(key, default=str(value)): selector.TextSelector()
-                                    for key, value in values.items()}),
-            errors=errors, description_placeholders={"detail": detail},
-        )
 
 
     async def async_step_saju(
