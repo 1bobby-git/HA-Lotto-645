@@ -1,8 +1,8 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '2.0.2';
+const VERSION = '2.0.3';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
-import {reviewPresentation} from './lotto-panel-view.js?v=2.0.2';
+import {reviewPresentation} from './lotto-panel-view.js?v=2.0.3';
 const AI_ID = 'home_assistant_ai';
 const validId = id => typeof id === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(id);
 const element = (tag, text, className) => {
@@ -53,7 +53,7 @@ export function countdownState(schedule, now = Date.now()) {
     days: Math.floor(seconds / 86400), hours: Math.floor(seconds % 86400 / 3600),
     minutes: Math.floor(seconds % 3600 / 60), remainder: seconds % 60 };
 }
-const sourceURL = id => new URL(`/lotto_645_static/methods/${id}.md`,location.href).href;
+const sourceURL = id => new URL(`./methods/${id}.md`,import.meta.url).href;
 
 // DOM-only subset covering our bundled Markdown guides. Raw HTML stays text;
 // never evaluate Markdown, inject its HTML, or load images/external parsers.
@@ -231,7 +231,6 @@ class LottoPanelTools extends HTMLElement {
     this.schedule = data.draw_schedule;
     const serverNow = Date.parse(this.schedule?.server_now);
     this._clockOffset = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
-    this.decorate('current-recommendations', data.recommendations || []);
     this.decorate('predictions', reviewPresentation(data).rows);
     this.decorate('reviews', data.reviews || []);
     this.startClock();
@@ -284,7 +283,7 @@ class LottoPanelTools extends HTMLElement {
         pending = (async () => {
           const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
           try {
-            const response = await fetch(`/lotto_645_static/methods/${id}.md?v=${VERSION}`, {credentials:'same-origin', redirect:'error', signal:controller.signal});
+            const response = await fetch(sourceURL(id), {credentials:'same-origin', redirect:'error', signal:controller.signal});
             if (!response.ok) throw new Error('guide_unavailable');
             const text = await response.text();
             if (text.length > 200000 || !text.trimStart().startsWith('# ')) throw new Error('invalid_guide');
@@ -325,15 +324,15 @@ class LottoPanelTools extends HTMLElement {
     else if (!event.shiftKey && active === last) { event.preventDefault(); first?.focus(); }
   }
 }
-if (!customElements.get('lotto-panel-tools-v2-0-2')) customElements.define('lotto-panel-tools-v2-0-2', LottoPanelTools);
+if (!customElements.get('lotto-panel-tools-v2-0-3')) customElements.define('lotto-panel-tools-v2-0-3', LottoPanelTools);
 
 export function applyPanelTools(panel) {
   const root = panel.shadowRoot, main = root?.querySelector('main'); if (!main) return;
-  if (!root.querySelector('style[data-lotto-panel-tools-v2-0-2]')) {
+  if (!root.querySelector('style[data-lotto-panel-tools-v2-0-3]')) {
     const style = element('style'); style.dataset.lottoPanelTools = VERSION; style.textContent = PANEL_STYLE; root.append(style);
   }
-  if (!root.querySelector('lotto-panel-tools-v2-0-2')) {
-    const tools = document.createElement('lotto-panel-tools-v2-0-2'); tools.panel = panel; main.prepend(tools);
+  if (!root.querySelector('lotto-panel-tools-v2-0-3')) {
+    const tools = document.createElement('lotto-panel-tools-v2-0-3'); tools.panel = panel; main.prepend(tools);
     if (panel._latestToolsData) tools.setData(panel._latestToolsData);
   }
   for (const id of ['current-recommendations', 'predictions', 'reviews']) {
@@ -347,7 +346,7 @@ export function applyPanelTools(panel) {
     const update = panel.updateResults;
     panel.updateResults = function (data, ...args) {
       const result = update.call(this, data, ...args); this._latestToolsData = data;
-      this.shadowRoot.querySelector('lotto-panel-tools-v2-0-2')?.setData(data); return result;
+      this.shadowRoot.querySelector('lotto-panel-tools-v2-0-3')?.setData(data); return result;
     };
   }
 }

@@ -23,8 +23,9 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-0-2'
+PANEL_TAG = 'lotto-ticket-panel-v2-0-3'
 WWW = Path(__file__).parent / 'www'
+FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
 # The user-supplied PNG and locally verified pixel-identical lossless encodings.
 # Never display the old quantized replacement as the supplied original.
 SOURCE_LOGO_HASHES = {
@@ -214,7 +215,7 @@ def _publish_panel(hass: HomeAssistant, shared: dict) -> None:
     existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
     if existing is not None:
         config = getattr(existing, 'config', None) or {}
-        if config.get('_panel_custom', {}).get('name') not in {'lotto-ticket-panel','lotto-ticket-panel-v2-0-0','lotto-ticket-panel-v2-0-1',PANEL_TAG}:
+        if config.get('_panel_custom', {}).get('name') not in {'lotto-ticket-panel','lotto-ticket-panel-v2-0-0','lotto-ticket-panel-v2-0-1','lotto-ticket-panel-v2-0-2',PANEL_TAG}:
             raise HomeAssistantError('로또 페이지 경로를 다른 패널이 사용 중입니다')
     frontend.async_register_built_in_panel(
         hass, component_name='custom', frontend_url_path=PATH,
@@ -224,7 +225,7 @@ def _publish_panel(hass: HomeAssistant, shared: dict) -> None:
                 'brand_logo_url': f'/lotto_645_brand/logo.png?v={VERSION}' if shared.get('source_logo_verified') else None,
                 '_panel_custom': {'name': PANEL_TAG, 'embed_iframe': False,
                                   'trust_external': False, 'handle_safe_area': True,
-                                  'module_url': f'/lotto_645_static/lotto-panel-shell.js?v={VERSION}'}},
+                                  'module_url': f'{FRONTEND_PATH}/lotto-panel-shell.js'}},
     )
 
 
@@ -240,6 +241,10 @@ async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
             await hass.http.async_register_static_paths([
                 StaticPathConfig('/lotto_645_static', str(WWW), False)])
             shared['static_registered'] = True
+        if shared.get('frontend_release') != VERSION:
+            await hass.http.async_register_static_paths([
+                StaticPathConfig(FRONTEND_PATH, str(WWW), False)])
+            shared['frontend_release'] = VERSION
         if not shared.get('brand_registered', False):
             await hass.http.async_register_static_paths([
                 StaticPathConfig('/lotto_645_brand', str(Path(__file__).parent / 'brand'), False)])
@@ -275,5 +280,5 @@ def async_remove_ticket_panel(hass: HomeAssistant, entry_id: str, *, permanent: 
         _publish_panel(hass, shared)
     else:
         existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
-        if existing and (getattr(existing, 'config', None) or {}).get('_panel_custom', {}).get('name') in {'lotto-ticket-panel','lotto-ticket-panel-v2-0-0','lotto-ticket-panel-v2-0-1',PANEL_TAG}:
+        if existing and (getattr(existing, 'config', None) or {}).get('_panel_custom', {}).get('name') in {'lotto-ticket-panel','lotto-ticket-panel-v2-0-0','lotto-ticket-panel-v2-0-1','lotto-ticket-panel-v2-0-2',PANEL_TAG}:
             frontend.async_remove_panel(hass, PATH)
