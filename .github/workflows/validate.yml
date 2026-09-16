@@ -82,8 +82,30 @@ jobs:
         run: python -m pip install playwright 'qrcode[pil]'
       - name: Install headless browser
         run: python -m playwright install --with-deps chromium
-      - name: Validate local QR preview and research tools in browser
+      - name: Validate QR, wallet and live recommendations in browser
         run: |
           python scripts/smoke_ticket_panel.py
-          python scripts/smoke_research_panel.py
-          python scripts/smoke_portfolio_panel.py
+  core-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: '3.11'
+          - os: windows-latest
+            python: '3.11'
+          - os: ubuntu-latest
+            python: '3.14'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install standalone core test dependencies (no HA)
+        run: python -m pip install pytest lunar_python==1.4.8 korean-lunar-calendar==0.4.0 tzdata==2025.2
+      - name: Verify API, identical HA adapter, wheel and removal boundaries
+        run: python -m pytest -q tests/test_core_contract.py tests/test_feature_removal.py tests/test_panel_live_payload.py

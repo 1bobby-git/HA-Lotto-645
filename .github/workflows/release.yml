@@ -38,4 +38,5 @@ jobs:
             echo "Release already exists; never retarget a published version."
             exit 0
           fi
-          gh release create "$TAG" --target "$TESTED_SHA" --title "$TAG" --generate-notes
+          python scripts/build_core.py --output dist --commit "$TESTED_SHA"
+          gh release create "$TAG" dist/*.zip dist/*.whl dist/lotto-core-manifest.json dist/SHA256SUMS.txt --target "$TESTED_SHA" --title "$TAG" --generate-notes
