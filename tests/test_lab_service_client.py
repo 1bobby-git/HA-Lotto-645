@@ -138,6 +138,8 @@ def test_durable_retry_uses_same_key_after_timeout():
         async def async_save(self, value): self.value = deepcopy(value)
     class InterruptedClient:
         keys = []
+        async def async_get_by_key(self, **kwargs):
+            raise LabServiceError('not_found')
         async def async_generate(self, **kwargs):
             self.keys.append(kwargs['request_key'])
             if len(self.keys) == 1:

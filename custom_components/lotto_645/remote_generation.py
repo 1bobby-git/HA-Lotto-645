@@ -1,7 +1,6 @@
 """Durable remote generation state, independent of the wallet and HA lifecycle.
 
-A Store-compatible object supplies async_load/async_save. This class is ready
-for coordinator integration but is NOT activated in v1.21.0 automatically.
+A Store-compatible object supplies async_load/async_save. The coordinator uses this state without sharing private calculation modules.
 """
 from __future__ import annotations
 
@@ -48,13 +47,16 @@ class RemoteGeneration:
         self._state = value
 
     async def start(self, *, target_round: int, formula_ids, options: dict | None = None,
-                    personal_profile: dict | None = None, personal_consent: bool = False) -> Generation:
+                    personal_profile: dict | None = None, personal_consent: bool = False, context_tag: str = "", mode: str = "generate",
+                    source_generation_id: str | None = None, material_context: str = "", nonce: int = 0) -> Generation:
         target, ids = positive(target_round), method_ids(formula_ids)
         public_options = deepcopy(options or {})
         if personal_profile is not None and not personal_consent:
             raise LabServiceError("personal_consent_required")
         public_context = {"target_round": target, "formula_ids": list(ids), "options": public_options,
-                          "requires_personal_input": personal_profile is not None}
+                          "requires_personal_input": personal_profile is not None, "context_tag": context_tag,
+                          "mode": mode, "source_generation_id": source_generation_id,
+                          "material_context": material_context, "nonce": nonce}
         fingerprint = sha256(json.dumps(public_context, sort_keys=True, allow_nan=False).encode()).hexdigest()
         async with self._lock:
             await self._load()
@@ -68,15 +70,21 @@ class RemoteGeneration:
                 # through the service; no profile is persisted here.
                 if current.get("generation_id"):
                     return await self._poll(current)
-                if current.get("requires_personal_input"):
-                    raise LabServiceError("personal_request_recovery_required")
+                try:
+                    result = await self.client.async_get_by_key(request_key=current["request_key"],
+                        target_round=target, formula_ids=ids)
+                    return await self._accept(result, current)
+                except LabServiceError as error:
+                    if error.code != "not_found":
+                        raise
             else:
                 current = {**public_context, "request_key": str(uuid4()), "generation_id": None,
                            "context_hash": fingerprint, "created_at": datetime.now(UTC).isoformat()}
                 await self._save({**self._state, "pending": current})
             result = await self.client.async_generate(
                 request_key=current["request_key"], target_round=target, formula_ids=ids,
-                options=public_options, personal_profile=personal_profile, personal_consent=personal_consent)
+                options=public_options, personal_profile=personal_profile, personal_consent=personal_consent,
+                mode=mode, source_generation_id=source_generation_id)
             return await self._accept(result, current)
 
     async def poll(self) -> Generation | None:
@@ -86,7 +94,9 @@ class RemoteGeneration:
             if pending is None:
                 return None
             if not pending.get("generation_id"):
-                raise LabServiceError("request_not_acknowledged")
+                result = await self.client.async_get_by_key(request_key=pending["request_key"],
+                    target_round=pending["target_round"], formula_ids=pending["formula_ids"])
+                return await self._accept(result, pending)
             return await self._poll(pending)
 
     async def _poll(self, pending: dict) -> Generation:
@@ -98,9 +108,9 @@ class RemoteGeneration:
     async def _accept(self, result: Generation, pending: dict) -> Generation:
         updated = deepcopy(self._state)
         if result.status == "completed":
-            updated.update(pending=None, last_result=asdict(result))
+            updated.update(pending=None, last_result=asdict(result), last_context=deepcopy(pending))
         elif result.status in ("failed", "cancelled"):
-            updated.update(pending=None, last_failure={"generation_id": result.generation_id, "status": result.status})
+            updated.update(pending=None, last_failure={"generation_id": result.generation_id, "status": result.status, "context_tag":pending.get("context_tag")})
         else:
             updated["pending"] = {**pending, "generation_id": result.generation_id}
         await self._save(updated)
@@ -110,3 +120,27 @@ class RemoteGeneration:
         async with self._lock:
             await self._load()
             return deepcopy(self._state["last_result"])
+
+    async def state(self):
+        async with self._lock:
+            await self._load()
+            return deepcopy(self._state)
+
+    async def cancel(self):
+        async with self._lock:
+            await self._load()
+            pending = self._state.get("pending")
+            if pending is None:
+                return None
+            if not pending.get("generation_id"):
+                result = await self.client.async_get_by_key(request_key=pending["request_key"],
+                    target_round=pending["target_round"], formula_ids=pending["formula_ids"])
+            else:
+                result = await self.client.async_cancel_generation(pending["generation_id"],
+                    request_key=pending["request_key"], target_round=pending["target_round"],
+                    formula_ids=pending["formula_ids"])
+            if result.status in ("queued", "running"):
+                result = await self.client.async_cancel_generation(result.generation_id,
+                    request_key=pending["request_key"], target_round=pending["target_round"],
+                    formula_ids=pending["formula_ids"])
+            return await self._accept(result, pending)

@@ -88,6 +88,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        await entry.runtime_data.service.close()
         await entry.runtime_data.async_flush_consensus()
         async_remove_ticket_panel(hass, entry.entry_id)
         if hass.services.has_service(DOMAIN, SERVICE_REFRESH):
@@ -100,3 +101,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove the panel only when the entry is really deleted, not reloaded."""
     async_remove_ticket_panel(hass, entry.entry_id, permanent=True)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Retain existing identity, options and records while upgrading schema."""
+    if entry.version > 2:
+        return False
+    if entry.version < 2:
+        hass.config_entries.async_update_entry(entry, version=2)
+    return True

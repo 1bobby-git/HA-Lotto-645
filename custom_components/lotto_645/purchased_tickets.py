@@ -72,7 +72,7 @@ def parse_games(values: dict[str, Any]) -> list[dict[str, Any]]:
     return games
 
 
-class PurchaseBook:
+class _LegacyPurchaseBook:
     """Five lines per draw; rounds are retained until the user explicitly deletes."""
 
     def __init__(self) -> None:
@@ -159,6 +159,136 @@ class PurchaseBook:
                 'winning_numbers': list(draw.numbers) if draw else [], 'bonus_number': draw.bonus if draw else None,
                 'games': games}
 
+
+class PurchaseBook:
+    """Ticket IDs separate multiple physical slips; legacy round records remain readable."""
+    def __init__(self):
+        self.tickets = {}
+        self.selected_round = None
+        self.selected_ticket_id = None
+
+    @property
+    def records(self):
+        result={}
+        for ticket in self.tickets.values():
+            result[str(ticket['round'])]={k:deepcopy(v) for k,v in ticket.items() if k in ('round','saved_at','games')}
+        selected=self.tickets.get(self.selected_ticket_id)
+        if selected:
+            result[str(selected['round'])]={k:deepcopy(v) for k,v in selected.items() if k in ('round','saved_at','games')}
+        return result
+
+    @classmethod
+    def from_storage(cls,payload):
+        book=cls()
+        if payload is None:return book
+        if not isinstance(payload,dict):raise ValueError('invalid_purchase_storage')
+        if payload.get('version')==1:
+            old=_LegacyPurchaseBook.from_storage(payload)
+            for key,row in old.records.items():
+                ticket_id='legacy-'+key
+                book.tickets[ticket_id]={'ticket_id':ticket_id,**deepcopy(row)}
+            book.selected_round=old.selected_round
+            book.selected_ticket_id='legacy-'+str(old.selected_round) if old.selected_round else None
+        elif payload.get('version')==2:
+            tickets=payload.get('tickets')
+            if not isinstance(tickets,dict) or len(tickets)>10000:
+                raise ValueError('invalid_ticket_storage')
+            for key,row in tickets.items():
+                if (not isinstance(key,str) or not re.fullmatch(r'[a-zA-Z0-9-]{1,80}',key)
+                    or not isinstance(row,dict) or row.get('ticket_id')!=key):
+                    raise ValueError('invalid_ticket_id')
+                number=parse_round(row.get('round'))
+                valid=_LegacyPurchaseBook.from_storage({'version':1,'records':{str(number):row},'selected_round':number})
+                book.tickets[key]={'ticket_id':key,**valid.records[str(number)]}
+            book.selected_round=payload.get('selected_round')
+            book.selected_ticket_id=payload.get('selected_ticket_id')
+            if book.selected_ticket_id is not None and book.selected_ticket_id not in book.tickets:
+                raise ValueError('invalid_selected_ticket')
+            # The backward-readable index must agree, not silently hide a corrupt record.
+            if payload.get('records')!=book.records:
+                raise ValueError('purchase_index_mismatch')
+        else:raise ValueError('unsupported_purchase_storage')
+        return book
+
+    def to_storage(self):
+        return {'version':2,'tickets':deepcopy(self.tickets),'records':self.records,
+                'selected_round':self.selected_round,'selected_ticket_id':self.selected_ticket_id}
+
+    def ticket_record(self,round_no,ticket_id=None):
+        if ticket_id:
+            row=self.tickets.get(ticket_id)
+            if row is None or row['round']!=round_no:
+                raise PurchaseInputError('base','invalid_ticket_id')
+            return row
+        current=self.tickets.get(self.selected_ticket_id)
+        if current and current['round']==round_no:return current
+        return next((r for r in reversed(list(self.tickets.values())) if r['round']==round_no),{})
+
+    def updated(self,round_no,values,*,clear=False,now=None,ticket_id=None,new_ticket=False):
+        from uuid import uuid4
+        round_no=parse_round(round_no)
+        result=self.from_storage(self.to_storage())
+        if clear:
+            if ticket_id:
+                result.ticket_record(round_no,ticket_id)
+                result.tickets.pop(ticket_id)
+            else:
+                result.tickets={k:v for k,v in result.tickets.items() if v['round']!=round_no}
+            if result.selected_ticket_id not in result.tickets:
+                result.selected_ticket_id=next(reversed(result.tickets),None)
+            result.selected_round=result.tickets[result.selected_ticket_id]['round'] if result.selected_ticket_id else None
+            return result
+        games=parse_games(values)
+        when=now or datetime.now(UTC)
+        if when.tzinfo is None:raise ValueError('timezone_required')
+        if len(result.tickets)>=10000 and new_ticket:
+            raise PurchaseInputError('base','purchase_storage_limit')
+        if new_ticket and ticket_id:
+            if not re.fullmatch(r'[a-zA-Z0-9-]{1,80}',ticket_id):
+                raise PurchaseInputError('base','invalid_ticket_id')
+            existing=result.tickets.get(ticket_id)
+            if existing:
+                if existing['round']!=round_no or existing['games']!=games:
+                    raise PurchaseInputError('base','purchase_revision_conflict')
+                result.selected_ticket_id=ticket_id;result.selected_round=round_no
+                return result
+        previous={} if new_ticket else result.ticket_record(round_no,ticket_id)
+        key=previous.get('ticket_id') or (ticket_id if new_ticket else None) or str(uuid4())
+        result.tickets[key]={'ticket_id':key,'round':round_no,'saved_at':when.isoformat(),'games':games}
+        result.selected_ticket_id=key;result.selected_round=round_no
+        return result
+
+    def form_values(self,round_no,ticket_id=None):
+        row=self.ticket_record(round_no,ticket_id)
+        return {f"game_{r['slot'].lower()}":', '.join(map(str,r['numbers'])) for r in row.get('games',[])}
+
+    def report(self,history,round_no=None,ticket_id=None):
+        round_no=self.selected_round if round_no is None else round_no
+        selected=([self.ticket_record(round_no,ticket_id)] if ticket_id else
+                  [r for r in self.tickets.values() if r['round']==round_no])
+        legacy=_LegacyPurchaseBook();legacy.selected_round=round_no
+        if not selected:
+            report=legacy.report(history,round_no)
+        else:
+            reports=[]
+            for ticket in selected:
+                legacy.records={str(round_no):ticket}
+                report=legacy.report(history,round_no)
+                for row in report['games']:
+                    row['ticket_id']=ticket['ticket_id']
+                    if len(selected)>1:
+                        row['method_id']=row['method_id']+'_'+ticket['ticket_id']
+                reports.append(report)
+            report=reports[-1]
+            if len(reports)>1:
+                report['games']=[row for item in reports for row in item['games']]
+                for field in ('saved_game_count','checked_game_count','winning_game_count','losing_game_count'):
+                    report[field]=sum(item.get(field,0) for item in reports)
+                winners=[r for r in report['games'] if r.get('prize_rank')]
+                report['highest_prize']=min(winners,key=lambda r:r['prize_rank'])['prize'] if winners else ('미당첨' if report['status']=='evaluated' else None)
+        report['saved_rounds']=sorted(map(int,self.records))
+        report['ticket_count']=len(selected)
+        return report
 
 def combined_result(draw: LottoDraw, recommendation_result: dict[str, Any] | None,
                     purchased_result: dict[str, Any]) -> dict[str, Any]:

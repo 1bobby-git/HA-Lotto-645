@@ -5,10 +5,21 @@
       "user": {
         "title": "Lotto 6/45 Analysis",
         "description": "Analyze Lotto 6/45 history using the release-bundled snapshot and a shared GitHub mirror, then create selectable recommendation games."
+      },
+      "reauth_confirm": {
+        "title": "Core API 재인증",
+        "description": "새 기기 토큰을 입력하세요. 로컬 복권은 삭제되지 않습니다.",
+        "data": {
+          "service_token": "기기 전용 토큰"
+        }
       }
     },
     "abort": {
-      "single_instance_allowed": "Only one Lotto 6/45 Analysis instance can be configured."
+      "single_instance_allowed": "Only one Lotto 6/45 Analysis instance can be configured.",
+      "reauth_successful": "Core API 재인증이 완료되었습니다."
+    },
+    "error": {
+      "service_connection_failed": "서버 연결 또는 인증을 확인하세요."
     }
   },
   "options": {
@@ -20,7 +31,9 @@
           "recommendations": "Draw formulas, AI, and data source",
           "saju": "Personal Four Pillars profile",
           "purchases": "Purchased tickets: enter / edit",
-          "generation_rules": "조건 지정 생성 설정"
+          "generation_rules": "조건 지정 생성 설정",
+          "service": "Core API 연결",
+          "formula_options": "공식 추가 설정"
         }
       },
       "recommendations": {
@@ -54,7 +67,8 @@
           "saju_lunar_leap_month": "Lunar leap month",
           "saju_true_solar_time": "Use true solar time correction",
           "saju_longitude": "Birth longitude (optional)",
-          "saju_lunar_standard": "Lunar calendar standard"
+          "saju_lunar_standard": "Lunar calendar standard",
+          "saju_remote_consent": "사주 계산에 필요한 출생정보를 연결한 Core API로 전송하는 데 동의 (서버 원문 비저장)"
         },
         "data_description": {
           "saju_birth_date": "Example: 1982-03-15",
@@ -102,6 +116,23 @@
           "max_run": "최대 연속 길이 (1-6)",
           "ac_min": "AC 최솟값 (0-10)"
         }
+      },
+      "service": {
+        "title": "비공개 Core API 연결",
+        "description": "운영자가 발급한 기기 전용 토큰을 사용합니다. QR·구매번호는 전송하지 않습니다. 기존 토큰을 유지하려면 비워 두세요. 사설 인증서는 별도로 확인한 SHA-256 지문을 입력하세요.",
+        "data": {
+          "service_url": "HTTPS 서버 주소",
+          "service_token": "기기 전용 토큰 (변경 시 입력)",
+          "service_certificate_sha256": "서버 인증서 SHA-256 지문 (공인 인증서는 비워 두기)",
+          "disconnect": "연결 해제 (내 복권은 유지)"
+        }
+      },
+      "formula_options": {
+        "title": "공식의 추가 공개 옵션",
+        "description": "연결된 공식 안내의 options_schema에 정의된 JSON 옵션만 입력하세요. 계산 코드나 내부 가중치는 입력할 수 없습니다.",
+        "data": {
+          "formula_options": "공개 옵션"
+        }
       }
     },
     "error": {
@@ -116,7 +147,8 @@
       "purchase_storage_unavailable": "Could not save. Existing tickets are preserved.",
       "purchase_game_limit": "Enter at most five games (A–E) per draw.",
       "select_korean_birthplace": "Choose one of the 17 South Korean regions.",
-      "invalid_generation_rules": "조건이 서로 충돌하거나 입력 범위가 올바르지 않습니다. 위 안내를 확인하세요."
+      "invalid_generation_rules": "조건이 서로 충돌하거나 입력 범위가 올바르지 않습니다. 위 안내를 확인하세요.",
+      "service_connection_failed": "서버 주소·토큰·인증서 또는 입력 조건을 확인하세요. 기존 기록은 유지됩니다."
     },
     "abort": {
       "purchase_integration_not_ready": "Wait for the integration to finish setup.",

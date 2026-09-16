@@ -55,13 +55,19 @@ def service_origin(value: str, *, allow_loopback_http: bool = False) -> str:
 
 class LottoLabClient:
     def __init__(self, session: aiohttp.ClientSession, base_url: str, access_token: str,
-                 *, allow_loopback_http: bool = False, timeout: float = 15.0):
+                 *, allow_loopback_http: bool = False, timeout: float = 15.0, certificate_sha256: str | None = None):
         self._session = session
         self._origin = service_origin(base_url, allow_loopback_http=allow_loopback_http)
         self._token = self._valid_token(access_token)
         if not 0 < timeout <= 120:
             raise ValueError("invalid_timeout")
         self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._ssl = True
+        if certificate_sha256:
+            digest = certificate_sha256.replace(":", "").lower()
+            if not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise ValueError("invalid_certificate_fingerprint")
+            self._ssl = aiohttp.Fingerprint(bytes.fromhex(digest))
 
     @staticmethod
     def _valid_token(value: Any) -> str:
@@ -85,7 +91,7 @@ class LottoLabClient:
                 raise LabServiceError("request_too_large")
         try:
             async with self._session.request(method, self._origin + path, json=body, headers=headers,
-                                             timeout=self._timeout, allow_redirects=False) as response:
+                                             timeout=self._timeout, allow_redirects=False, ssl=self._ssl) as response:
                 retry = response.headers.get("Retry-After", "")
                 retry_after = min(int(retry), 3600) if retry.isdecimal() and len(retry) < 9 else None
                 code = {401: "reauth_required", 403: "permission_denied", 404: "not_found",
@@ -125,16 +131,42 @@ class LottoLabClient:
         except (ContractError, ValueError, TypeError) as exc:
             raise LabServiceError("invalid_catalog") from exc
 
+    async def async_service_info(self) -> dict:
+        value = await self._request("GET", "/v1/service")
+        if not isinstance(value, dict) or value.get("contract_version") != 1:
+            raise LabServiceError("unsupported_service")
+        identifier(value.get("device_id"))
+        return value
+
+    async def async_validate(self, formula_ids, options=None, personal_profile=None, personal_consent=False):
+        body = {"formula_ids": list(formula_ids), "options": options or {}}
+        if personal_profile is not None:
+            if personal_consent is not True:
+                raise LabServiceError("personal_consent_required")
+            body.update(personal_profile=personal_profile, personal_consent=True)
+        value = await self._request("POST", "/v1/validate", body=body)
+        if value.get("valid") is not True:
+            raise LabServiceError("invalid_options")
+        return value
+
+    async def async_get_by_key(self, *, request_key, target_round, formula_ids):
+        key = identifier(request_key)
+        raw = await self._request("GET", f"/v1/generations/by-key/{key}")
+        return self._parse_generation(raw, key, positive(target_round), method_ids(formula_ids))
+
     async def async_generate(self, *, request_key: str, target_round: int, formula_ids,
                              options: dict | None = None, personal_profile: dict | None = None,
-                             personal_consent: bool = False) -> Generation:
+                             personal_consent: bool = False, mode: str = "generate",
+                             source_generation_id: str | None = None) -> Generation:
         key, target, ids = identifier(request_key), positive(target_round), method_ids(formula_ids)
         if options is not None and not isinstance(options, dict):
             raise LabServiceError("invalid_options")
         if personal_profile is not None and (not personal_consent or not isinstance(personal_profile, dict)):
             raise LabServiceError("personal_consent_required")
         body = {"contract_version": 1, "request_key": key, "target_round": target,
-                "formula_ids": list(ids), "options": options or {}}
+                "formula_ids": list(ids), "options": options or {}, "mode": mode}
+        if source_generation_id:
+            body["source_generation_id"] = identifier(source_generation_id)
         if personal_profile is not None:
             body["personal_profile"] = personal_profile
             body["personal_consent"] = True

@@ -134,7 +134,7 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
                 if self.coordinator.local_generated_at
                 else None
             ),
-            "refresh_behavior": "즉시 새로고침 시 AI를 제외한 선택된 로컬 추천번호를 새 후보로 재생성",
+            "refresh_behavior": "즉시 새로고침 시 AI를 제외한 선택한 공식의 번호를 비공개 Core API에 새로 요청",
             "source_status": data.source_status,
             "data_source": SOURCE_NAME,
             "source_url": SOURCE_RESULT_URL,
@@ -182,6 +182,9 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
         catalog = method_catalog()
         return {
             "method_count": len(METHODS_BY_ID),
+            "service_status": self.coordinator.service.status,
+            "core_version": self.coordinator.service.catalog.core_version if self.coordinator.service.catalog else None,
+            "service_device": self.coordinator.service.info.get("device_id"),
             "selected_method_ids": list(self.coordinator.selected_method_ids),
             "selected_method_names": [
                 METHODS_BY_ID[method_id].label
@@ -194,7 +197,7 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
                 "속성이 접혀 보이면 개발자 도구 > 상태에서 '추첨 공식 안내' 엔티티를 선택하면 전체 목록을 볼 수 있습니다."
             ),
             "usage": "통합 구성에서 여러 공식을 동시에 선택할 수 있으며, 각 공식은 6개 번호 1게임과 핵심 근거를 생성합니다.",
-            "refresh_behavior": "즉시 새로고침은 선택된 비AI 추천을 고득점 후보군 안에서 다시 선택합니다.",
+            "refresh_behavior": "즉시 새로고침은 선택한 비AI 공식으로 Core API에 번호 생성을 요청합니다.",
             "public_formula_notice": PUBLIC_FORMULA_NOTICE,
             "disclaimer": DISCLAIMER,
         }
@@ -228,7 +231,7 @@ class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
             "required_before_use": True,
             "required_fields": ["양력/음력", "생년월일", "출생시간", "성별", "출생지", "시간대"],
             "where_to_enter": "설정 > 기기 및 서비스 > Lotto 6/45 Analysis > 구성 > 명리 사주정보 입력·수정",
-            "privacy": "입력값은 Home Assistant 구성에 로컬 저장되며 로또 미러와 HA AI 추천 프롬프트에 원본 생년월일·출생시간·출생지를 보내지 않습니다.",
+            "privacy": "입력은 로컬에 저장됩니다. 원격 계산 동의 시에만 연결한 Core API에 필요한 출생정보를 보내며 이력 미러·AI에는 전달하지 않습니다.",
         }
         data = self.coordinator.data
         if data is None:
