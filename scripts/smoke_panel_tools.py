@@ -47,6 +47,15 @@ async def verify_panel_tools(page):
             winning:{status:'evaluated',round:1241,winning_game_count:0,results:catalog.map(m=>({method_id:m.method_id,sensor_name:m.name,source:'local',recommended_numbers:[1,7,15,24,33,45],prize:'미당첨'}))},
             reviews:catalog.map(m=>({method_id:m.method_id,display_name:'★1.0 · '+m.name,reviewed_rounds:1})),
             review_round:{},result_verification:{status:'official_confirmed'},result_round:1241};
+        // Reconnection refreshes use the same fixture, so layout changes cannot
+        // replace the deliberately populated guide/review tables with old data.
+        const previousWS=el._hass.callWS;
+        el.hass={...el._hass,callWS:async msg=>{
+            if(msg.type==='lotto_645/purchases_get'){
+                requests.push(structuredClone(msg));return structuredClone(toolsFixture);
+            }
+            return previousWS(msg);
+        }};
         el.updateResults(toolsFixture);el._clearSmartSync();el.showScreen('home');
         window.wsBeforeTools=requests.length;
     }""", catalog)
@@ -72,6 +81,11 @@ async def verify_panel_tools(page):
         document.body.append(viewport);inline.append(el);
         el._clearSmartSync();el.showScreen('review');
     }""")
+    # The two fixture moves above run real disconnect/connect callbacks.
+    # Allow their read-only refreshes, then keep the no-layout/no-timer-I/O gate.
+    await page.wait_for_function('!el._busy && !el._livePending && !el._liveQueued')
+    assert await page.evaluate("requests.slice(wsBeforeTools).every(r=>r.type==='lotto_645/purchases_get')")
+    await page.evaluate('wsBeforeTools=requests.length;el._clearSmartSync()')
     for width in (320,390,560,615,870,871,1366):
         await page.set_viewport_size({'width':width,'height':900})
         await page.evaluate('(narrow)=>{el.narrow=narrow;el.scrollTop=0}', width <= 870)

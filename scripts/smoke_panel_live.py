@@ -17,6 +17,10 @@ async def verify_live_sync(page):
       };
       window.liveWS=async msg=>{liveReads++;return liveResponse(msg);};
       el.hass={...el._hass,connection:liveConnection,callWS:msg=>liveWS(msg)};
+      // The preceding tools fixture intentionally detaches the panel to verify
+      // cleanup. Reattach only after installing this test's connection/data.
+      if(!el.isConnected)document.body.append(el);
+      document.querySelector('#allocated')?.remove();
       window.invalidate=id=>{for(const {fn} of liveHandlers.values())fn({entry_id:id});};
     }''')
     await page.wait_for_function("!el._busy && el.node('current-recommendations').querySelectorAll('.ball').length===6")
