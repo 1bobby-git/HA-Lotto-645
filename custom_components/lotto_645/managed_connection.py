@@ -7,6 +7,7 @@ origin. No shared credential is shipped.
 from __future__ import annotations
 import asyncio
 import copy
+import hashlib
 import re
 import secrets
 import time
@@ -15,7 +16,8 @@ import aiohttp
 from .const import CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CERT
 from .lab_client import LabServiceError, service_origin, CLIENT_USER_AGENT
 
-DEFAULT_SERVICE_URL = "https://lottolab.toiss.kr"
+RETIRED_SERVICE_ORIGIN = "https://lottolab.toiss.kr"
+DEFAULT_SERVICE_URL = "https://lotto.formulab.kr"
 CONNECTION_KEYS = (CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CERT)
 REMOVED_OPTIONS = frozenset(("generation_rules", "formula_options", "_member_link"))
 
@@ -40,6 +42,25 @@ def without_user_connection(raw):
     return {k: v for k, v in dict(raw).items() if k not in CONNECTION_KEYS and k not in REMOVED_OPTIONS}
 
 
+def _migrate_retired_origin(saved):
+    """Rewrite the retired service origin in place, pinning the old journal scope.
+
+    Tokens, device identity and records are preserved; only the endpoint moves.
+    Returns True when the stored state changed and must be persisted.
+    """
+    if not isinstance(saved, dict):
+        return False
+    creds = saved.get('credentials')
+    if not isinstance(creds, dict) or creds.get(CONF_SERVICE_URL) != RETIRED_SERVICE_ORIGIN:
+        return False
+    if not saved.get('journal_scope'):
+        token = creds.get(CONF_SERVICE_TOKEN, '')
+        saved['journal_scope'] = hashlib.sha256(
+            (RETIRED_SERVICE_ORIGIN + '\0' + str(token)).encode()).hexdigest()[:24]
+    creds[CONF_SERVICE_URL] = DEFAULT_SERVICE_URL
+    return True
+
+
 class ManagedConnection:
     def __init__(self, store):
         self.store = store
@@ -60,6 +81,13 @@ class ManagedConnection:
             connection_values(saved.get("credentials"))
             if saved["source"] == "automatic" and not re.fullmatch(r"[0-9a-f]{32}", str(saved.get("installation_id", ""))):
                 raise ValueError("invalid_installation_id")
+            if _migrate_retired_origin(saved):
+                connection_values(saved.get("credentials"))
+                try:
+                    await self.store.async_save(saved)
+                except OSError:
+                    self.state = None
+                    raise
             self.state = saved
             return
         if legacy and legacy.get('_member_link'):
@@ -75,6 +103,8 @@ class ManagedConnection:
                      "enrolled": False}
         # Persist the exact identity before network use. A timeout cannot create a
         # second identity, and a failed save never removes the legacy credential.
+        if _migrate_retired_origin(saved):
+            connection_values(saved.get("credentials"))
         await self.store.async_save(saved)
         self.state = saved
 

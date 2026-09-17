@@ -2,6 +2,7 @@
 import asyncio
 import ast
 import copy
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -116,6 +117,44 @@ def test_old_request_journal_scope_is_unchanged():
     old_scope=hashlib.sha256((LEGACY[URL]+'\0'+LEGACY[TOKEN]).encode()).hexdigest()[:24]
     assert owner.generator=='lotto_645.remote.entry.'+old_scope
     assert owner.ai_generator=='lotto_645.remote_ai.entry.'+old_scope
+
+OLD_ORIGIN='https://lottolab.toiss.kr'
+NEW_ORIGIN='https://lotto.formulab.kr'
+
+def test_service_origin_points_to_current_domain():
+    from custom_components.lotto_645.managed_connection import DEFAULT_SERVICE_URL
+    from custom_components.lotto_645 import member_link
+    assert DEFAULT_SERVICE_URL==NEW_ORIGIN
+    assert member_link.ORIGIN==NEW_ORIGIN
+
+def test_retired_origin_is_rewritten_without_identity_change():
+    async def case():
+        old={'version':1,'source':'member','credentials':{URL:OLD_ORIGIN,TOKEN:'t'*43,CERT:''},
+             'enrolled':True,'device_id':'d'*32,'refresh_token':'r'*64,'access_expires_at':0}
+        old_scope=hashlib.sha256((OLD_ORIGIN+'\0'+'t'*43).encode()).hexdigest()[:24]
+        store=MemoryStore(old);manager=ManagedConnection(store);await manager.load()
+        assert manager.values[URL]==NEW_ORIGIN
+        assert manager.values[TOKEN]=='t'*43
+        assert store.value['credentials'][URL]==NEW_ORIGIN
+        assert manager.journal_scope==old_scope
+        assert store.value['journal_scope']==old_scope
+        assert store.value['refresh_token']=='r'*64 and store.value['device_id']=='d'*32
+    asyncio.run(case())
+
+def test_retired_origin_migration_failure_keeps_previous_state():
+    async def case():
+        old={'version':1,'source':'member','credentials':{URL:OLD_ORIGIN,TOKEN:'t'*43,CERT:''},'enrolled':True}
+        store=MemoryStore(old,fail=True);manager=ManagedConnection(store)
+        with pytest.raises(OSError):await manager.load()
+        assert manager.state is None and store.value==old
+    asyncio.run(case())
+
+def test_unrelated_origin_is_never_rewritten():
+    async def case():
+        saved={'version':1,'source':'operator','credentials':dict(LEGACY),'enrolled':True}
+        store=MemoryStore(saved);manager=ManagedConnection(store);await manager.load()
+        assert manager.values==LEGACY and store.value==saved and store.writes==0
+    asyncio.run(case())
 
 def test_removed_values_are_never_sent_to_generation():
     s=(R/'service_runtime.py').read_text(encoding='utf-8')
