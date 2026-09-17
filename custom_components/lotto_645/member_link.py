@@ -11,7 +11,7 @@ import time
 import aiohttp
 from .lab_client import LabServiceError, CLIENT_USER_AGENT
 
-ORIGIN='https://lottolab.toiss.kr'
+ORIGIN='https://lotto.formulab.kr'
 CLIENT_ID='ha-lotto-645'
 GRANT='urn:ietf:params:oauth:grant-type:device_code'
 

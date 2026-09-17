@@ -253,7 +253,7 @@ class Lotto645ConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._member_grant=None
         grant=getattr(self,'_member_grant',None) or {}
         return self.async_show_form(step_id='user',data_schema=vol.Schema({}),errors=errors,
-            description_placeholders={'url':grant.get('url','https://lottolab.toiss.kr'), 'code':grant.get('user_code','—')})
+            description_placeholders={'url':grant.get('url','https://lotto.formulab.kr'), 'code':grant.get('user_code','—')})
 
 
 class Lotto645OptionsFlow(OptionsFlow):
@@ -298,7 +298,7 @@ class Lotto645OptionsFlow(OptionsFlow):
                 self._member_grant=None
         grant=getattr(self,'_member_grant',None) or {}
         return self.async_show_form(step_id='account',data_schema=vol.Schema({}),errors=errors,
-            description_placeholders={'url':grant.get('url','https://lottolab.toiss.kr'),'code':grant.get('user_code','—')})
+            description_placeholders={'url':grant.get('url','https://lotto.formulab.kr'),'code':grant.get('user_code','—')})
 
     async def async_step_recommendations(
         self, user_input: dict[str, Any] | None = None
