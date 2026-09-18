@@ -118,7 +118,11 @@ main{padding-top:40px!important} .screen{outline:0}.page-heading{display:flex;al
 .ticket-list{padding:0 24px}.ticket-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:14px;align-items:center;min-height:76px;border-bottom:1px solid var(--line)}.ticket-row:last-child{border:0}
 .game-label{font-size:12px;color:var(--muted);font-weight:600}.ticket-balls{display:flex;gap:9px;flex-wrap:wrap;--ball-size:33px}
 .ticket-balls .ball{font-size:13px;background:transparent;border:1px solid var(--line);color:var(--ink)}
-.prize{font-size:11px;color:var(--muted);white-space:nowrap;background:var(--soft);border-radius:6px;padding:4px 8px}.prize[data-winning="true"]{background:var(--green-soft);color:var(--green);font-weight:700}
+.ticket-status{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.prize,.match-badge{font-size:11px;white-space:nowrap;border-radius:6px;padding:4px 8px}
+.prize{color:var(--muted);background:var(--soft)}
+.prize[data-purchase-match="true"],.match-badge{background:var(--blue-soft);color:var(--blue);font-weight:700}
+.prize[data-winning="true"]{background:var(--green-soft);color:var(--green);font-weight:700}
 .paper-bottom{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--surface);padding:13px 24px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
 .paper-bottom button{flex:none;white-space:nowrap;font-size:12px;min-height:34px;padding:4px 0 4px 10px;background:transparent;color:var(--blue)}
 .empty{padding:38px 18px;text-align:center;color:var(--muted);font-size:12px}.empty svg{width:32px;height:32px;margin-bottom:10px;color:var(--muted)}.empty strong{display:block;color:var(--ink);font-size:15px;margin:3px 0 8px}.empty p{line-height:1.9}
@@ -270,10 +274,27 @@ export function numberBalls(root, numbers, bonus=null, outcome=null) {
   if(hasBonus){const group=document.createElement('span');group.className='bonus-group';group.setAttribute('aria-hidden','true');const plus=document.createElement('span');plus.className='plus';plus.textContent='+';const wrap=document.createElement('span');wrap.className='bonus-label';const text=document.createElement('span');text.className='bonus-caption';text.textContent='보너스';wrap.append(ball(bonus),text);group.append(plus,wrap);root.append(group);}
 }
 
-export function ticketRows(root, games, limit=Infinity) {
+export function ticketRows(root, games, limit=Infinity, matches=[]) {
   root.replaceChildren();root.setAttribute('role','list');
   if(!games?.length){root.removeAttribute('role');const empty=document.createElement('div');empty.className='empty';empty.innerHTML=`${icons.ticket}<strong>아직 보관한 복권이 없어요.</strong><p>복권 등록을 눌러 QR이나 사진으로 가져오세요.<br>번호를 직접 입력해도 좋아요.</p>`;root.append(empty);return;}
-  for(const g of games.slice(0,limit)) {const row=document.createElement('div');row.className='ticket-row';row.setAttribute('role','listitem');const slot=document.createElement('span');slot.className='game-label';slot.textContent=g.slot||'';slot.setAttribute('aria-label',`${g.slot||''} 게임`);const nums=document.createElement('span');nums.className='ticket-balls result-balls';const isWinner=Number.isInteger(g.prize_rank)&&g.prize_rank>=1&&g.prize_rank<=5;numberBalls(nums,g.numbers||g.recommended_numbers||[],null,g);const prize=document.createElement('span');prize.className='prize';prize.textContent=g.prize||'추첨 대기';prize.dataset.winning=String(isWinner);row.append(slot,nums,prize);root.append(row);}
+  for(const g of games.slice(0,limit)) {
+    const row=document.createElement('div');row.className='ticket-row';row.setAttribute('role','listitem');
+    const slot=document.createElement('span');slot.className='game-label';slot.textContent=g.slot||'';slot.setAttribute('aria-label',`${g.slot||''} 게임`);
+    const nums=document.createElement('span');nums.className='ticket-balls result-balls';
+    const isWinner=Number.isInteger(g.prize_rank)&&g.prize_rank>=1&&g.prize_rank<=5;
+    numberBalls(nums,g.numbers||g.recommended_numbers||[],null,g);
+    const status=document.createElement('span');status.className='ticket-status';
+    const linked=(Array.isArray(matches)?matches:[]).filter(m=>m.slot===g.slot&&(!g.ticket_id||m.ticket_id===g.ticket_id));
+    if(linked.length){
+      const badge=document.createElement('span');badge.className='match-badge';
+      badge.textContent=linked.length===1?'공식 일치':`공식 ${linked.length}개 일치`;
+      const labels=[...new Set(linked.map(m=>m.formula_label||m.formula_id).filter(Boolean))];
+      if(labels.length)badge.title=`${labels.join(', ')} 생성번호와 6개 번호가 모두 같습니다.`;
+      status.append(badge);
+    }
+    const prize=document.createElement('span');prize.className='prize';prize.textContent=g.prize||'추첨 대기';prize.dataset.winning=String(isWinner);status.append(prize);
+    row.append(slot,nums,status);root.append(row);
+  }
 }
 
 export function currentRecommendations(data) {
@@ -284,7 +305,10 @@ export function currentRecommendations(data) {
     Array.isArray(row.numbers)&&row.numbers.length===6&&new Set(row.numbers).size===6&&
     row.numbers.every(n=>Number.isInteger(n)&&n>=1&&n<=45)).map(row=>({
       method_id:row.method_id,sensor_name:row.label||row.method||row.method_id,
-      recommended_numbers:[...row.numbers],prize:'생성번호 · 평가 전'
+      recommended_numbers:[...row.numbers],
+      purchase_match:row.purchase_match===true,
+      purchase_matches:Array.isArray(row.purchase_matches)?row.purchase_matches:[],
+      prize:row.purchase_match===true?'구매번호 일치':'생성번호 · 평가 전'
     }));
 }
 
@@ -306,7 +330,7 @@ export function renderPredictionRows(root, rows, empty) {
     const method=document.createElement('td');method.setAttribute('role','cell');method.dataset.label='추첨 공식';method.textContent=row.sensor_name||row.method_id||'—';
     const numberCell=document.createElement('td');numberCell.setAttribute('role','cell');numberCell.dataset.label='번호';const balls=document.createElement('span');balls.className='ticket-balls result-balls';numberBalls(balls,row.recommended_numbers||[],null,row);numberCell.append(balls);
     if(balls.dataset.evaluated==='true'){const detail=document.createElement('span');detail.className='result-detail';const main=(row.matched_main_numbers||[]).join(', ');detail.textContent=`일치 ${row.main_match_count}개${main?` · ${main}`:''}${row.bonus_match?` · 보너스 ${row.matched_bonus_number}`:''}`;numberCell.append(detail);}
-    const result=document.createElement('td');result.setAttribute('role','cell');result.dataset.label='결과';const prize=document.createElement('span');prize.className='prize';prize.dataset.winning=String(isWinner);prize.textContent=row.prize||'판정 대기';result.append(prize);
+    const result=document.createElement('td');result.setAttribute('role','cell');result.dataset.label='결과';const prize=document.createElement('span');prize.className='prize';prize.dataset.winning=String(isWinner);prize.dataset.purchaseMatch=String(row.purchase_match===true);prize.textContent=row.prize||'판정 대기';const linked=Array.isArray(row.purchase_matches)?row.purchase_matches:[];if(linked.length){const labels=linked.map(m=>`복권 ${m.ticket_number} · ${m.slot}게임`);prize.title=`${labels.join(', ')}과 6개 번호가 모두 같습니다.`;}result.append(prize);
     tr.append(method,numberCell,result);root.append(tr);
   }
 }
