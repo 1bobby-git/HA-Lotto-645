@@ -161,3 +161,42 @@ def test_removed_values_are_never_sent_to_generation():
     assert "options.update(self.entry.options.get('formula_options'" not in s
     assert "options['generation_rules']" not in s
     assert 'async_start_reauth' not in s
+
+
+def test_simultaneous_member_refresh_shares_one_persisted_rotation(monkeypatch):
+    from custom_components.lotto_645.member_link import state_from_tokens
+    import custom_components.lotto_645.member_link as link
+    async def case():
+        tokens={'access_token':'a'*43,'refresh_token':'b'*64,'device_id':'c'*32,'expires_in':900}
+        saved=state_from_tokens(tokens);saved['access_expires_at']=0
+        store=MemoryStore(saved);manager=ManagedConnection(store);await manager.load()
+        scope=manager.journal_scope;calls=[]
+        async def exchange(session,path,body):
+            calls.append(dict(body));await asyncio.sleep(.03)
+            return {**tokens,'token_type':'Bearer','access_token':'d'*43,'refresh_token':'e'*64}
+        monkeypatch.setattr(link,'request',exchange)
+        await asyncio.gather(manager.ensure_enrolled(None),manager.ensure_enrolled(None))
+        assert len(calls)==1
+        assert manager.values[TOKEN]=='d'*43 and manager.journal_scope==scope
+        assert 'pending_rotation' not in store.value
+    asyncio.run(case())
+
+
+def test_refresh_token_updates_inflight_client_without_replacing_journals():
+    tree=ast.parse((R/'service_runtime.py').read_text(encoding='utf-8'))
+    method=next(n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='_configure_connection')
+    class Client:
+        def __init__(self,session,url,token,**kwargs):self.token=token
+        def set_access_token(self,value):self.token=value
+    namespace={'DOMAIN':'lotto_645','CONF_SERVICE_URL':URL,'CONF_SERVICE_TOKEN':TOKEN,'CONF_SERVICE_CERT':CERT,
+        'LottoLabClient':Client,'async_get_clientsession':lambda _:None,
+        'Store':lambda h,v,key:key,'RemoteGeneration':lambda client,store:SimpleNamespace(client=client,store=store)}
+    exec(compile(ast.Module(body=[method],type_ignores=[]),'<actual-runtime>','exec'),namespace)
+    owner=SimpleNamespace(client=None,connection={},hass=None,entry=SimpleNamespace(entry_id='entry'),
+        connection_manager=SimpleNamespace(journal_scope='fixed-device-journal'))
+    apply=namespace['_configure_connection'];apply(owner,LEGACY)
+    before=owner.client;pending=owner.generator;ai=owner.ai_generator
+    apply(owner,{**LEGACY,TOKEN:'rotated-access-token-1234567890'})
+    assert owner.client is before and owner.generator is pending and owner.ai_generator is ai
+    assert pending.client.token=='rotated-access-token-1234567890'
+    assert owner.connection[TOKEN]==pending.client.token

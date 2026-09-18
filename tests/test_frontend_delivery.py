@@ -15,13 +15,15 @@ def test_release_has_isolated_resource_path_and_matching_element():
         for found in re.findall(r'lotto-(?:ticket-panel|panel-tools)-v([0-9-]+)',text):assert found==v.replace('.','-')
 def test_overview_has_no_recommendation_summary():
     text=(R/'www/lotto-panel-view.js').read_text(encoding='utf-8')
-    assert 'id="current-recommendations"' not in text
+    home=text.split('id="screen-home"',1)[1].split('id="screen-wallet"',1)[0]
+    assert 'id="current-recommendations"' not in home
+    assert 'id="current-recommendations"' in text.split('id="screen-review"',1)[1]
     for obsolete in ('recommendation-summary','current-title','current-count','current-meta','open-current-review'):
         assert obsolete not in text
     assert 'id="predictions"' in text
     assert 'data-go="review"' in text
     script=(R/'www/lotto-panel-core.js').read_text(encoding='utf-8')
-    assert "this.node('current-recommendations')" not in script
+    assert 'currentRecommendations(data)' in script
     for obsolete in ('current-title','current-count','current-meta','open-current-review'):
         assert obsolete not in script
     assert "reviewPresentation(data)" in script

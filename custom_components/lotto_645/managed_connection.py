@@ -66,6 +66,7 @@ class ManagedConnection:
         self.store = store
         self.state = None
         self.retry_at = 0.0
+        self._refresh_lock = asyncio.Lock()
 
     @property
     def values(self):
@@ -131,6 +132,11 @@ class ManagedConnection:
         return bool(self.state and self.state['source']=='member' and self.state.get('access_expires_at',0)<time.time()+60)
 
     async def ensure_enrolled(self, session):
+        # Concurrent sensor refreshes share one token rotation and persisted result.
+        async with self._refresh_lock:
+            await self._ensure_enrolled(session)
+
+    async def _ensure_enrolled(self, session):
         if not self.state:
             raise LabServiceError('member_link_required')
         if self.state['source']=='operator':

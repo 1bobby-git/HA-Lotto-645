@@ -31,7 +31,8 @@ def test_option_cleanup_preserves_settings_and_does_not_mutate_input():
     clean=migration.clean_options(raw)
     assert clean['selected_methods']==['uniform_floyd'] and clean['advanced_methods']==[]
     assert 'lucky_keyword' not in clean and 'lucky_theme' not in clean
-    assert clean['generation_rules']==raw['generation_rules'] and clean['saju_birth_date']==raw['saju_birth_date']
+    assert 'generation_rules' not in clean and clean['saju_birth_date']==raw['saju_birth_date']
+    assert raw['generation_rules']=={'fixed':[7]}
     assert raw['lucky_keyword']=='private'
     assert migration.clean_options({'selected_methods':['personal_lucky']})['selected_methods']==list(methods.DEFAULT_METHOD_IDS)
 
