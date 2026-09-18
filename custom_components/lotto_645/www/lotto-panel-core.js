@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows } from './lotto-panel-view.js?v=2.3.2';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows } from './lotto-panel-view.js?v=2.3.3';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-3-2';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-3-3';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -500,9 +500,25 @@ class LottoTicketPanel extends HTMLElement {
     this.node('upcoming-round').textContent=Number.isInteger(upcomingRound)?`다가오는 ${formatRound(upcomingRound)}`:'다가오는 회차 확인 중';
     const upcomingTickets=Array.isArray(data.upcoming_ticket_previews)?data.upcoming_ticket_previews:[];
     const upcomingGames=upcomingTickets.reduce((sum,ticket)=>sum+(Number(ticket.game_count)||0),0);
-    this.node('home-purchase-status').textContent=upcomingTickets.length
-      ? `${upcomingTickets.length}장 · ${upcomingGames}게임`
-      : '등록 없음';
+    const heroTicketSummary=this.node('hero-ticket-summary');
+    const heroTicketTotal=this.node('hero-ticket-total');
+    const heroTicketItems=this.node('hero-ticket-items');
+    heroTicketItems.replaceChildren();
+    if(upcomingTickets.length){
+      heroTicketSummary.hidden=false;
+      heroTicketTotal.textContent=`등록 복권 ${upcomingTickets.length}장 · ${upcomingGames}게임`;
+      upcomingTickets.slice(0,4).forEach((ticket,index)=>{
+        const chip=document.createElement('span');chip.className='hero-ticket-chip';
+        chip.textContent=`복권 ${ticket.ticket_number||index+1} · ${Number(ticket.game_count)||0}게임`;
+        heroTicketItems.append(chip);
+      });
+      if(upcomingTickets.length>4){
+        const more=document.createElement('span');more.className='hero-ticket-chip';more.textContent=`+${upcomingTickets.length-4}장`;heroTicketItems.append(more);
+      }
+    }else{
+      heroTicketSummary.hidden=true;
+      heroTicketTotal.textContent='';
+    }
     this.node('home-formula-status').textContent=currentRows.length
       ? `${currentRows.length}개 · 평가 대기`
       : '생성 없음';

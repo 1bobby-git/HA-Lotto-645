@@ -86,16 +86,16 @@ export const COMPONENT_STYLE = `
 }
 .main-tabs button:focus-visible { outline-offset:-3px; }
 /* One text hierarchy for every screen, including the editor and empty states. */
-main { padding-top:38px!important; padding-bottom:48px!important; }
+main { padding-top:30px!important; padding-bottom:34px!important; }
 h1 { font-size:clamp(28px,4cqw,38px); line-height:1.3; font-weight:780; letter-spacing:-.045em; word-break:keep-all; overflow-wrap:anywhere; }
 h2 { font-size:22px; line-height:1.4; font-weight:760; letter-spacing:-.035em; }
 h3 { font-size:19px; line-height:1.4; font-weight:760; letter-spacing:-.03em; }
-.page-heading { align-items:end; gap:24px; margin-bottom:26px; }
-.page-heading p { margin-top:10px; font-size:15px; line-height:1.65; max-width:720px; }
+.page-heading { align-items:end; gap:18px; margin-bottom:18px; }
+.page-heading p { margin-top:7px; font-size:15px; line-height:1.6; max-width:720px; }
 .kicker { margin-bottom:8px; color:var(--blue); font-size:12px; font-weight:800; letter-spacing:.12em; }
-.section-heading { align-items:end; margin-bottom:14px; gap:20px; }
+.section-heading { align-items:end; margin-bottom:9px; gap:14px; }
 .section-heading h2, .review-block .section-heading h2 { font-size:22px; font-weight:760; }
-.dashboard-grid { margin-top:34px; gap:28px; }
+.dashboard-grid { margin-top:22px; gap:18px; }
 /* Keep the layout and purpose of the lottery wallet; share surface treatment. */
 .draw-stage { padding:28px 28px 0; border-radius:var(--lotto-radius-hero); box-shadow:var(--lotto-shadow-card); }
 .draw-stage h2 { font-size:32px; line-height:1.28; font-weight:780; letter-spacing:-.04em; }
@@ -105,7 +105,7 @@ h3 { font-size:19px; line-height:1.4; font-weight:760; letter-spacing:-.03em; }
 .result-copy .caption { font-size:13px; }
 .result-copy strong { font-size:15px; font-weight:700; }
 .ticket-paper, .review-block { border-radius:var(--lotto-radius-card); box-shadow:var(--lotto-shadow-card); }
-.import-promo { border-radius:var(--lotto-radius-card); padding:24px; margin-top:50px; }
+.import-promo { border-radius:var(--lotto-radius-card); padding:22px; margin-top:0; }
 .review-block { padding:24px; }
 .paper-label { font-size:14px; font-weight:700; }
 .paper-meta, .paper-bottom, .paper-bottom button, .small-print,
@@ -122,7 +122,7 @@ h3 { font-size:19px; line-height:1.4; font-weight:760; letter-spacing:-.03em; }
 .quick-copy strong, .game-field label, .form-count strong { font-weight:700; }
 .empty strong { font-size:17px; font-weight:750; }
 .import-promo h3 { font-size:19px; font-weight:760; }
-.footer { margin-top:28px; padding-top:18px; display:flex; flex-wrap:wrap; gap:8px 20px; }
+.footer { margin-top:18px; padding-top:13px; display:flex; flex-wrap:wrap; gap:6px 16px; }
 .footer .sync { white-space:normal; overflow-wrap:anywhere; }
 .review-note { line-height:1.8; }
 th { font-size:12px; font-weight:700; }
@@ -156,7 +156,7 @@ main button, dialog button { font-size:14px; }
   .draw-numbers { --ball-size:clamp(38px,calc((100cqw - 200px)/7),58px); gap:8px; }
   .bonus-group { gap:8px; }
   .dashboard-grid { gap:0; }
-  .import-promo { margin-top:24px; }
+  .import-promo { margin-top:0; }
 }
 @container wallet (max-width:560px) {
   .header-row { min-height:68px; grid-template-columns:minmax(0,1fr) auto 44px; gap:0 10px; }
@@ -167,8 +167,8 @@ main button, dialog button { font-size:14px; }
   .header-tools .settings .settings-copy { display:none; }
   .entry-field, .entry-field select { width:100%; max-width:none; }
   .main-tabs { gap:24px; }
-  main { padding-top:28px!important; padding-bottom:36px!important; }
-  .page-heading { margin-bottom:22px; gap:18px; align-items:flex-start; }
+  main { padding-top:22px!important; padding-bottom:28px!important; }
+  .page-heading { margin-bottom:15px; gap:14px; align-items:flex-start; }
   .page-heading .primary { min-height:46px; font-size:14px; }
   .draw-stage { padding:22px 20px 0; border-radius:16px; }
   .draw-stage h2 { font-size:26px; }
@@ -180,9 +180,9 @@ main button, dialog button { font-size:14px; }
   .result-copy { flex:1 1 145px; }
   .result-copy strong { font-size:14px; }
   .draw-foot button { margin-left:auto; }
-  .dashboard-grid { margin-top:28px; }
+  .dashboard-grid { margin-top:18px; }
   .section-heading h2, .review-block .section-heading h2 { font-size:21px; }
-  .section-heading { gap:12px; }
+  .section-heading { gap:10px; margin-bottom:9px; }
   .paper-label { font-size:13px; }
   .paper-bottom { flex-wrap:wrap; gap:4px 12px; }
   .paper-bottom button { margin-left:auto; }
