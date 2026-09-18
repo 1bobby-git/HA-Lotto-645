@@ -85,8 +85,10 @@ def test_panel_shell_is_the_versioned_production_entry():
     assert (WWW / 'lotto-panel-core.js').exists()
 
 
-def test_countdown_is_rendered_in_home_hero_not_as_standalone_card():
-    assert 'hero-draw-countdown' in SHELL
+def test_countdown_is_rendered_once_in_upcoming_card():
+    assert 'function ensureHeroCountdown' not in SHELL
+    assert 'function renderHeroCountdown' not in SHELL
+    assert "querySelector('.hero-draw-countdown')?.remove()" in SHELL
     assert "oldSection.hidden = true" in SHELL
-    assert "0일 00시간 00분 00초" in SHELL
-    assert 'sales_reopen_at' in SHELL
+    assert 'id="upcoming-countdown"' in VIEW
+    assert 'id="upcoming-date"' in VIEW

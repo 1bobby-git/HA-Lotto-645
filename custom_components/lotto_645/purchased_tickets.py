@@ -256,10 +256,19 @@ class _LegacyPurchaseBook:
                        {'status': '판정 대기', 'prize': None, 'prize_rank': None,
                         'main_match_count': None, 'matched_main_numbers': [], 'bonus_match': None})
             links = deepcopy(row.get('formula_links', []))
+            applied_ids = list(dict.fromkeys(
+                link.get('formula_id') for link in links if link.get('formula_id')
+            ))
+            applied_labels = list(dict.fromkeys(
+                link.get('formula_label') or link.get('formula_id')
+                for link in links if link.get('formula_label') or link.get('formula_id')
+            ))
             games.append({'method_id': f"purchased_{row['slot']}", 'slot': row['slot'],
                           'sensor_name': f"직접 구매 {row['slot']}", 'source': 'purchased',
                           'recommended_numbers': list(row['numbers']), 'numbers': list(row['numbers']),
-                          'formula_links': links, 'formula_match_count': len(links), **outcome})
+                          'formula_links': links, 'formula_match_count': len(links),
+                          'applied_formula_ids': applied_ids,
+                          'applied_formula_labels': applied_labels, **outcome})
         winners = [game for game in games if game['prize_rank'] is not None]
         return {**base, 'status': 'evaluated' if draw else 'waiting', 'saved_at': record['saved_at'],
                 'saved_game_count': len(games), 'checked_game_count': len(games) if draw else 0,

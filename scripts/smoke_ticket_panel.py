@@ -70,7 +70,9 @@ async def run():
                     return {round:1241,game_count:1,values:{game_a:'1, 7, 15, 24, 33, 45'},revision:'',will_replace:false};
                 }
                 if(msg.type==='lotto_645/purchases_save'){saved=msg.values;revision='saved-1';}
-                return {round:msg.round||1241,revision,values:saved,stored_rounds:revision?[1241]:[],purchased:{games:Object.entries(saved).filter(([,v])=>v.trim()).map(([k,v])=>({slot:k.at(-1).toUpperCase(),numbers:v.split(', ').map(Number),prize:'추첨 대기'}))},draw:{numbers:[11,13,19,20,31,44],bonus:27},result_round:1240,result_verification:{status:'official_history'},winning:null,recommendation_target:1241};
+                const games=Object.entries(saved).filter(([,v])=>v.trim()).map(([k,v])=>({slot:k.at(-1).toUpperCase(),numbers:v.split(', ').map(Number),prize:'추첨 대기',formula_links:[]}));
+                const ticket=revision?{ticket_id:'fixture-ticket',ticket_number:1,saved_at:revision,game_count:games.length,status:'waiting',highest_prize:null,games}:null;
+                return {round:msg.round||1241,revision,ticket_id:ticket?.ticket_id||null,values:saved,stored_rounds:revision?[1241]:[],tickets:ticket?[{ticket_id:ticket.ticket_id,saved_at:revision,game_count:games.length}]:[],ticket_previews:ticket?[ticket]:[],upcoming_ticket_previews:ticket?[ticket]:[],upcoming_purchased:{status:revision?'waiting':'not_registered',games},purchased:{status:revision?'waiting':'not_registered',games},draw:{numbers:[11,13,19,20,31,44],bonus:27},result_round:1240,result_verification:{status:'official_history'},winning:null,recommendation_target:1241,recommendations:[],generation_matches:[]};
             }};
         }""")
         await page.evaluate('(qr)=>window.expectedQR=qr', QR)
@@ -120,8 +122,8 @@ async def run():
         assert saves[-1]['revision'] == ''
         assert 'qr' not in saves[-1] and 'image' not in saves[-1]
         assert saves[-1]['values']['game_a'] == '1, 7, 15, 24, 33, 45'
-        assert await page.locator('#wallet-games .ticket-row').count() == 1
-        assert await page.locator('#wallet-games .ball').count() == 6
+        assert await page.locator('#wallet-swiper-track .wallet-ticket-card .ticket-row').count() == 1
+        assert await page.locator('#wallet-swiper-track .wallet-ticket-card .ball').count() == 6
 
         await page.locator('#edit-wallet').click()
         await page.locator('#game_a').fill('2, 3, 4, 5, 6, 7')
@@ -131,7 +133,7 @@ async def run():
             el._hass.callWS=async msg=>({...await base(msg),revision:'server-newer',
                 result_round:1241,draw:{numbers:[7,13,16,23,24,43],bonus:9},
                 result_verification:{status:'provisional'},
-                reviews:[{method_id:'test',display_name:'★4.5 · 90.0점 | 시험',reviewed_rounds:2}],
+                reviews:[{method_id:'test',label:'시험',display_name:'★4.5 · 90.0점 | 시험',reviewed_rounds:2,mean_score:90,stars:4.5,total_score:180,history_preview:[{round:1240,review_score:95,exact_match_count:4},{round:1241,review_score:85,exact_match_count:5}]}],
                 review_round:{round:1241,status:'provisional',peer_count:1,methods:[{method_id:'test',review_score:85,exact_match_count:5,near_match_count:1,rank_this_round:1}]}});
             await el.refreshStatus();
         }""")
@@ -139,41 +141,42 @@ async def run():
         assert await page.locator('#game_a').input_value() == '2, 3, 4, 5, 6, 7'
         assert await page.evaluate("el._revision===draftRevision && el._walletData.revision==='server-newer'")
         assert '★4.5' in await page.locator('#reviews').text_content()
-        assert '잠정' in await page.locator('#reviews').text_content()
+        assert '90.0점' in await page.locator('#reviews').text_content()
         assert 'HA 상태 자동 동기화 중' in await page.locator('#sync-status').text_content()
         await page.evaluate("""async()=>{
             const base=el._hass.callWS;
             el._hass.callWS=async msg=>({...await base(msg),review_round:{},
-                reviews:[{method_id:'old',display_name:'☆평가대기 | 종합 앙상블',reviewed_rounds:0,
+                reviews:[{method_id:'old',label:'종합 앙상블',display_name:'☆평가대기 | 종합 앙상블',reviewed_rounds:0,
                     unrated_result:{round:1241,comparison:{prize:'5등'},counts_toward_rating:false}}]});
             await el.refreshStatus();
         }""")
-        assert '1241회 5등 · 누적 제외' in await page.locator('#reviews').text_content()
-        assert '생성시각' in await page.locator('#reviewstatus').text_content()
+        assert '종합 앙상블' in await page.locator('#reviews').text_content()
+        assert '추첨 전 생성 여부' in await page.locator('#reviewstatus').text_content()
         assert await page.locator('#game_a').input_value() == '2, 3, 4, 5, 6, 7'
         await page.evaluate("""async()=>{
             const base=el._hass.callWS;
             el._hass.callWS=async msg=>({...await base(msg),result_round:1241,
                 draw:{numbers:[7,24,30,31,32,42],bonus:9},result_verification:{status:'official_confirmed'},
+                last_review_round:{round:1241,status:'confirmed',peer_count:2,methods:[
+                  {method_id:'public_ensemble',label:'공개 공식 · 종합 앙상블',numbers:[7,13,15,24,38,42],prize:'5등',prize_rank:5,exact_match_count:3,main_match_count:3,near_match_count:0,matched_main_numbers:[7,24,42],bonus_match:false,matched_bonus_number:null,review_score:60,stars:3,rank_this_round:2},
+                  {method_id:'weighted_frequency',label:'공개 공식 · 가중 빈도',numbers:[7,9,24,30,31,32],prize:'2등',prize_rank:2,exact_match_count:5,main_match_count:5,near_match_count:0,matched_main_numbers:[7,24,30,31,32],bonus_match:true,matched_bonus_number:9,review_score:90,stars:4.5,rank_this_round:1}
+                ]},
                 winning:{status:'evaluated',round:1241,winning_game_count:2,highest_prize:'2등',
-                    winning_numbers:[7,24,30,31,32,42],bonus_number:9,results:[
-                      {method_id:'public_ensemble',sensor_name:'공개 공식 · 종합 앙상블',source:'local',recommended_numbers:[7,13,15,24,38,42],prize:'5등',prize_rank:5,main_match_count:3,matched_main_numbers:[7,24,42],bonus_match:false,matched_bonus_number:null},
-                      {method_id:'weighted_frequency',sensor_name:'공개 공식 · 가중 빈도',source:'local',recommended_numbers:[7,9,24,30,31,32],prize:'2등',prize_rank:2,main_match_count:5,matched_main_numbers:[7,24,30,31,32],bonus_match:true,matched_bonus_number:9}
-                    ]}});
+                    winning_numbers:[7,24,30,31,32,42],bonus_number:9,results:[]}});
             await el.refreshStatus();
         }""")
         await page.locator('#close-editor').click()
         await page.locator('#tab-review').click()
         winning_rows=page.locator('#predictions tr[data-winning="true"]')
         assert await winning_rows.count()==2
-        first=winning_rows.nth(0)
+        first=page.locator('#predictions tr[data-method-id="public_ensemble"]')
         assert await first.locator('.ball[data-hit="main"]').count()==3
         assert await first.locator('.ball[data-hit="miss"]').count()==3
         label=await first.locator('.result-balls').get_attribute('aria-label')
         assert '당첨번호 일치 7, 24, 42' in label and '미일치 13, 15, 38' in label
         assert await first.locator('.ball[data-hit="miss"]').first.evaluate("n=>{const s=getComputedStyle(n);return s.opacity==='1'&&s.filter==='none'&&s.backgroundColor==='rgb(229, 231, 235)'&&s.color==='rgb(75, 85, 99)'&&s.outlineStyle==='none'}")
         assert await first.locator('.ball[data-hit="main"]').first.evaluate("n=>{const s=getComputedStyle(n);return s.opacity==='1'&&s.filter==='none'&&s.outlineStyle==='none'}")
-        second=winning_rows.nth(1)
+        second=page.locator('#predictions tr[data-method-id="weighted_frequency"]')
         assert await second.locator('.ball[data-hit="bonus"]').count()==1
         assert await second.locator('.ball[data-hit="bonus"]').evaluate("n=>getComputedStyle(n).outlineStyle==='none'")
         assert '보너스 9' in await second.locator('.result-detail').text_content()

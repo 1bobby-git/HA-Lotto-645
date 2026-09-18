@@ -9,7 +9,8 @@ async def verify_live_sync(page):
       window.liveResponse=msg=>({entry_id:msg.entry_id,round:1241,revision:'server-revision',values:{game_a:'6, 7, 8, 9, 10, 11'},stored_rounds:[1241],
         purchased:{games:[]},result_round:1240,result_verification:{status:'official_history'},draw:{numbers:[4,10,20,30,40,43],bonus:9},
         recommendation_target:1241,recommendations:structuredClone(msg.entry_id==='other'?[{method_id:'uniform_floyd',label:'다른 통합',numbers:[5,12,18,27,35,45]}]:liveRows),
-        winning:{round:1240,status:'evaluated',winning_game_count:0,results:[{method_id:'uniform_fisher_yates',sensor_name:'이전 추천',recommended_numbers:[3,11,19,28,36,42],source:'local',prize:'미당첨',main_match_count:0,prize_rank:null}]},reviews:[]});
+        winning:{round:1240,status:'evaluated',winning_game_count:0,results:[]},
+        last_review_round:{round:1240,status:'confirmed',peer_count:1,methods:[{method_id:'uniform_fisher_yates',label:'이전 추천',numbers:[3,11,19,28,36,42],prize:'미당첨',prize_rank:null,exact_match_count:0,main_match_count:0,near_match_count:0,matched_main_numbers:[],bonus_match:false,matched_bonus_number:null,review_score:0,stars:0,rank_this_round:1}]},reviews:[]});
       window.liveConnection={
         subscribeMessage:async(fn,msg)=>{const token=Symbol();liveHandlers.set(token,{fn,msg});return()=>{unsubscribed++;liveHandlers.delete(token);};},
         addEventListener:(type,fn)=>{if(type==='ready')readyHandlers.add(fn);},
@@ -24,7 +25,7 @@ async def verify_live_sync(page):
       window.invalidate=id=>{for(const {fn} of liveHandlers.values())fn({entry_id:id});};
     }''')
     await page.wait_for_function("!el._busy && el.node('current-recommendations').querySelectorAll('.ball').length===6")
-    assert '1241' in await page.locator('#current-title').text_content()
+    assert '1,241' in await page.locator('#current-recommendations-heading').text_content()
     assert '이전 추천' in await page.locator('#predictions').text_content()
     assert '이전 추천' not in await page.locator('#current-recommendations').text_content()
     reads=await page.evaluate('liveReads')
@@ -34,9 +35,9 @@ async def verify_live_sync(page):
     await page.evaluate("liveRows[0].numbers=[2,9,17,24,33,41];invalidate('test')")
     await page.wait_for_function("!el._busy && el.node('current-recommendations').querySelector('.ball').textContent==='2'")
     await page.evaluate("liveRows.push({method_id:'constraint_uniform',label:'조건 지정 균등 생성',numbers:[7,15,22,26,38,43]});invalidate('test')")
-    await page.wait_for_function("el.node('current-count').textContent==='2개 공식'")
+    await page.wait_for_function("el.node('current-recommendations').querySelectorAll('tr').length===2")
     await page.evaluate("liveRows.pop();invalidate('test')")
-    await page.wait_for_function("!el._busy && el.node('current-count').textContent==='1개 공식'")
+    await page.wait_for_function("!el._busy && el.node('current-recommendations').querySelectorAll('tr').length===1")
     # Network invalidations cannot overwrite the editor or its concurrency revision.
     await page.evaluate("el._editing=true;el.node('game_a').value='1, 2, 3, 4, 5, 6';el._revision='draft-revision';invalidate('test')")
     await page.wait_for_timeout(100)

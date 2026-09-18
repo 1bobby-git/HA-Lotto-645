@@ -199,6 +199,8 @@ def test_formula_lineage_survives_reload_and_unchanged_ticket_edit():
     report = restored.report([DRAW], 40, restored.selected_ticket_id)
     assert report["games"][0]["formula_match_count"] == 1
     assert report["games"][0]["formula_links"][0]["generation_id"] == "gen-40"
+    assert report["games"][0]["applied_formula_ids"] == ["uniform_floyd"]
+    assert report["games"][0]["applied_formula_labels"] == ["균등 공식 · Floyd"]
 
     edited = restored.updated(
         40,

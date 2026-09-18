@@ -26,12 +26,12 @@ def test_overview_has_no_recommendation_summary():
     assert 'currentRecommendations(data)' in script
     for obsolete in ('current-title','current-count','current-meta','open-current-review'):
         assert obsolete not in script
-    assert "reviewPresentation(data)" in script
-    assert "purchase_match" in text and "match-badge" in text
-    assert "generation_matches" in script and "구매번호 일치" in text
-    assert "purchase_formula_reviews" in text and "formula_links" in text
-    assert "formula-origin" in text and "리뷰 추적번호" in script
-    assert 'id="home-wallet-heading"' in text and 'class="draw-stage"' in text
+    assert "lastReviewPresentation(data)" in script
+    assert "match-badge" in text and "적용 공식" in text
+    assert "generation_matches" in script and "formula_links" in text
+    assert "purchase_formula_reviews" not in text
+    assert 'id="home-wallet-heading"' in text and 'class="draw-stage last-draw"' in text
+    assert 'id="upcoming-countdown"' in text
 
 
 def test_home_wallet_renders_five_games_and_multiple_tickets_as_swiper():

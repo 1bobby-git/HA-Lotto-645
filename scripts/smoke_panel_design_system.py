@@ -28,7 +28,8 @@ async def verify_component_design(page: Page) -> None:
     }""")
     assert await page.locator('style[data-lotto-component-design]').count() == 1
     assert await page.locator('style[data-lotto-official-ball-colors]').count() == 1
-    assert await page.locator('.hero-draw-countdown').count() == 1
+    assert await page.locator('.hero-draw-countdown').count() == 0
+    assert await page.locator('#upcoming-countdown').count() == 1
     assert await page.locator('.component-version').count() == 1
     assert await page.locator('.settings-copy').count() == 1
     assert await page.locator('.ha-component-title').count() == 0
@@ -82,7 +83,7 @@ async def verify_component_design(page: Page) -> None:
                   drawOverflow:q('.draw-numbers').scrollWidth>q('.draw-numbers').clientWidth+1,
                   overflow:el.scrollWidth>el.clientWidth+1,
                   palette:palette('.draw-numbers'),
-                  ticketPalette:palette('#wallet-games')
+                  ticketPalette:palette('#wallet-swiper-track')
                 };
             }""")
             label = (viewport, width, narrow, dark)
@@ -91,8 +92,10 @@ async def verify_component_design(page: Page) -> None:
             assert state['height'] == (68 if mobile else 76), (label, state)
             assert state['logo']['height'] == (30 if width <= 350 else 32 if mobile else 38), (label, state)
             assert state['logoFit'] == 'contain' and state['logo']['width'] > 0, (label, state)
-            assert state['tabs']['height'] == 48 and state['tabFont'] == '14px', (label, state)
-            assert state['gap'] == ('24px' if mobile else '30px'), (label, state)
+            expected_tab_font = '13px' if width <= 350 else '14px'
+            expected_gap = '14px' if width <= 350 else '24px' if mobile else '30px'
+            assert state['tabs']['height'] == 48 and state['tabFont'] == expected_tab_font, (label, state)
+            assert state['gap'] == expected_gap, (label, state)
             # A grid item blockifies inline-flex to flex in computed style.
             assert state['connection'] == 'flex', (label, state)
             assert state['connectionRect']['height'] >= 44, (label, state)

@@ -42,13 +42,15 @@ async def verify_panel_tools(page):
     await page.route('**/lotto_645_static/methods/**', serve_guide)
     await page.wait_for_function('!el._busy')
     await page.evaluate("""catalog => {
-        window.tools=el.shadowRoot.querySelector('lotto-panel-tools-v2-0-0');
+        window.tools=el.shadowRoot.querySelector('lotto-panel-tools-v2-3-1');
         window.toolsFixture={...el._latestToolsData,method_catalog:catalog,
             draw_schedule:{round:1242,basis:'regular_schedule',scheduled_at:'2026-09-19T20:35:00+09:00',
                 sales_reopen_at:'2026-09-20T06:00:00+09:00',rollover_at:'2026-09-20T06:00:00+09:00',server_now:new Date().toISOString()},
-            winning:{status:'evaluated',round:1241,winning_game_count:0,results:catalog.map(m=>({method_id:m.method_id,sensor_name:m.name,source:'local',recommended_numbers:[1,7,15,24,33,45],prize:'미당첨'}))},
-            reviews:catalog.map(m=>({method_id:m.method_id,display_name:'★1.0 · '+m.name,reviewed_rounds:1})),
-            review_round:{},result_verification:{status:'official_confirmed'},result_round:1241};
+            winning:{status:'evaluated',round:1241,winning_game_count:0,results:[]},
+            reviews:catalog.map(m=>({method_id:m.method_id,label:m.name,display_name:'★1.0 · '+m.name,reviewed_rounds:1,mean_score:20,stars:1,total_score:20,history_preview:[{round:1241,review_score:20,exact_match_count:1}]})),
+            review_round:{},
+            last_review_round:{round:1241,status:'confirmed',peer_count:catalog.length,methods:catalog.map(m=>({method_id:m.method_id,label:m.name,numbers:[1,7,15,24,33,45],prize:'미당첨',prize_rank:null,exact_match_count:1,main_match_count:1,near_match_count:0,matched_main_numbers:[1],bonus_match:false,matched_bonus_number:null,review_score:20,stars:1,rank_this_round:1}))},
+            result_verification:{status:'official_confirmed'},result_round:1241};
         // Reconnection refreshes use the same fixture, so layout changes cannot
         // replace the deliberately populated guide/review tables with old data.
         const previousWS=el._hass.callWS;
@@ -63,12 +65,12 @@ async def verify_panel_tools(page):
     }""", catalog)
     assert await page.locator('#predictions .method-info-trigger').count() == len(catalog)
     assert await page.locator('#reviews .method-info-trigger').count() == len(catalog)
-    assert await page.locator('lotto-panel-tools-v2-0-0').count() == 1
-    assert await page.locator('.hero-draw-countdown').is_visible()
-    assert '제 1,242회 추첨까지' in await page.locator('.hero-clock-label').text_content()
-    assert '동행복권 정규 일정 기준' in await page.locator('.hero-clock-date').text_content()
-    assert not await page.locator('lotto-panel-tools-v2-0-0 .countdown').is_visible()
-    assert await page.locator('lotto-panel-tools-v2-0-0').evaluate('n=>n.getBoundingClientRect().height===0')
+    assert await page.locator('lotto-panel-tools-v2-3-1').count() == 1
+    assert await page.locator('#upcoming-countdown').is_visible()
+    assert '다가오는 제 1,242회' in await page.locator('#upcoming-round').text_content()
+    assert '한국시간' in await page.locator('#upcoming-date').text_content()
+    assert not await page.locator('lotto-panel-tools-v2-3-1 .countdown').is_visible()
+    assert await page.locator('lotto-panel-tools-v2-3-1').evaluate('n=>n.getBoundingClientRect().height===0')
     await page.evaluate("el.showScreen('review')")
 
     # Test unpositioned, sidebar-offset HA layouts as well as a positioned box.
@@ -106,11 +108,11 @@ async def verify_panel_tools(page):
     await page.set_viewport_size({'width':1000,'height':900})
     await page.evaluate('el.scrollTop=0')
 
-    trigger = page.locator('#predictions [data-method-id="weighted_frequency"]')
+    trigger = page.locator('#predictions .method-info-trigger[data-method-id="weighted_frequency"]')
     await trigger.click()
     await page.wait_for_function("tools.dialog.open && !tools.shadowRoot.querySelector('.method-body').hasAttribute('aria-busy')")
     body = page.locator('.method-body')
-    assert '비공개 Core API' in await body.text_content()
+    assert '공개 분석식' in await body.text_content()
     assert 'Public rendering fixture' in await body.text_content()
     assert await body.locator('table').count() >= 2
     assert await page.evaluate("el.hasAttribute('data-method-open') && getComputedStyle(el).overflowY==='hidden'")
@@ -128,11 +130,11 @@ async def verify_panel_tools(page):
     await page.keyboard.press('Escape')
 
     # Every packaged guide can be read from either table without generating AI.
-    ai = page.locator('#reviews [data-method-id="home_assistant_ai"]')
+    ai = page.locator('#reviews .method-info-trigger[data-method-id="home_assistant_ai"]')
     await ai.click(); await page.locator('.method-retry').wait_for()
     await page.locator('.method-retry').click()
     await page.wait_for_function("!tools.shadowRoot.querySelector('.method-body').hasAttribute('aria-busy')")
-    assert 'Core' in await body.text_content()
+    assert 'AI는 번호를 변경하거나 당첨을 보장하지 않습니다.' in await body.text_content()
     await page.keyboard.press('Escape')
     for method in catalog:
         await page.evaluate('(id)=>tools.openGuide(id)', method['method_id'])
@@ -158,7 +160,7 @@ async def verify_panel_tools(page):
             el.style.setProperty('--safe-area-inset-top','59px');el.style.setProperty('--safe-area-inset-bottom','34px');
             el.narrow=true;el.scrollTop=0;
         }""")
-        await page.locator('#predictions [data-method-id="weighted_frequency"]').click()
+        await page.locator('#predictions .method-info-trigger[data-method-id="weighted_frequency"]').click()
         assert await page.locator('.method-close').evaluate('n=>n.getBoundingClientRect().top>=59')
         assert await page.locator('.method-foot').evaluate('n=>n.getBoundingClientRect().bottom<=innerHeight-34+1')
         assert await body.evaluate('n=>n.scrollWidth<=n.clientWidth+1')
@@ -168,20 +170,20 @@ async def verify_panel_tools(page):
     # Explicit instants: count reaches zero at draw time, remains zero until the
     # Sunday 06:00 sales boundary, then starts the following-round countdown.
     result = await page.evaluate("""async () => {
-        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=2.0.0');
+        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=2.3.1');
         const s=toolsFixture.draw_schedule;
         const prior=countdownState(s,Date.parse(s.scheduled_at)-1000);
         const at=countdownState(s,Date.parse(s.scheduled_at));
         const beforeReopen=countdownState(s,Date.parse(s.rollover_at)-1000);
         const next=countdownState(s,Date.parse(s.rollover_at));
         tools.tickClock(Date.parse(s.scheduled_at));
-        const zeroAt=el.shadowRoot.querySelector('.hero-clock-value').textContent;
+        const zeroAt=el.shadowRoot.querySelector('#upcoming-countdown').textContent;
         tools.tickClock(Date.parse(s.rollover_at)-1000);
-        const zeroBefore=el.shadowRoot.querySelector('.hero-clock-value').textContent;
-        const reopenNote=el.shadowRoot.querySelector('.hero-clock-date').textContent;
+        const zeroBefore=el.shadowRoot.querySelector('#upcoming-countdown').textContent;
+        const reopenNote=el.shadowRoot.querySelector('#upcoming-date').textContent;
         tools.tickClock(Date.parse(s.rollover_at));
-        const nextLabel=el.shadowRoot.querySelector('.hero-clock-label').textContent;
-        const nextValue=el.shadowRoot.querySelector('.hero-clock-value').textContent;
+        const nextLabel=el.shadowRoot.querySelector('#upcoming-round').textContent;
+        const nextValue=el.shadowRoot.querySelector('#upcoming-countdown').textContent;
         const invalid=countdownState({...s,scheduled_at:'bad'});
         const div=document.createElement('div');
         div.append(renderGuideMarkdown('# Test\\n\\n<script>window.bad=1</script>\\n\\n[x](javascript:alert) [data](data:text/html,bad) [ok](https://example.com/)','https://github.com/1bobby-git/HA-Lotto-645/blob/v1.11.10/docs/methods/a.md'));
@@ -196,9 +198,9 @@ async def verify_panel_tools(page):
     assert result['atWaiting'] and result['at'] == 0
     assert result['beforeWaiting'] and result['before'] == 0
     assert result['next'] == 1243
-    assert result['zeroAt'] == result['zeroBefore'] == '0일 00시간 00분 00초'
-    assert '판매 시작' in result['reopenNote']
-    assert '1,243회 추첨까지' in result['nextLabel'] and result['nextValue'] != '0일 00시간 00분 00초'
+    assert result['zeroAt'] == result['zeroBefore'] == '추첨 예정 시각이 지났습니다.'
+    assert '한국시간' in result['reopenNote']
+    assert '다가오는 제 1,243회' in result['nextLabel'] and result['nextValue'] != '추첨 예정 시각이 지났습니다.'
     assert result['invalid'] is None and not result['oldVisible']
     assert result['scripts'] == 0 and result['links'] == ['https:']
     # A timer tick must never send purchases_get/result_check/generate requests.
@@ -208,4 +210,4 @@ async def verify_panel_tools(page):
     assert await page.evaluate('tools._clockTimer===null')
     await page.evaluate("delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));el.remove()")
     assert await page.evaluate('tools._clockTimer===null && !tools.dialog.open && !el.hasAttribute("data-method-open")')
-    print(f'PASS: {len(catalog)} guides, single scroll, hero countdown zero-hold/restart, modal safe areas and no timer network')
+    print(f'PASS: {len(catalog)} guides, single scroll, upcoming countdown restart, modal safe areas and no timer network')

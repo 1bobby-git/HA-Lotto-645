@@ -250,6 +250,18 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 result[game["slot"]] = links
         return result
 
+    async def _async_sync_purchase_formula_links(self) -> bool:
+        """Persist exact formula matches already evidenced in the review ledger."""
+        if self.purchase_storage_error or self.review_storage_error:
+            return False
+        async with self._purchase_lock:
+            linked = self.purchase_book.with_review_formula_links(self.review_book.rounds)
+            if linked.to_storage() == self.purchase_book.to_storage():
+                return False
+            await self._purchase_store.async_save(linked.to_storage())
+            self.purchase_book = linked
+        return True
+
     async def async_save_purchase_record(
         self, round_no: int, values: dict[str, Any], *, clear: bool = False,
         expected_revision: str | None = None, ticket_id: str | None = None, new_ticket: bool = False
@@ -661,6 +673,12 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 _LOGGER.warning("AI 로또 추천 자동 생성 실패: %s", err)
 
         self._set_prediction_snapshot(analysis, ai_recommendation, ai_generated_at)
+        try:
+            await self._async_sync_purchase_formula_links()
+        except (OSError, HomeAssistantError):
+            _LOGGER.warning(
+                "구매 복권과 공식 생성번호의 자동 연결을 저장하지 못했습니다. 기존 구매 기록은 유지됩니다."
+            )
         if self._needs_storage_save:
             await self._save_storage()
 

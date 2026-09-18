@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows } from './lotto-panel-view.js?v=2.3.0';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows } from './lotto-panel-view.js?v=2.3.1';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-3-0';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-3-1';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -312,7 +312,7 @@ class LottoTicketPanel extends HTMLElement {
       status:data.upcoming_purchased.status,highest_prize:data.upcoming_purchased.highest_prize,games:data.upcoming_purchased.games,
     }]:[];
     const tickets=detailed.length?detailed:fallback;
-    const matches=[];
+    const matches=Array.isArray(data.generation_matches)?data.generation_matches:[];
     track.replaceChildren();dots.replaceChildren();
     this.node('mini-swiper')?.setAttribute('aria-label',tickets.length?`등록한 복권 ${tickets.length}장`:'등록한 복권 없음');
     if(!tickets.length){
@@ -379,6 +379,7 @@ class LottoTicketPanel extends HTMLElement {
     if(!track||!nav||!dots)return;
     const tickets=Array.isArray(data.ticket_previews)?data.ticket_previews:[];
     const round=Number(data.round);
+    const matches=round===Number(data.recommendation_target)&&Array.isArray(data.generation_matches)?data.generation_matches:[];
     track.replaceChildren();dots.replaceChildren();
     this.node('wallet-swiper')?.setAttribute('aria-label',Number.isInteger(round)?`${formatRound(round)} 구매 복권`:'구매 복권');
     if(!tickets.length){
@@ -404,7 +405,7 @@ class LottoTicketPanel extends HTMLElement {
       const games=document.createElement('span');games.textContent=`${ticket.game_count||0}게임`;
       const state=document.createElement('span');state.className='ticket-state';state.dataset.done=String(ticket.status==='evaluated');state.textContent=ticket.status==='evaluated'?'결과 확인 완료':'추첨 전';
       meta.append(games,state);top.append(label,meta);
-      const list=document.createElement('div');list.className='ticket-list';ticketRows(list,ticket.games||[],Infinity,[]);
+      const list=document.createElement('div');list.className='ticket-list';ticketRows(list,ticket.games||[],Infinity,matches);
       card.append(top,list);
       if(ticket.status==='evaluated'){
         const details=document.createElement('details');details.className='ticket-review';
@@ -500,13 +501,13 @@ class LottoTicketPanel extends HTMLElement {
     const upcomingTickets=Array.isArray(data.upcoming_ticket_previews)?data.upcoming_ticket_previews:[];
     const upcomingGames=upcomingTickets.reduce((sum,ticket)=>sum+(Number(ticket.game_count)||0),0);
     this.node('home-purchase-status').textContent=upcomingTickets.length
-      ? `${formatRound(upcomingRound)} 내 복권 ${upcomingTickets.length}장 · 총 ${upcomingGames}게임을 보관 중입니다. 추첨 후 자동 대조됩니다.`
-      : `${formatRound(upcomingRound)}에 등록한 구매 복권이 없습니다.`;
+      ? `${upcomingTickets.length}장 · ${upcomingGames}게임`
+      : '등록 없음';
     this.node('home-formula-status').textContent=currentRows.length
-      ? `${formatRound(upcomingRound)} 공식 생성번호 ${currentRows.length}개 · 평가 대기`
-      : `${formatRound(upcomingRound)}에 생성된 공식 번호가 없습니다.`;
+      ? `${currentRows.length}개 · 평가 대기`
+      : '생성 없음';
     this.renderMiniWallet(data);
-    this.node('drawtitle').textContent=data.result_round?`지난 회차 결과 · ${formatRound(data.result_round)}`:'지난 회차 결과 확인 중';
+    this.node('drawtitle').textContent=data.result_round?formatRound(data.result_round):'지난 회차 확인 중';
     const numbers=this.node('numbers');numbers.removeAttribute('role');numbers.removeAttribute('aria-label');
     if(meta.status!=='conflict'&&draw)numberBalls(numbers,draw.numbers,draw.bonus);
     else numbers.textContent=meta.status==='conflict'?'출처를 확인 중입니다. 판정을 잠시 보류합니다.':'아직 확인된 지난 회차 당첨번호가 없습니다.';

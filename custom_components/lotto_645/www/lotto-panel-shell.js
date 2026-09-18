@@ -1,8 +1,8 @@
 /* Production entry: component presentation with HA-owned narrow-state decisions. */
-import './lotto-panel.js?v=2.3.0';
-import { PANEL_TAG } from './lotto-panel-core.js?v=2.3.0';
-import { applyComponentDesign } from './lotto-panel-design.js?v=2.3.0';
-import { applyPanelTools, countdownState } from './lotto-panel-tools.js?v=2.3.0';
+import './lotto-panel.js?v=2.3.1';
+import { PANEL_TAG } from './lotto-panel-core.js?v=2.3.1';
+import { applyComponentDesign } from './lotto-panel-design.js?v=2.3.1';
+import { applyPanelTools } from './lotto-panel-tools.js?v=2.3.1';
 
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
@@ -101,41 +101,7 @@ const LOTTO_BALL_AND_COUNTDOWN_STYLE = `
   color:#d1d5db!important;
   border-color:#4b5563!important;
 }
-.hero-draw-countdown{
-  display:flex;
-  align-items:baseline;
-  flex-wrap:wrap;
-  gap:4px 8px;
-  margin-top:15px;
-  min-height:28px;
-  font-variant-numeric:tabular-nums;
-}
-.hero-clock-label{
-  color:var(--muted);
-  font-size:13px;
-  font-weight:600;
-}
-.hero-clock-value{
-  color:var(--ink);
-  font-size:15px;
-  line-height:1.5;
-  font-weight:750;
-  letter-spacing:-.02em;
-}
-.hero-clock-date{
-  flex-basis:100%;
-  color:var(--muted);
-  font-size:12px;
-  line-height:1.55;
-}
-.hero-draw-countdown[data-waiting="true"] .hero-clock-value{color:var(--blue)}
-lotto-panel-tools-v2-3-0{display:block!important;height:0!important;min-height:0!important;margin:0!important;overflow:visible!important}
-@container wallet (max-width:560px){
-  .hero-draw-countdown{margin-top:12px;gap:2px 7px}
-  .hero-clock-label{font-size:12px}
-  .hero-clock-value{font-size:14px}
-  .hero-clock-date{font-size:11px}
-}
+lotto-panel-tools-v2-3-1{display:block!important;height:0!important;min-height:0!important;margin:0!important;overflow:visible!important}
 @media(forced-colors:active){
   .draw-numbers .ball[data-band],.ticket-balls .ball[data-band]{
     background:Canvas!important;
@@ -146,77 +112,8 @@ lotto-panel-tools-v2-3-0{display:block!important;height:0!important;min-height:0
 }
 `;
 
-function ensureHeroCountdown(panel) {
-  const headingCopy = panel.shadowRoot?.querySelector('#screen-home .page-heading > div');
-  if (!headingCopy) return null;
-  let countdown = headingCopy.querySelector('.hero-draw-countdown');
-  if (countdown) return countdown;
-  countdown = document.createElement('div');
-  countdown.className = 'hero-draw-countdown';
-  countdown.hidden = true;
-  countdown.setAttribute('aria-label', '로또 추첨까지 남은 시간');
-  countdown.setAttribute('aria-live', 'off');
-  const label = document.createElement('span');
-  label.className = 'hero-clock-label';
-  const value = document.createElement('strong');
-  value.className = 'hero-clock-value';
-  const date = document.createElement('span');
-  date.className = 'hero-clock-date';
-  countdown.append(label, value, date);
-  headingCopy.append(countdown);
-  return countdown;
-}
-
-function formatKst(value) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return '';
-  return new Intl.DateTimeFormat('ko-KR', {
-    timeZone:'Asia/Seoul', month:'2-digit', day:'2-digit', weekday:'short',
-    hour:'2-digit', minute:'2-digit', hour12:false,
-  }).format(date);
-}
-
-function renderHeroCountdown(panel, state, schedule) {
-  const root = ensureHeroCountdown(panel);
-  if (!root) return;
-  root.hidden = !state;
-  if (!state) return;
-  root.dataset.waiting = String(state.waiting);
-  const label = root.querySelector('.hero-clock-label');
-  const value = root.querySelector('.hero-clock-value');
-  const date = root.querySelector('.hero-clock-date');
-  const pad = number => String(number).padStart(2, '0');
-  label.textContent = state.waiting
-    ? `제 ${state.round.toLocaleString('ko-KR')}회 추첨 시간`
-    : `제 ${state.round.toLocaleString('ko-KR')}회 추첨까지`;
-  value.textContent = state.waiting
-    ? '0일 00시간 00분 00초'
-    : `${state.days}일 ${pad(state.hours)}시간 ${pad(state.minutes)}분 ${pad(state.remainder)}초`;
-  if (state.waiting) {
-    const reopen = formatKst(schedule?.sales_reopen_at || schedule?.rollover_at);
-    date.textContent = reopen
-      ? `다음 회차 인터넷 판매 시작 ${reopen} · 판매 시작 시 새 카운트가 시작됩니다.`
-      : '다음 회차 판매 시작 시 새 카운트가 시작됩니다.';
-  } else {
-    const draw = formatKst(state.at);
-    date.textContent = draw
-      ? `${draw}경 추첨 · 동행복권 정규 일정 기준`
-      : '동행복권 정규 일정 기준';
-  }
-}
-
-/* Reuse the existing local-only timer, but move its visible result into the
-   “이번 주의 작은 기대.” hero. The old standalone countdown is always hidden. */
-const Tools = customElements.get('lotto-panel-tools-v2-3-0');
-if (Tools && !Tools.prototype._lottoHeroCountdownPatched) {
-  Tools.prototype._lottoHeroCountdownPatched = true;
-  const previousTickClock = Tools.prototype.tickClock;
-  Tools.prototype.tickClock = function (now = Date.now() + (this._clockOffset || 0)) {
-    previousTickClock.call(this, now);
-    const oldSection = this.shadowRoot?.querySelector('.countdown');
-    if (oldSection) oldSection.hidden = true;
-    renderHeroCountdown(this.panel, countdownState(this.schedule, now), this.schedule);
-  };
+function removeLegacyHeroCountdown(panel) {
+  panel.shadowRoot?.querySelector('.hero-draw-countdown')?.remove();
 }
 
 Panel.prototype._syncHaHostHeader = function () {
@@ -283,10 +180,10 @@ Panel.prototype.render = function (...args) {
       hostStyle = document.createElement('style');
       root.append(hostStyle);
     }
-    hostStyle.setAttribute('data-lotto-ha-host-header', '2.3.0');
+    hostStyle.setAttribute('data-lotto-ha-host-header', '2.3.1');
     hostStyle.textContent = HA_HOST_HEADER_STYLE;
   }
-  ensureHeroCountdown(this);
+  removeLegacyHeroCountdown(this);
   applyComponentDesign(this);
   applyPanelTools(this);
   if (root) {
@@ -296,10 +193,10 @@ Panel.prototype.render = function (...args) {
       root.append(ballStyle);
     }
     /* Refresh stale style nodes instead of accepting their old text. */
-    ballStyle.setAttribute('data-lotto-official-ball-colors', '2.3.0');
+    ballStyle.setAttribute('data-lotto-official-ball-colors', '2.3.1');
     ballStyle.textContent = LOTTO_BALL_AND_COUNTDOWN_STYLE;
   }
-  const tools = root?.querySelector('lotto-panel-tools-v2-3-0');
+  const tools = root?.querySelector('lotto-panel-tools-v2-3-1');
   if (tools) {
     tools.style.height = '0';
     tools.style.minHeight = '0';
@@ -307,10 +204,7 @@ Panel.prototype.render = function (...args) {
     tools.style.overflow = 'visible';
     const oldSection = tools.shadowRoot?.querySelector('.countdown');
     if (oldSection) oldSection.hidden = true;
-    if (tools.schedule) {
-      const now = Date.now() + (tools._clockOffset || 0);
-      renderHeroCountdown(this, countdownState(tools.schedule, now), tools.schedule);
-    }
+    removeLegacyHeroCountdown(this);
   }
   this._syncHaHostHeader?.();
   return value;

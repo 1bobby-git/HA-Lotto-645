@@ -15,6 +15,11 @@ export const COMPONENT_STYLE = `
   font-size:15px;
   line-height:1.65;
   text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+.wrap, main, .screen, .page-heading, .dashboard-grid, .review-grid,
+.ticket-swiper, .ticket-swiper-track, .wallet-toolbar, .table-scroll {
+  min-width:0; max-width:100%;
 }
 :host([data-theme="dark"]) { --lotto-shadow-card:none; }
 /* Keep the host-owned navigation palette separate from the white brand area. */
