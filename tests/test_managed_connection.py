@@ -321,3 +321,15 @@ def test_config_entry_migration_targets_automatic_connection_schema_v5():
     assert "version=5" in text
     assert "member_connection_pending" not in source
     assert "member_service_unavailable" not in source
+
+
+def test_panel_upgrade_accepts_recent_release_tags():
+    source = (R / "ticket_panel.py").read_text(encoding="utf-8")
+    for tag in (
+        "lotto-ticket-panel-v2-1-0",
+        "lotto-ticket-panel-v2-1-1",
+        "lotto-ticket-panel-v2-1-2",
+        "lotto-ticket-panel-v2-2-0",
+    ):
+        assert repr(tag) in source
+    assert "PANEL_TAG = 'lotto-ticket-panel-v2-2-1'" in source
