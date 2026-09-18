@@ -145,3 +145,25 @@ def test_manual_purchase_may_equal_an_old_winning_combination():
 def test_sixth_game_rejected_not_silently_discarded():
     with pytest.raises(purchases.PurchaseInputError, match='purchase_game_limit'):
         purchases.PurchaseBook().updated(40, {f'game_{s}': GOOD for s in 'abcdef'}, now=NOW)
+
+
+def test_matching_purchase_games_is_exact_and_round_scoped():
+    numbers = "11, 13, 18, 22, 31, 32"
+    book = purchases.PurchaseBook().updated(40, {"game_b": numbers}, now=NOW)
+    first_ticket_id = book.selected_ticket_id
+    book = book.updated(40, {"game_c": numbers}, now=NOW, new_ticket=True)
+    second_ticket_id = book.selected_ticket_id
+
+    matches = purchases.matching_purchase_games(
+        book, 40, (32, 31, 22, 18, 13, 11)
+    )
+    assert [
+        (item["ticket_id"], item["ticket_number"], item["slot"])
+        for item in matches
+    ] == [
+        (first_ticket_id, 1, "B"),
+        (second_ticket_id, 2, "C"),
+    ]
+    assert all(item["numbers"] == [11, 13, 18, 22, 31, 32] for item in matches)
+    assert purchases.matching_purchase_games(book, 41, (11, 13, 18, 22, 31, 32)) == []
+    assert purchases.matching_purchase_games(book, 40, (11, 13, 18, 22, 31, 33)) == []
