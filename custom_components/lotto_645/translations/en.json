@@ -3,17 +3,15 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect Lotto Lab",
-        "description": "Open [Lotto Lab]({url}), sign in or join with an invitation, and approve the code **{code}**. Then return here and select Submit. Do not approve a code you did not request."
+        "title": "Connect Lotto Lab service",
+        "description": "The integration connects automatically to https://lotto.formulab.kr with a unique installation credential. No Lotto Lab account or approval code is required."
       }
     },
     "abort": {
       "single_instance_allowed": "Only one Lotto 6/45 Analysis instance can be configured."
     },
     "error": {
-      "service_connection_failed": "서버 연결 또는 인증을 확인하세요.",
-      "member_waiting": "Approval is pending.",
-      "member_link_failed": "Unable to finish the connection. Start again."
+      "service_connection_failed": "서버 연결 또는 인증을 확인하세요."
     }
   },
   "options": {
@@ -24,8 +22,7 @@
         "menu_options": {
           "recommendations": "Draw formulas, AI, and data source",
           "saju": "Personal Four Pillars profile",
-          "purchases": "Purchased tickets: enter / edit",
-          "account": "Lotto Lab account"
+          "purchases": "Purchased tickets: enter / edit"
         }
       },
       "recommendations": {
@@ -92,10 +89,6 @@
           "game_e": "Game E (six numbers)",
           "clear_round": "Delete this round (ignore input lines)"
         }
-      },
-      "account": {
-        "title": "Connect Lotto Lab account",
-        "description": "Open [Lotto Lab]({url}), sign in or join with an invitation, and approve the code **{code}**. Then return here and select Submit. Do not approve a code you did not request."
       }
     },
     "error": {
@@ -110,9 +103,7 @@
       "purchase_storage_unavailable": "Could not save. Existing tickets are preserved.",
       "purchase_game_limit": "Enter at most five games (A–E) per draw.",
       "invalid_generation_rules": "Conflicting or invalid rules. Check the explanation above.",
-      "service_connection_failed": "서버 주소·토큰·인증서 또는 입력 조건을 확인하세요. 기존 기록은 유지됩니다.",
-      "member_waiting": "Approval is pending.",
-      "member_link_failed": "Unable to finish the connection. Start again."
+      "service_connection_failed": "서버 주소·토큰·인증서 또는 입력 조건을 확인하세요. 기존 기록은 유지됩니다."
     },
     "abort": {
       "purchase_integration_not_ready": "Wait for the integration to finish setup.",
