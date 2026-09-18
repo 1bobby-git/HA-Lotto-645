@@ -277,7 +277,8 @@ class LottoTicketPanel extends HTMLElement {
     const games=data.purchased?.games||[];
     this.node('mini-round').textContent=formatRound(data.round);this.node('ticket-round').textContent=formatRound(data.round);
     this.node('mini-count').textContent=games.length>3?`${games.length}게임 중 3게임 표시`:`${games.length}게임 보관`;this.node('wallet-count').textContent=`${games.length}게임 · 이번 회차 ${data.tickets?.length||0}장`;
-    ticketRows(this.node('mini-games'),games,3);ticketRows(this.node('wallet-games'),games);
+    const matches=data.generation_matches||[];
+    ticketRows(this.node('mini-games'),games,3,matches);ticketRows(this.node('wallet-games'),games,Infinity,matches);
     const select=this.node('wallet-round');const rounds=[...new Set([data.round,data.recommendation_target,...(data.stored_rounds||[])].map(Number).filter(n=>Number.isInteger(n)&&n>0))].sort((a,b)=>b-a);
     const signature=rounds.join(',');
     if(this._roundSignature!==signature){select.replaceChildren();for(const n of rounds){const option=document.createElement('option');option.value=String(n);option.textContent=formatRound(n);select.append(option);}this._roundSignature=signature;}
@@ -290,7 +291,11 @@ class LottoTicketPanel extends HTMLElement {
     renderPredictionRows(this.node('current-recommendations'),currentRows,['현재 생성번호가 없습니다.','공식 선택과 서비스 연결을 확인하세요. 기존 복권·리뷰 기록은 보존됩니다.']);
     this.node('current-recommendations-heading').textContent=`${formatRound(data.recommendation_target)} · 현재 생성번호`;
     const serviceStatus=data.service_status;
-    this.node('current-recommendations-note').textContent=(serviceStatus==='generating'?'새 번호를 생성 중입니다. 이전 저장번호를 유지합니다. ':serviceStatus&&serviceStatus!=='ready'?'서비스 상태: '+serviceStatus+' · 저장번호를 표시합니다. ':'')+'현재 센서의 번호이며 과거 검증 성적이나 실제 구매 내역이 아닙니다.';
+    const matchedFormulaCount=new Set((data.generation_matches||[]).map(row=>row.formula_id).filter(Boolean)).size;
+    const matchNote=matchedFormulaCount
+      ? `저장한 구매번호와 ${matchedFormulaCount}개 공식의 번호가 정확히 일치합니다. 같은 회차의 6개 번호가 모두 같은 경우만 표시합니다.`
+      : '현재 센서의 번호이며 과거 검증 성적이나 실제 구매 내역이 아닙니다.';
+    this.node('current-recommendations-note').textContent=(serviceStatus==='generating'?'새 번호를 생성 중입니다. 이전 저장번호를 유지합니다. ':serviceStatus&&serviceStatus!=='ready'?'서비스 상태: '+serviceStatus+' · 저장번호를 표시합니다. ':'')+matchNote;
     const awaiting=!presentation.evaluated;
     this._targetRound=Number(data.recommendation_target)||this._targetRound;
     this.node('drawtitle').textContent=data.result_round?formatRound(data.result_round):'결과 발표 대기';

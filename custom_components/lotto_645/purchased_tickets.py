@@ -72,6 +72,38 @@ def parse_games(values: dict[str, Any]) -> list[dict[str, Any]]:
     return games
 
 
+def matching_purchase_games(
+    book: "PurchaseBook", round_no: int | None, numbers: Iterable[int]
+) -> list[dict[str, Any]]:
+    """Return purchased lines whose six numbers exactly match in the same round."""
+    if round_no is None:
+        return []
+    try:
+        target_round = parse_round(round_no)
+        canonical = parse_ticket(list(numbers), "numbers")
+    except (PurchaseInputError, TypeError):
+        return []
+
+    matches: list[dict[str, Any]] = []
+    ticket_number = 0
+    for ticket in book.tickets.values():
+        if ticket["round"] != target_round:
+            continue
+        ticket_number += 1
+        for game in ticket["games"]:
+            if tuple(game["numbers"]) != canonical:
+                continue
+            matches.append(
+                {
+                    "ticket_id": ticket["ticket_id"],
+                    "ticket_number": ticket_number,
+                    "slot": game["slot"],
+                    "numbers": list(canonical),
+                }
+            )
+    return matches
+
+
 class _LegacyPurchaseBook:
     """Five lines per draw; rounds are retained until the user explicitly deletes."""
 
