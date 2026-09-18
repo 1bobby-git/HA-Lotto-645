@@ -19,7 +19,12 @@ from .panel_metadata import panel_metadata
 from .review_selection import review_method_ids, selected_round_review
 from .const import AI_METHOD_ID
 from .methods import METHODS_BY_ID, RETIRED_METHOD_LABELS
-from .purchased_tickets import PurchaseInputError, parse_round, parse_games
+from .purchased_tickets import (
+    PurchaseInputError,
+    matching_purchase_games,
+    parse_games,
+    parse_round,
+)
 from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
@@ -87,12 +92,27 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
     visible = frozenset(visible_ids)
     review = selected_round_review(review, visible_ids)
     recommendations = []
+    generation_matches = []
     if coordinator.data and coordinator.data.analysis.target_round == active_round:
         source_rows = [*coordinator.data.analysis.recommendations]
         if coordinator.data.ai_recommendation:
             source_rows.append(coordinator.data.ai_recommendation)
-        recommendations = [row.as_attributes() for row in source_rows
-                           if row.method_id in visible and row.details.get('target_round', active_round) == active_round]
+        for row in source_rows:
+            if row.method_id not in visible or row.details.get('target_round', active_round) != active_round:
+                continue
+            matches = matching_purchase_games(book, active_round, row.numbers)
+            payload = row.as_attributes()
+            payload['purchase_match'] = bool(matches)
+            payload['purchase_match_count'] = len(matches)
+            payload['purchase_matches'] = matches
+            recommendations.append(payload)
+            for match in matches:
+                generation_matches.append({
+                    **match,
+                    'formula_id': row.method_id,
+                    'formula_label': row.label,
+                    'generation_id': row.details.get('generation_id'),
+                })
     return {**panel,
             'selected_method_ids': list(visible_ids),
             'reviews': _review_rows(coordinator),
@@ -116,7 +136,7 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
             'recommendations': recommendations,
             'recommendation_generated_at': coordinator.data.generated_at.isoformat() if coordinator.data else None,
             'generation_sequence': getattr(coordinator, 'local_generation_sequence', 0),
-            'generation_matches':[{'ticket_id':t['ticket_id'],'formula_id':r.method_id,'generation_id':r.details.get('generation_id')} for t in book.tickets.values() if t['round']==round_no for r in (coordinator.data.analysis.recommendations if coordinator.data and coordinator.data.analysis.target_round==round_no else []) if r.method_id in visible if any(tuple(g['numbers'])==r.numbers for g in t['games'])]}
+            'generation_matches': generation_matches}
 
 
 @websocket_api.websocket_command({'type': 'lotto_645/purchases_get', vol.Required('entry_id'): str,
