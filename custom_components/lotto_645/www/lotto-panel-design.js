@@ -107,7 +107,7 @@ h3 { font-size:19px; line-height:1.4; font-weight:760; letter-spacing:-.03em; }
 .quick-copy small, .wallet-description, .review-count, .review-note,
 .review-footnote, .import-promo p, .footer, .empty,
 .steps, .savedrounds, .game-feedback, .input-help, .sheet-privacy,
-.game-field label, .game-label, .prize, .wallet-paper .prize {
+.game-field label, .game-label, .prize, .wallet-paper .prize, .match-badge {
   font-size:12px; line-height:1.65;
 }
 .quick-copy strong, .quick-link, .wallet-toolbar label, .wallet-toolbar select,
@@ -132,7 +132,7 @@ main button, dialog button { font-size:14px; }
 .draw-foot button { min-height:44px; font-size:13px; padding:8px 12px; }
 .section-heading button, .paper-bottom button, .import-promo button { min-height:44px; font-size:13px; }
 .quick-link { border-radius:0; }
-.prize, .review-count, .slot-tag { border-radius:var(--lotto-radius-badge); }
+.prize, .match-badge, .review-count, .slot-tag { border-radius:var(--lotto-radius-badge); }
 .sheet-head .icon-only { width:44px; height:44px; min-height:44px; border-radius:var(--lotto-radius-control); }
 .sheet-head h2 { font-size:22px; }
 .import-choice { border-radius:var(--lotto-radius-card); }
@@ -191,7 +191,7 @@ main button, dialog button { font-size:14px; }
   .wallet-toolbar { flex-wrap:wrap; }
   .wallet-paper .game-label { font-size:12px; }
   .wallet-paper .ticket-row, .ticket-row { gap:6px; }
-  .wallet-paper .prize, .prize { font-size:12px; padding:3px 5px; }
+  .wallet-paper .prize, .prize, .match-badge { font-size:12px; padding:3px 5px; }
 }
 @container wallet (max-width:350px) {
   .header-row { gap:0 8px; }
