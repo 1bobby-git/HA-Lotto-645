@@ -49,6 +49,62 @@ def test_view_includes_current_sensor_records_separate_from_last_draw():
     assert 'historical_validation' not in view
 
 
+def test_view_includes_all_five_games_for_each_ticket_preview():
+    from custom_components.lotto_645.purchased_tickets import PurchaseBook
+
+    five_a = {
+        "game_a": "1, 2, 3, 4, 5, 6",
+        "game_b": "7, 8, 9, 10, 11, 12",
+        "game_c": "13, 14, 15, 16, 17, 18",
+        "game_d": "19, 20, 21, 22, 23, 24",
+        "game_e": "25, 26, 27, 28, 29, 30",
+    }
+    five_b = {
+        "game_a": "2, 3, 4, 5, 6, 7",
+        "game_b": "8, 9, 10, 11, 12, 13",
+        "game_c": "14, 15, 16, 17, 18, 19",
+        "game_d": "20, 21, 22, 23, 24, 25",
+        "game_e": "26, 27, 28, 29, 30, 31",
+    }
+    book = PurchaseBook().updated(31, five_a, now=datetime.now(UTC))
+    first_id = book.selected_ticket_id
+    book = book.updated(31, five_b, now=datetime.now(UTC), new_ticket=True)
+    second_id = book.selected_ticket_id
+    current = models.AnalysisResult(31, 30, (), {})
+    owner = SimpleNamespace(
+        result_draw=None,
+        purchase_book=book,
+        result_metadata={"status": "waiting"},
+        result_round=30,
+        data=SimpleNamespace(
+            analysis=current,
+            generated_at=datetime.now(UTC),
+            ai_recommendation=None,
+        ),
+        result_history=[],
+        winning_summary={"round": 30, "results": []},
+        entry=SimpleNamespace(entry_id="entry"),
+        purchase_storage_error=False,
+        local_generation_sequence=1,
+        configured_method_ids=(),
+        ai_enabled=False,
+    )
+    view = production_function(
+        "_view",
+        {
+            "Any": object,
+            "_review_rows": lambda c: [],
+            "panel_metadata": lambda *args: {"draw_schedule": {"round": 31}},
+        },
+    )(owner, 31, first_id)
+
+    previews = view["ticket_previews"]
+    assert [item["ticket_id"] for item in previews] == [first_id, second_id]
+    assert [item["ticket_number"] for item in previews] == [1, 2]
+    assert [item["game_count"] for item in previews] == [5, 5]
+    assert all([game["slot"] for game in item["games"]] == list("ABCDE") for item in previews)
+
+
 def test_subscription_is_entry_scoped_and_contains_no_numbers_or_profiles():
     registrations={}
     def listen(event,callback):

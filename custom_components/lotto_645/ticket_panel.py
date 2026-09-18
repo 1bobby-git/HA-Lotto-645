@@ -29,7 +29,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-2-4'
+PANEL_TAG = 'lotto-ticket-panel-v2-2-5'
 COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel',
     'lotto-ticket-panel-v2-0-0', 'lotto-ticket-panel-v2-0-1',
@@ -37,7 +37,7 @@ COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel-v2-1-0', 'lotto-ticket-panel-v2-1-1',
     'lotto-ticket-panel-v2-1-2', 'lotto-ticket-panel-v2-2-0',
     'lotto-ticket-panel-v2-2-1', 'lotto-ticket-panel-v2-2-2',
-    'lotto-ticket-panel-v2-2-3', PANEL_TAG,
+    'lotto-ticket-panel-v2-2-3', 'lotto-ticket-panel-v2-2-4', PANEL_TAG,
 }
 WWW = Path(__file__).parent / 'www'
 FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
@@ -167,6 +167,24 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
     purchased = book.report(
         coordinator.result_history, round_no, record.get('ticket_id')
     )
+    ticket_previews = []
+    if round_no:
+        round_tickets = [
+            ticket for ticket in book.tickets.values() if ticket['round'] == round_no
+        ]
+        for index, ticket in enumerate(round_tickets, start=1):
+            ticket_report = book.report(
+                coordinator.result_history, round_no, ticket['ticket_id']
+            )
+            ticket_previews.append({
+                'ticket_id': ticket['ticket_id'],
+                'ticket_number': index,
+                'saved_at': ticket['saved_at'],
+                'game_count': len(ticket_report.get('games', [])),
+                'status': ticket_report.get('status'),
+                'highest_prize': ticket_report.get('highest_prize'),
+                'games': ticket_report.get('games', []),
+            })
     return {**panel,
             'selected_method_ids': list(visible_ids),
             'reviews': _review_rows(coordinator),
@@ -176,6 +194,7 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
             'round': round_no, 'revision': record.get('saved_at', ''),
             'ticket_id':record.get('ticket_id'),
             'tickets':[{'ticket_id':r['ticket_id'],'saved_at':r['saved_at'],'game_count':len(r['games'])} for r in book.tickets.values() if r['round']==round_no],
+            'ticket_previews': ticket_previews,
             'service_status':getattr(getattr(coordinator,'service',None),'status','unknown'),
             'values': book.form_values(round_no,record.get('ticket_id')) if round_no else {},
             'stored_rounds': sorted(map(int, book.records), reverse=True),

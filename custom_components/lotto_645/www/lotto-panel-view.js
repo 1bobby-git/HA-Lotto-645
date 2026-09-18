@@ -113,6 +113,18 @@ main{padding-top:40px!important} .screen{outline:0}.page-heading{display:flex;al
 .current-formulas{margin-top:24px}.dashboard-grid{display:grid;grid-template-columns:minmax(0,1fr) 304px;gap:32px;margin-top:36px;align-items:start}
 .section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.section-heading h2{font-size:21px}.section-heading button{font-size:12px;color:var(--muted);padding:6px 0 6px 10px;background:none;min-height:36px}.section-heading svg{width:15px;height:15px}
 .ticket-paper{background:var(--surface);border:1px solid var(--line);border-radius:19px;box-shadow:var(--shadow);overflow:hidden}
+.ticket-swiper{min-width:0}
+.ticket-swiper-track{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.ticket-swiper-track::-webkit-scrollbar{display:none}
+.ticket-slide{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always;box-sizing:border-box}
+.ticket-swiper-nav{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:10px;min-height:36px}
+.swiper-arrow{width:36px;height:36px;min-height:36px!important;padding:0!important;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);font-size:22px;line-height:1}
+.swiper-arrow:disabled{opacity:.32}
+.ticket-swiper-dots{display:flex;align-items:center;justify-content:center;gap:0}
+.swiper-dot{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;min-height:30px!important;padding:0!important;background:transparent!important;border:0!important}
+.swiper-dot::after{content:"";display:block;width:6px;height:6px;border-radius:999px;background:var(--field);transition:width .18s ease,background .18s ease}
+.swiper-dot[data-active="true"]::after{width:18px;background:var(--blue)}
+.swiper-status{min-width:38px;text-align:center;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
 .paper-top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:19px 24px;border-bottom:1px dashed var(--field)}
 .paper-label{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:650}.paper-label svg{color:var(--muted);width:18px;height:18px}.paper-meta{font-size:11px;color:var(--muted)}
 .ticket-list{padding:0 24px}.ticket-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:14px;align-items:center;min-height:76px;border-bottom:1px solid var(--line)}.ticket-row:last-child{border:0}
@@ -206,7 +218,15 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
       </section>
  <div class="dashboard-grid">
         <section aria-labelledby="home-wallet-heading"><div class="section-heading"><h2 id="home-wallet-heading">내 복권</h2><button type="button" data-go="wallet">전체 보기${icons.arrow}</button></div>
-          <div class="ticket-paper"><div class="paper-top"><span class="paper-label">${icons.ticket}<span id="mini-round">보관한 복권</span></span><span id="mini-count" class="paper-meta">불러오는 중</span></div><div id="mini-games" class="ticket-list"></div><div class="paper-bottom"><span>등록한 번호는 결과 발표 후 자동 대조해요.</span><button type="button" data-go="wallet">복권 관리${icons.arrow}</button></div></div>
+          <div id="mini-swiper" class="ticket-swiper" role="region" aria-roledescription="carousel" aria-label="등록한 복권">
+            <div id="mini-swiper-track" class="ticket-swiper-track"></div>
+            <div id="mini-swiper-nav" class="ticket-swiper-nav" hidden>
+              <button id="mini-prev" type="button" class="swiper-arrow" aria-label="이전 복권">‹</button>
+              <div id="mini-swiper-dots" class="ticket-swiper-dots" aria-label="복권 페이지"></div>
+              <span id="mini-swiper-status" class="swiper-status" aria-live="polite"></span>
+              <button id="mini-next" type="button" class="swiper-arrow" aria-label="다음 복권">›</button>
+            </div>
+          </div>
           <p class="small-print">${icons.lock}<span>내 번호는 Home Assistant에 보관해요. 실제 복권은 별도로 보관해 주세요.</span></p>
         </section>
         <aside aria-label="간편 등록과 리뷰"><div class="import-promo"><h3>종이 복권은 그대로,<br>번호만 간편하게.</h3><p>QR을 읽으면 번호 입력이 끝.<br>확인 후 내 복권에 저장하세요.</p><button type="button" data-register>QR로 가져오기${icons.arrow}</button><div class="ticket-art" aria-hidden="true"><div class="art-head">MY LOTTO</div><div class="art-row"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="art-row"><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div><button class="quick-link" type="button" data-go="review"><span class="quick-icon">${icons.chart}</span><span class="quick-copy"><strong>추첨 공식별 결과는 어땠을까요?</strong><small>이번 결과와 누적 리뷰 확인</small></span>${icons.arrow}</button></aside>
