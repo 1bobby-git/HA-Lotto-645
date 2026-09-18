@@ -266,8 +266,9 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
           </div>
           <p class="small-print">${icons.lock}<span>내 번호는 Home Assistant에 보관합니다. 실제 복권은 별도로 보관해 주세요.</span></p>
         </section>
-        <aside class="overview-side" aria-label="추천 리뷰 요약">
+        <aside class="overview-side" aria-label="추천 리뷰와 간편 복권 등록">
           <div class="overview-card"><h3>추천 리뷰</h3><p id="home-review-summary">지난 회차 공식 평가 상태를 확인하고 있습니다.</p><p id="home-review-top"></p><button type="button" data-go="review">추천 리뷰 보기${icons.arrow}</button></div>
+          <div class="import-promo"><h3>종이 복권은 그대로,<br>번호만 간편하게.</h3><p>QR을 읽으면 번호 입력이 끝.<br>확인 후 내 복권에 저장하세요.</p><button type="button" data-register>QR로 가져오기${icons.arrow}</button><div class="ticket-art" aria-hidden="true"><div class="art-head">MY LOTTO</div><div class="art-row"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="art-row"><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
         </aside>
       </div>
     </section>

@@ -32,6 +32,7 @@ def test_overview_has_no_recommendation_summary():
     assert "purchase_formula_reviews" not in text
     assert 'id="home-wallet-heading"' in text and 'class="draw-stage last-draw"' in text
     assert 'id="upcoming-countdown"' in text
+    assert 'class="import-promo"' in home and 'MY LOTTO' in home and 'QR로 가져오기' in home
 
 
 def test_home_wallet_renders_five_games_and_multiple_tickets_as_swiper():
