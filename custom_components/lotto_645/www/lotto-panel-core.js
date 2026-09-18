@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows, reviewPresentation } from './lotto-panel-view.js?v=2.1.1';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows, reviewPresentation, currentRecommendations } from './lotto-panel-view.js?v=2.1.2';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-1-1';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-1-2';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -286,6 +286,11 @@ class LottoTicketPanel extends HTMLElement {
   updateResults(data) {
     const draw=data.draw,meta=data.result_verification||{};
     const presentation=reviewPresentation(data),rr=presentation.report;
+    const currentRows=currentRecommendations(data);
+    renderPredictionRows(this.node('current-recommendations'),currentRows,['현재 생성번호가 없습니다.','공식 선택과 서비스 연결을 확인하세요. 기존 복권·리뷰 기록은 보존됩니다.']);
+    this.node('current-recommendations-heading').textContent=`${formatRound(data.recommendation_target)} · 현재 생성번호`;
+    const serviceStatus=data.service_status;
+    this.node('current-recommendations-note').textContent=(serviceStatus==='generating'?'새 번호를 생성 중입니다. 이전 저장번호를 유지합니다. ':serviceStatus&&serviceStatus!=='ready'?'서비스 상태: '+serviceStatus+' · 저장번호를 표시합니다. ':'')+'현재 센서의 번호이며 과거 검증 성적이나 실제 구매 내역이 아닙니다.';
     const awaiting=!presentation.evaluated;
     this._targetRound=Number(data.recommendation_target)||this._targetRound;
     this.node('drawtitle').textContent=data.result_round?formatRound(data.result_round):'결과 발표 대기';

@@ -37,8 +37,16 @@ class ServiceRuntime:
         self.ai_generator = None
 
     def _configure_connection(self, values):
-        if self.client is not None and self.connection == values:
+        scope = self.connection_manager.journal_scope
+        same_endpoint = all(self.connection.get(k) == values.get(k)
+                            for k in (CONF_SERVICE_URL, CONF_SERVICE_CERT))
+        if (self.client is not None and same_endpoint
+                and getattr(self, '_configured_scope', None) == scope):
+            # Token rotation must not strand an in-flight polling task.
+            self.client.set_access_token(values[CONF_SERVICE_TOKEN])
+            self.connection = dict(values)
             return
+        self._configured_scope = scope
         self.connection = dict(values)
         self.client = LottoLabClient(async_get_clientsession(self.hass),
             values[CONF_SERVICE_URL], values[CONF_SERVICE_TOKEN],

@@ -24,7 +24,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-1-1'
+PANEL_TAG = 'lotto-ticket-panel-v2-1-2'
 WWW = Path(__file__).parent / 'www'
 FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
 # The user-supplied PNG and locally verified pixel-identical lossless encodings.

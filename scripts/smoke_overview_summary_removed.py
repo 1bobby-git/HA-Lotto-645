@@ -46,6 +46,9 @@ async def main():
             assert await page.locator('#home-wallet-heading').is_visible()
             assert await page.locator('#screen-home .draw-stage + .dashboard-grid').count()==1
             await page.locator('#tab-review').click()
+            assert await page.locator('#current-recommendations .prediction-row').count()==1
+            assert await page.locator('#current-recommendations .ball').count()==6
+            assert await page.locator('#current-recommendations [data-hit]').count()==0
             assert await page.locator('#predictions .prediction-row').count()==1
             assert await page.locator('#predictions .ball').count()==6
             assert await page.locator('#predictions .prize').inner_text()=='추첨 대기'
