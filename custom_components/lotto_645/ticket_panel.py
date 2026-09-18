@@ -29,7 +29,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-2-5'
+PANEL_TAG = 'lotto-ticket-panel-v2-3-0'
 COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel',
     'lotto-ticket-panel-v2-0-0', 'lotto-ticket-panel-v2-0-1',
@@ -69,14 +69,21 @@ def _coordinator(hass: HomeAssistant, message: dict) -> Any:
 
 def _review_rows(coordinator) -> list[dict]:
     from .const import AI_METHOD_ID
-    from .methods import METHODS_BY_ID, RETIRED_METHOD_LABELS
+    from .methods import ADVANCED_METHOD_IDS, METHODS_BY_ID, RETIRED_METHOD_LABELS
     from .review import review_name
     ids = review_method_ids(coordinator)
     rows = []
     for method_id in ids:
         summary = coordinator.review_for_method(method_id) if hasattr(coordinator, 'review_for_method') else {}
         label = METHODS_BY_ID[method_id].label if method_id in METHODS_BY_ID else 'Home Assistant AI 추천' if method_id == AI_METHOD_ID else RETIRED_METHOD_LABELS.get(method_id, method_id)
-        rows.append({'method_id': method_id, 'label': label, 'display_name': review_name(label, summary), **summary})
+        tier = 'ai' if method_id == AI_METHOD_ID else 'advanced' if method_id in ADVANCED_METHOD_IDS else 'basic'
+        rows.append({
+            'method_id': method_id,
+            'label': label,
+            'display_name': review_name(label, summary),
+            'tier': tier,
+            **summary,
+        })
     return rows
 
 
@@ -129,6 +136,30 @@ def _purchase_formula_reviews(book, history, round_no: int) -> list[dict]:
 def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None = None) -> dict:
     draw = coordinator.result_draw
     book = coordinator.purchase_book
+
+    def ticket_previews_for(target_round: int | None) -> list[dict]:
+        if not target_round:
+            return []
+        previews = []
+        round_tickets = [
+            ticket for ticket in book.tickets.values()
+            if ticket['round'] == target_round
+        ]
+        for index, ticket in enumerate(round_tickets, start=1):
+            ticket_report = book.report(
+                coordinator.result_history, target_round, ticket['ticket_id']
+            )
+            previews.append({
+                'ticket_id': ticket['ticket_id'],
+                'ticket_number': index,
+                'saved_at': ticket['saved_at'],
+                'game_count': len(ticket_report.get('games', [])),
+                'status': ticket_report.get('status'),
+                'highest_prize': ticket_report.get('highest_prize'),
+                'winning_game_count': ticket_report.get('winning_game_count', 0),
+                'games': ticket_report.get('games', []),
+            })
+        return previews
     round_no = round_no or book.selected_round or (coordinator.data.analysis.target_round if coordinator.data else None)
     record = book.ticket_record(round_no,ticket_id)
     metadata = coordinator.result_metadata
@@ -139,6 +170,16 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
     visible_ids = review_method_ids(coordinator)
     visible = frozenset(visible_ids)
     review = selected_round_review(review, visible_ids)
+    last_review = {}
+    if getattr(coordinator, 'result_round', None):
+        last_review = coordinator.review_for_round(coordinator.result_round) if hasattr(coordinator, 'review_for_round') else {}
+    last_review = last_review or {
+        'round': coordinator.result_round,
+        'status': 'waiting',
+        'methods': [],
+        'peer_count': 0,
+    }
+    last_review = selected_round_review(last_review, visible_ids)
     recommendations = []
     generation_matches = []
     if coordinator.data and coordinator.data.analysis.target_round == active_round:
@@ -167,34 +208,24 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
     purchased = book.report(
         coordinator.result_history, round_no, record.get('ticket_id')
     )
-    ticket_previews = []
-    if round_no:
-        round_tickets = [
-            ticket for ticket in book.tickets.values() if ticket['round'] == round_no
-        ]
-        for index, ticket in enumerate(round_tickets, start=1):
-            ticket_report = book.report(
-                coordinator.result_history, round_no, ticket['ticket_id']
-            )
-            ticket_previews.append({
-                'ticket_id': ticket['ticket_id'],
-                'ticket_number': index,
-                'saved_at': ticket['saved_at'],
-                'game_count': len(ticket_report.get('games', [])),
-                'status': ticket_report.get('status'),
-                'highest_prize': ticket_report.get('highest_prize'),
-                'games': ticket_report.get('games', []),
-            })
+    ticket_previews = ticket_previews_for(round_no)
+    upcoming_ticket_previews = ticket_previews_for(active_round)
+    upcoming_purchased = book.report(
+        coordinator.result_history, active_round
+    )
     return {**panel,
             'selected_method_ids': list(visible_ids),
             'reviews': _review_rows(coordinator),
             'review_round': review,
+            'last_review_round': last_review,
             'review_storage_error': getattr(coordinator, 'review_storage_error', False),
             'review_save_pending': getattr(coordinator, '_review_save_error', False),
             'round': round_no, 'revision': record.get('saved_at', ''),
             'ticket_id':record.get('ticket_id'),
             'tickets':[{'ticket_id':r['ticket_id'],'saved_at':r['saved_at'],'game_count':len(r['games'])} for r in book.tickets.values() if r['round']==round_no],
             'ticket_previews': ticket_previews,
+            'upcoming_ticket_previews': upcoming_ticket_previews,
+            'upcoming_purchased': upcoming_purchased,
             'service_status':getattr(getattr(coordinator,'service',None),'status','unknown'),
             'values': book.form_values(round_no,record.get('ticket_id')) if round_no else {},
             'stored_rounds': sorted(map(int, book.records), reverse=True),

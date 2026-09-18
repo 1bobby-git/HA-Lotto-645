@@ -197,6 +197,29 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
 .ticket-balls.result-balls[data-has-matches="false"] .ball{opacity:1;filter:none}
 .mobile-table .result-detail{grid-column:2;white-space:normal;overflow-wrap:anywhere}
 @media(forced-colors:active){.ticket-balls.result-balls .ball[data-hit="main"],.ticket-balls.result-balls .ball[data-hit="bonus"]{outline-color:Highlight}.ticket-balls.result-balls .ball{opacity:1;filter:none}}
+
+/* 2.3.0 information architecture: upcoming first, purchases and formula reviews separated. */
+.upcoming-hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr);gap:28px;padding:34px 36px;border:1px solid var(--line);border-radius:24px;background:var(--surface);box-shadow:var(--shadow);margin-bottom:30px}
+.upcoming-main{display:flex;flex-direction:column;justify-content:center;min-width:0}.upcoming-kicker{font-size:12px;font-weight:700;color:var(--blue);letter-spacing:.04em;margin-bottom:6px}
+.upcoming-title{font-size:36px;font-weight:780;letter-spacing:-.045em}.upcoming-state{display:inline-flex;align-items:center;width:max-content;margin-top:12px;padding:5px 10px;border-radius:8px;background:var(--blue-soft);color:var(--blue);font-size:12px;font-weight:700}
+.upcoming-clock{margin-top:22px}.upcoming-clock .clock-label{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}.upcoming-clock strong{display:block;font-size:30px;line-height:1.35;font-variant-numeric:tabular-nums;letter-spacing:-.03em}.upcoming-clock small{display:block;margin-top:4px;color:var(--muted);font-size:12px}
+.hero-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}.hero-actions button{min-height:42px;font-size:13px}
+.upcoming-status{display:grid;gap:12px;align-content:center}.status-card{padding:18px 20px;border-radius:16px;background:var(--soft);min-width:0}.status-card span{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}.status-card strong{display:block;font-size:14px;line-height:1.7;overflow-wrap:anywhere}
+.draw-stage.last-draw{margin-bottom:0}.draw-stage.last-draw .draw-main{min-height:120px}.draw-stage.last-draw .draw-kicker{font-weight:700}
+.overview-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:28px;margin-top:30px;align-items:start}
+.overview-side{display:grid;gap:16px}.overview-card{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:20px}.overview-card h3{font-size:16px}.overview-card p{font-size:12px;color:var(--muted);line-height:1.8;margin-top:6px}.overview-card button{margin-top:12px;padding-left:0;background:transparent;color:var(--blue);font-size:12px}
+.wallet-swiper{margin-top:6px}.wallet-swiper .ticket-swiper-track{gap:20px}.wallet-ticket-card{position:relative;border-radius:16px}.wallet-ticket-card::after{content:"";display:block;border-top:1px dashed var(--field);margin:0 24px}
+.wallet-ticket-card .paper-top{border-bottom:1px dashed var(--field)}.wallet-ticket-card .paper-label{font-size:15px}.wallet-ticket-card .paper-meta{display:flex;gap:8px;align-items:center}
+.ticket-state{display:inline-flex;padding:3px 7px;border-radius:999px;background:var(--soft);color:var(--muted);font-size:10px;font-weight:700}.ticket-state[data-done="true"]{background:var(--green-soft);color:var(--green)}
+.ticket-review{margin:0 24px;padding:14px 0;border-top:1px dashed var(--field);font-size:12px;color:var(--muted)}.ticket-review summary{cursor:pointer;color:var(--ink);font-weight:650;min-height:34px;align-content:center}.ticket-review-body{display:grid;gap:8px;padding:10px 0 2px}.ticket-review-line{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:8px;align-items:start}.ticket-review-line strong{color:var(--ink)}.ticket-review-line small{font-size:10px;line-height:1.55;text-align:right}
+.ticket-card-actions{display:flex;justify-content:flex-end;gap:8px;padding:12px 24px 16px}.ticket-card-actions button{min-height:36px;padding:6px 10px;font-size:12px}
+.review-intro{padding:18px 20px;border:1px solid var(--line);border-radius:14px;background:var(--surface);margin:-8px 0 24px}.review-intro strong{display:block;font-size:13px}.review-intro p{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.8}
+.review-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:18px 0 20px}.review-kpi{padding:14px 16px;border-radius:12px;background:var(--soft);min-width:0}.review-kpi span{display:block;color:var(--muted);font-size:10px}.review-kpi strong{display:block;margin-top:3px;font-size:15px;overflow-wrap:anywhere}
+.review-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}.review-toolbar label{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}.review-toolbar select{min-height:38px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:7px 28px 7px 10px}.ticket-swiper:focus-visible{outline:3px solid var(--blue);outline-offset:4px}
+@container wallet (min-width:561px){table:has(#current-recommendations) th:first-child{width:24%}table:has(#current-recommendations) th:nth-child(2){width:42%}table:has(#current-recommendations) th:nth-child(3){width:18%}table:has(#current-recommendations) th:last-child{width:16%}table:has(#predictions) th:first-child{width:7%}table:has(#predictions) th:nth-child(2){width:18%}table:has(#predictions) th:nth-child(3){width:34%}table:has(#predictions) th:nth-child(4){width:10%}table:has(#predictions) th:nth-child(5){width:7%}table:has(#predictions) th:nth-child(6){width:7%}table:has(#predictions) th:nth-child(7){width:9%}table:has(#predictions) th:last-child{width:8%}table:has(#reviews) th:first-child{width:9%}table:has(#reviews) th:nth-child(2){width:25%}table:has(#reviews) th:nth-child(3){width:12%}table:has(#reviews) th:nth-child(4){width:13%}table:has(#reviews) th:nth-child(5){width:15%}table:has(#reviews) th:nth-child(6){width:14%}table:has(#reviews) th:last-child{width:12%}}
+@container wallet (max-width:870px){.upcoming-hero{grid-template-columns:1fr}.overview-grid{grid-template-columns:1fr}.review-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container wallet (max-width:560px){.upcoming-hero{padding:24px 20px;gap:20px;border-radius:20px}.upcoming-title{font-size:29px}.upcoming-clock{margin-top:16px}.upcoming-clock strong{font-size:24px}.hero-actions{margin-top:18px}.status-card{padding:14px 16px}.overview-grid{margin-top:24px}.wallet-ticket-card::after{margin:0 16px}.ticket-review{margin:0 16px}.ticket-card-actions{padding:10px 16px 14px}.review-kpis{grid-template-columns:1fr 1fr}.review-kpi{padding:12px}.review-toolbar{display:grid;grid-template-columns:1fr 1fr}.review-toolbar label{display:block}.review-toolbar select{display:block;width:100%;margin-top:4px}}
+@container wallet (max-width:350px){.upcoming-hero{padding:20px 16px}.review-kpis{grid-template-columns:1fr}.review-toolbar{grid-template-columns:1fr}}
 </style>
 <div class="shell">
   <header class="app-header">
@@ -210,15 +233,28 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
   </header>
   <main class="wrap">
     <section id="screen-home" class="screen" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
-      <div class="page-heading"><div><div class="kicker">MY LOTTO</div><h1>이번 주의 작은 기대.</h1><p>당첨 결과를 확인하고, 내 복권을 한곳에 모아보세요.</p></div><button class="primary" type="button" data-register>${icons.plus}복권 등록</button></div>
-      <section class="draw-stage" aria-labelledby="drawtitle">
-        <div class="draw-main"><div class="draw-intro"><p class="draw-kicker">최근 추첨 결과</p><h2 id="drawtitle">결과 확인 중</h2><span id="verification" class="verification" data-state="pending">공식 결과 확인 중</span></div><div id="numbers" class="draw-numbers">당첨번호를 불러오고 있어요.</div></div>
-        <div class="draw-foot"><div class="result-copy"><span class="caption">구매·추천번호 대조</span><strong id="result">저장한 번호를 확인하고 있어요.</strong></div><button id="check" type="button">${icons.refresh}다시 확인</button></div>
+      <div class="page-heading"><div><div class="kicker">AT A GLANCE</div><h1>한눈에</h1><p>다가오는 회차를 먼저 확인하고, 지난 결과와 내 복권 상태를 이어서 봅니다.</p></div><button class="primary" type="button" data-register>${icons.plus}복권 등록</button></div>
+      <section class="upcoming-hero" aria-labelledby="upcoming-round">
+        <div class="upcoming-main">
+          <p class="upcoming-kicker">다가오는 회차</p>
+          <h2 id="upcoming-round" class="upcoming-title">다가오는 회차 확인 중</h2>
+          <span id="upcoming-state" class="upcoming-state">추첨 예정</span>
+          <div class="upcoming-clock"><span class="clock-label">추첨까지 남은 시간</span><strong id="upcoming-countdown" role="timer">계산 중</strong><small id="upcoming-date">추첨 예정 일시 확인 중</small></div>
+          <div class="hero-actions"><button class="primary" type="button" data-register>복권 등록</button><button type="button" data-go="wallet">내 복권 보기</button><button type="button" data-go="review">생성번호 보기</button></div>
+        </div>
+        <div class="upcoming-status">
+          <div class="status-card"><span>이번 회차 내 복권</span><strong id="home-purchase-status">구매 복권 현황을 확인하고 있습니다.</strong></div>
+          <div class="status-card"><span>이번 회차 공식 생성</span><strong id="home-formula-status">공식 생성 현황을 확인하고 있습니다.</strong></div>
+        </div>
+      </section>
+      <section class="draw-stage last-draw" aria-labelledby="drawtitle">
+        <div class="draw-main"><div class="draw-intro"><p class="draw-kicker">지난 회차 결과</p><h2 id="drawtitle">지난 회차 결과 확인 중</h2><span id="verification" class="verification" data-state="pending">공식 결과 확인 중</span></div><div id="numbers" class="draw-numbers">당첨번호를 불러오고 있어요.</div></div>
+        <div class="draw-foot"><div class="result-copy"><span class="caption">공식 결과 상태</span><strong id="result">지난 회차 결과를 확인하고 있어요.</strong></div><button id="check" type="button">${icons.refresh}다시 확인</button></div>
         <details class="draw-details"><summary>결과 확인 기준과 출처</summary><p>속보 결과는 공식 이력이 확인되면 다시 대조합니다. 출처가 서로 다르면 판정을 보류합니다. 결과 발표나 수신이 늦어질 수 있습니다.</p><div id="sources"></div></details>
       </section>
- <div class="dashboard-grid">
-        <section aria-labelledby="home-wallet-heading"><div class="section-heading"><h2 id="home-wallet-heading">내 복권</h2><button type="button" data-go="wallet">전체 보기${icons.arrow}</button></div>
-          <div id="mini-swiper" class="ticket-swiper" role="region" aria-roledescription="carousel" aria-label="등록한 복권">
+      <div class="overview-grid">
+        <section aria-labelledby="home-wallet-heading"><div class="section-heading"><h2 id="home-wallet-heading">이번 회차 내 복권</h2><button type="button" data-go="wallet">전체 보기${icons.arrow}</button></div>
+          <div id="mini-swiper" class="ticket-swiper" role="region" aria-roledescription="carousel" aria-label="등록한 복권" tabindex="0">
             <div id="mini-swiper-track" class="ticket-swiper-track"></div>
             <div id="mini-swiper-nav" class="ticket-swiper-nav" hidden>
               <button id="mini-prev" type="button" class="swiper-arrow" aria-label="이전 복권">‹</button>
@@ -227,27 +263,49 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
               <button id="mini-next" type="button" class="swiper-arrow" aria-label="다음 복권">›</button>
             </div>
           </div>
-          <p class="small-print">${icons.lock}<span>내 번호는 Home Assistant에 보관해요. 실제 복권은 별도로 보관해 주세요.</span></p>
+          <p class="small-print">${icons.lock}<span>내 번호는 Home Assistant에 보관합니다. 실제 복권은 별도로 보관해 주세요.</span></p>
         </section>
-        <aside aria-label="간편 등록과 리뷰"><div class="import-promo"><h3>종이 복권은 그대로,<br>번호만 간편하게.</h3><p>QR을 읽으면 번호 입력이 끝.<br>확인 후 내 복권에 저장하세요.</p><button type="button" data-register>QR로 가져오기${icons.arrow}</button><div class="ticket-art" aria-hidden="true"><div class="art-head">MY LOTTO</div><div class="art-row"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="art-row"><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div><button class="quick-link" type="button" data-go="review"><span class="quick-icon">${icons.chart}</span><span class="quick-copy"><strong>추첨 공식별 결과는 어땠을까요?</strong><small>이번 결과와 누적 리뷰 확인</small></span>${icons.arrow}</button></aside>
+        <aside class="overview-side" aria-label="복권 등록과 추천 리뷰 요약">
+          <div class="overview-card"><h3>복권 등록</h3><p>QR·사진·직접 입력으로 이번 회차 구매 복권을 빠르게 등록합니다.</p><button type="button" data-register>등록하기${icons.arrow}</button></div>
+          <div class="overview-card"><h3>추천 리뷰</h3><p id="home-review-summary">지난 회차 공식 평가 상태를 확인하고 있습니다.</p><p id="home-review-top"></p><button type="button" data-go="review">추천 리뷰 보기${icons.arrow}</button></div>
+        </aside>
       </div>
     </section>
     <section id="screen-wallet" class="screen" role="tabpanel" aria-labelledby="tab-wallet" tabindex="0" hidden>
       <div class="page-heading"><div><div class="kicker">MY TICKETS</div><h1>내 복권</h1><p>구매한 번호를 회차별로 보관하고 확인하세요.</p></div><button class="primary" type="button" data-register>${icons.plus}복권 등록</button></div>
-      <div class="wallet-toolbar"><div class="select-wrap"><label for="wallet-round">회차 선택</label><select id="wallet-round"></select><label for="wallet-ticket">복권 선택</label><select id="wallet-ticket"></select></div><div class="wallet-actions"><button id="export-wallet" type="button">내보내기</button><button id="edit-wallet" type="button" class="soft-blue">${icons.edit}번호 수정</button></div></div>
-      <section class="ticket-paper wallet-paper" aria-labelledby="ticket-round"><div class="paper-top"><span class="paper-label">${icons.ticket}<span id="ticket-round">보관한 복권</span></span><span id="wallet-count" class="paper-meta"></span></div><div id="wallet-games" class="ticket-list"></div><div class="paper-bottom"><span>입력 중인 번호가 아닌, 저장된 번호의 결과입니다.</span><button id="delete-wallet" type="button" class="danger">이 복권 삭제</button></div></section>
-      <p class="wallet-description">최대 5게임(A~E)을 저장할 수 있어요. 같은 회차를 다시 저장하면 기존 번호를 교체합니다.</p>
+      <div class="wallet-toolbar"><div class="select-wrap"><label for="wallet-round">회차 선택</label><select id="wallet-round"></select><label for="wallet-ticket">복권 선택</label><select id="wallet-ticket"></select></div><div class="wallet-actions"><button id="export-wallet" type="button">내보내기</button><button id="edit-wallet" type="button" class="soft-blue">${icons.edit}번호 수정</button><button id="delete-wallet" type="button" class="danger">이 복권 삭제</button></div></div>
+      <div id="wallet-swiper" class="ticket-swiper wallet-swiper" role="region" aria-roledescription="carousel" aria-label="구매 복권" tabindex="0">
+        <div id="wallet-swiper-track" class="ticket-swiper-track"></div>
+        <div id="wallet-swiper-nav" class="ticket-swiper-nav" hidden>
+          <button id="wallet-prev" type="button" class="swiper-arrow" aria-label="이전 복권">‹</button>
+          <div id="wallet-swiper-dots" class="ticket-swiper-dots" aria-label="복권 페이지"></div>
+          <span id="wallet-swiper-status" class="swiper-status" aria-live="polite"></span>
+          <button id="wallet-next" type="button" class="swiper-arrow" aria-label="다음 복권">›</button>
+        </div>
+      </div>
+      <div id="wallet-games" hidden></div><span id="ticket-round" hidden></span><span id="wallet-count" hidden></span>
+      <p class="wallet-description">한 장마다 A~E 최대 5게임을 모두 표시합니다. 같은 회차에 여러 장을 등록하면 카드 단위로 넘겨 보고, 추첨 후에는 각 복권의 결과 리뷰를 펼쳐볼 수 있습니다.</p>
     </section>
     <section id="screen-review" class="screen" role="tabpanel" aria-labelledby="tab-review" tabindex="0" hidden>
-      <div class="page-heading"><div><div class="kicker">RECOMMENDATION REVIEW</div><h1>추천을 돌아보는 시간.</h1><p>추첨 공식의 실제 결과를 차곡차곡 비교해 보세요.</p></div><span id="method-count" class="review-count"></span></div>
+      <div class="page-heading"><div><div class="kicker">RECOMMENDATION REVIEW</div><h1>추천 리뷰</h1><p>컴포넌트가 생성한 공식 번호를 실제 당첨번호와 비교해 공식별 성적·평점·순위를 확인합니다.</p></div><span id="method-count" class="review-count"></span></div>
+      <div class="review-intro"><strong>공식 생성번호만 평가합니다.</strong><p>등록한 구매 복권은 이 평가에 포함하지 않습니다. 구매 복권 결과는 ‘내 복권’에서 확인하세요.</p></div>
       <section class="review-block current-formulas" aria-labelledby="current-recommendations-heading">
         <div class="section-heading"><h2 id="current-recommendations-heading">현재 생성번호</h2></div>
-        <p id="current-recommendations-note" class="review-note">선택한 공식의 현재 생성번호입니다. 실제 구매와 추첨 결과는 별도로 관리합니다.</p>
-        <div class="table-scroll"><table class="mobile-table"><caption class="sr-only">선택 공식의 현재 생성번호와 연결 상태</caption><thead><tr><th scope="col">추첨 공식</th><th scope="col">번호</th><th scope="col">상태</th></tr></thead><tbody id="current-recommendations"></tbody></table></div>
+        <p id="current-recommendations-note" class="review-note">이번 회차를 위해 현재 선택된 공식이 생성한 번호입니다. 추첨 발표 후 자동으로 평가됩니다.</p>
+        <div class="table-scroll"><table class="mobile-table"><caption class="sr-only">선택 공식의 현재 생성번호와 평가 상태</caption><thead><tr><th scope="col">공식</th><th scope="col">번호</th><th scope="col">생성 시각</th><th scope="col">상태</th></tr></thead><tbody id="current-recommendations"></tbody></table></div>
       </section>
-      <div class="review-grid"><section class="review-block" aria-labelledby="predictions-heading"><div class="section-heading"><h2 id="predictions-heading">이번 추첨, 추천번호 결과</h2></div><p id="predictions-note" class="review-note">추첨 전에 저장된 추천과 발표된 당첨번호를 비교합니다. 당첨 게임은 본번호 일치를 테두리로, 보너스 일치를 점선 테두리로 강조하고 미일치 번호는 흐리게 표시합니다.</p><div class="table-scroll"><table class="mobile-table" role="table"><caption class="sr-only">추첨 공식별 번호와 이번 추첨 판정</caption><thead role="rowgroup"><tr role="row"><th scope="col">추첨 공식</th><th scope="col">번호</th><th scope="col">결과</th></tr></thead><tbody id="predictions" role="rowgroup"></tbody></table></div></section>
-      <section class="review-block" aria-labelledby="reviews-heading"><div class="section-heading"><h2 id="reviews-heading">공식별 누적 리뷰</h2></div><p id="reviewstatus" class="review-note"></p><div class="table-scroll"><table class="mobile-table" role="table"><caption class="sr-only">추첨 공식별 누적 별점, 평가 회차, 이번 점수, 정확 일치와 인접 번호, 순위</caption><thead role="rowgroup"><tr role="row"><th scope="col">추첨 공식 / 누적 별점</th><th scope="col">평가 회차</th><th scope="col">이번 점수</th><th scope="col">정확 / ±1</th><th scope="col">순위</th></tr></thead><tbody id="reviews" role="rowgroup"></tbody></table></div></section>
-      <details class="review-footnote"><summary>리뷰 점수는 이렇게 해석해 주세요</summary><p>공식 확인 회차의 평균 점수 ÷ 20이 누적 별점입니다. ±1은 비슷한 번호일 뿐 당첨이 아닙니다. 속보 점수는 잠정이며 누적 평균과 분리합니다. 표본이 적은 별점이나 과거 결과는 미래 당첨 가능성을 뜻하지 않습니다.</p></details></div>
+      <div class="review-grid">
+        <section class="review-block" aria-labelledby="predictions-heading"><div class="section-heading"><h2 id="predictions-heading">지난 회차 공식 리뷰 결과</h2></div>
+          <p id="predictions-note" class="review-note">추첨 전에 저장된 공식 생성번호와 실제 당첨번호를 비교합니다.</p>
+          <div class="review-kpis"><div class="review-kpi"><span>평가 공식 수</span><strong id="review-kpi-count">—</strong></div><div class="review-kpi"><span>최고 점수</span><strong id="review-kpi-score">—</strong></div><div class="review-kpi"><span>평균 정확 일치</span><strong id="review-kpi-exact">—</strong></div><div class="review-kpi"><span>1위 공식</span><strong id="review-kpi-top">—</strong></div></div>
+          <div class="table-scroll"><table class="mobile-table" role="table"><caption class="sr-only">지난 회차 공식별 번호, 일치, 점수와 순위</caption><thead role="rowgroup"><tr role="row"><th scope="col">순위</th><th scope="col">공식</th><th scope="col">번호</th><th scope="col">본번호 일치</th><th scope="col">±1</th><th scope="col">보너스</th><th scope="col">이번 점수</th><th scope="col">평점</th></tr></thead><tbody id="predictions" role="rowgroup"></tbody></table></div>
+        </section>
+        <section class="review-block" aria-labelledby="reviews-heading"><div class="section-heading"><h2 id="reviews-heading">누적 공식 순위</h2></div><p id="reviewstatus" class="review-note"></p>
+          <div class="review-toolbar"><label>분류<select id="review-filter"><option value="all">전체</option><option value="basic">기본 공식</option><option value="advanced">고급 공식</option><option value="ai">AI</option></select></label><label>정렬<select id="review-sort"><option value="total">누적 점수</option><option value="recent">최근 성적</option><option value="count">평가 회차 수</option><option value="name">이름</option></select></label></div>
+          <div class="table-scroll"><table class="mobile-table" role="table"><caption class="sr-only">공식별 누적 순위, 평가 회차, 평균 점수, 최고 일치, 최근 평균과 별점</caption><thead role="rowgroup"><tr role="row"><th scope="col">누적 순위</th><th scope="col">공식명</th><th scope="col">평가 회차 수</th><th scope="col">평균 점수</th><th scope="col">최고 일치 기록</th><th scope="col">최근 5회 평균</th><th scope="col">누적 별점</th></tr></thead><tbody id="reviews" role="rowgroup"></tbody></table></div>
+        </section>
+        <details class="review-footnote"><summary>리뷰 점수는 이렇게 해석해 주세요</summary><p>공식 확인 회차의 평균 점수 ÷ 20이 누적 별점입니다. ±1은 비슷한 번호일 뿐 당첨이 아닙니다. 속보 점수는 잠정이며 누적 평균과 분리합니다. 표본이 적은 별점이나 과거 결과는 미래 당첨 가능성을 뜻하지 않습니다.</p></details>
+      </div>
     </section>
 
     <footer class="footer"><span>이 화면은 번호 관리·대조용입니다. 실제 구매나 당첨금 지급을 인증하지 않습니다.</span><span id="sync-status" class="sync">Home Assistant 연결 확인 중</span></footer>
@@ -329,11 +387,11 @@ export function currentRecommendations(data) {
     (!selected.size||selected.has(row.method_id))&&Number(row.target_round??target)===target&&
     Array.isArray(row.numbers)&&row.numbers.length===6&&new Set(row.numbers).size===6&&
     row.numbers.every(n=>Number.isInteger(n)&&n>=1&&n<=45)).map(row=>({
-      method_id:row.method_id,sensor_name:row.label||row.method||row.method_id,
+      method_id:row.method_id,
+      sensor_name:row.label||row.method||row.method_id,
       recommended_numbers:[...row.numbers],
-      purchase_match:row.purchase_match===true,
-      purchase_matches:Array.isArray(row.purchase_matches)?row.purchase_matches:[],
-      prize:row.purchase_match===true?'구매번호 일치':'생성번호 · 평가 전'
+      generated_at:row.generated_at||data.recommendation_generated_at||null,
+      prize:'생성 완료 · 평가 대기'
     }));
 }
 
@@ -341,21 +399,71 @@ export function reviewPresentation(data) {
   const report=data.review_round||{}, round=Number(report.round||data.draw_schedule?.round||data.recommendation_target);
   const evaluated=['confirmed','provisional'].includes(report.status);
   const methods=(report.methods||[]).filter(row=>!row.target_round||Number(row.target_round)===round);
-  const rows=methods.map(row=>evaluated?{...row,sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[]}:
-    {method_id:row.method_id,sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[],prize:'리뷰 추적 · 추첨 대기'});
-  const signatures=new Set(rows.map(row=>`${row.method_id}|${(row.recommended_numbers||[]).join(',')}`));
-  for(const linked of Array.isArray(data.purchase_formula_reviews)?data.purchase_formula_reviews:[]){
-    if(Number(linked.target_round)!==round||!Array.isArray(linked.recommended_numbers)||linked.recommended_numbers.length!==6)continue;
-    const signature=`${linked.method_id}|${linked.recommended_numbers.join(',')}`;
-    if(signatures.has(signature))continue;
-    signatures.add(signature);
-    rows.push({
-      ...linked,
-      sensor_name:linked.sensor_name||`${linked.formula_label||linked.method_id} · 구매추적`,
-      prize:evaluated?(linked.prize?`구매추적 · ${linked.prize}`:'구매추적 · 판정 대기'):'구매추적 · 추첨 대기'
-    });
-  }
+  const rows=methods.map(row=>evaluated
+    ?{...row,sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[]}
+    :{method_id:row.method_id,sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[],generated_at:row.generated_at||null,prize:'생성 완료 · 평가 대기'});
   return {report,round,rows,evaluated};
+}
+
+export function lastReviewPresentation(data) {
+  const report=data.last_review_round||{};
+  const round=Number(report.round||data.result_round);
+  const evaluated=['confirmed','provisional'].includes(report.status);
+  const rows=(report.methods||[])
+    .filter(row=>!row.target_round||Number(row.target_round)===round)
+    .map(row=>({...row,sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[]}));
+  return {report,round,rows,evaluated};
+}
+
+const formatGeneratedAt = value => {
+  const time=Date.parse(value||'');
+  return Number.isFinite(time)
+    ? new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(time))
+    : '—';
+};
+
+export function renderCurrentRecommendationRows(root, rows, empty) {
+  root.replaceChildren();
+  const headers=['공식','번호','생성 시각','상태'];
+  if(!rows.length){renderRows(root,[],headers,empty);return;}
+  for(const row of rows){
+    const tr=document.createElement('tr');tr.setAttribute('role','row');
+    const method=document.createElement('td');method.dataset.label=headers[0];method.textContent=row.sensor_name||row.method_id||'—';
+    const numberCell=document.createElement('td');numberCell.dataset.label=headers[1];const balls=document.createElement('span');balls.className='ticket-balls';numberBalls(balls,row.recommended_numbers||[]);numberCell.append(balls);
+    const generated=document.createElement('td');generated.dataset.label=headers[2];generated.textContent=formatGeneratedAt(row.generated_at);
+    const status=document.createElement('td');status.dataset.label=headers[3];const badge=document.createElement('span');badge.className='prize';badge.textContent=row.prize||'생성 완료 · 평가 대기';status.append(badge);
+    tr.append(method,numberCell,generated,status);root.append(tr);
+  }
+}
+
+export function renderReviewResultRows(root, rows, empty) {
+  root.replaceChildren();
+  const headers=['순위','공식','번호','본번호 일치','±1','보너스','이번 점수','평점'];
+  const ordered=[...(rows||[])].sort((a,b)=>
+    (Number(b.review_score)||0)-(Number(a.review_score)||0) ||
+    (Number(b.exact_match_count)||0)-(Number(a.exact_match_count)||0) ||
+    String(a.sensor_name||a.method_id||'').localeCompare(String(b.sensor_name||b.method_id||''),'ko'));
+  if(!ordered.length){renderRows(root,[],headers,empty);return;}
+  for(const row of ordered){
+    const tr=document.createElement('tr');tr.setAttribute('role','row');
+    const values=[
+      Number.isFinite(Number(row.rank_this_round))?String(row.rank_this_round):'—',
+      row.sensor_name||row.method_id||'—',
+      null,
+      Number.isFinite(Number(row.exact_match_count))?`${row.exact_match_count}개`:'—',
+      Number.isFinite(Number(row.near_match_count))?`${row.near_match_count}개`:'—',
+      row.bonus_match===true?'일치':'—',
+      Number.isFinite(Number(row.review_score))?`${Number(row.review_score).toFixed(1)}점`:'—',
+      Number.isFinite(Number(row.stars))?`★${Number(row.stars).toFixed(1)}`:'—',
+    ];
+    values.forEach((value,index)=>{
+      const td=document.createElement('td');td.dataset.label=headers[index];
+      if(index===2){const balls=document.createElement('span');balls.className='ticket-balls result-balls';numberBalls(balls,row.recommended_numbers||row.numbers||[],null,row);td.append(balls);}
+      else td.textContent=value;
+      tr.append(td);
+    });
+    root.append(tr);
+  }
 }
 
 export function renderPredictionRows(root, rows, empty) {

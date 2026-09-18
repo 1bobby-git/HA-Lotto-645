@@ -1,8 +1,8 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '2.2.5';
+const VERSION = '2.3.0';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
-import {reviewPresentation} from './lotto-panel-view.js?v=2.2.5';
+import {lastReviewPresentation,currentRecommendations} from './lotto-panel-view.js?v=2.3.0';
 const AI_ID = 'home_assistant_ai';
 const validId = id => typeof id === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(id);
 const element = (tag, text, className) => {
@@ -30,11 +30,24 @@ const PANEL_STYLE = `
 .method-info-trigger:hover:not(:disabled){background:var(--blue-soft);filter:none}
 .method-help-hint{margin:0 0 12px;color:var(--muted);font-size:13px}
 @container wallet (min-width:561px){
- table:has(#predictions) th:first-child{width:43%}
- table:has(#predictions) th:nth-child(2){width:42%}
- table:has(#predictions) th:last-child{width:15%}
- table:has(#reviews) th:first-child{width:44%}
- table:has(#reviews) th:not(:first-child){width:14%}
+ table:has(#current-recommendations) th:first-child{width:24%}
+ table:has(#current-recommendations) th:nth-child(2){width:42%}
+ table:has(#current-recommendations) th:nth-child(3){width:18%}
+ table:has(#current-recommendations) th:last-child{width:16%}
+ table:has(#predictions) th:first-child{width:7%}
+ table:has(#predictions) th:nth-child(2){width:18%}
+ table:has(#predictions) th:nth-child(3){width:34%}
+ table:has(#predictions) th:nth-child(4){width:10%}
+ table:has(#predictions) th:nth-child(5),table:has(#predictions) th:nth-child(6){width:7%}
+ table:has(#predictions) th:nth-child(7){width:9%}
+ table:has(#predictions) th:last-child{width:8%}
+ table:has(#reviews) th:first-child{width:9%}
+ table:has(#reviews) th:nth-child(2){width:25%}
+ table:has(#reviews) th:nth-child(3){width:12%}
+ table:has(#reviews) th:nth-child(4){width:13%}
+ table:has(#reviews) th:nth-child(5){width:15%}
+ table:has(#reviews) th:nth-child(6){width:14%}
+ table:has(#reviews) th:last-child{width:12%}
 }
 `;
 
@@ -196,6 +209,7 @@ class LottoPanelTools extends HTMLElement {
   get dialog() { return this.shadowRoot.querySelector('dialog'); }
   connectedCallback() {
     if (!this.panel) return;
+    this.panel._panelTools = this;
     this._onClick = event => {
       const trigger = event.target.closest?.('.method-info-trigger');
       if (trigger) void this.openGuide(trigger.dataset.methodId, trigger);
@@ -219,6 +233,7 @@ class LottoPanelTools extends HTMLElement {
   }
   disconnectedCallback() {
     this.stopClock(); this.closeGuide(false); this._generation++; this._observer?.disconnect();
+    if (this.panel?._panelTools === this) this.panel._panelTools = null;
     this.panel?.shadowRoot.removeEventListener('click', this._onClick);
     document.removeEventListener('visibilitychange', this._visibility);
     window.removeEventListener('pagehide', this._pageHide); window.removeEventListener('pageshow', this._pageShow);
@@ -231,15 +246,20 @@ class LottoPanelTools extends HTMLElement {
     this.schedule = data.draw_schedule;
     const serverNow = Date.parse(this.schedule?.server_now);
     this._clockOffset = Number.isFinite(serverNow) ? serverNow - Date.now() : 0;
-    this.decorate('predictions', reviewPresentation(data).rows);
-    this.decorate('reviews', data.reviews || []);
+    this.decorate('current-recommendations', currentRecommendations(data));
+    const previous=lastReviewPresentation(data).rows.sort((a,b)=>
+      (Number(b.review_score)||0)-(Number(a.review_score)||0) ||
+      (Number(b.exact_match_count)||0)-(Number(a.exact_match_count)||0) ||
+      String(a.sensor_name||a.method_id||'').localeCompare(String(b.sensor_name||b.method_id||''),'ko'));
+    this.decorate('predictions', previous);
+    this.decorate('reviews', this.panel._visibleReviewRows || data.reviews || []);
     this.startClock();
   }
   decorate(id, rows) {
     const table = this.panel.node(id); if (!table) return;
     const nodes = [...table.children];
     rows.forEach((row, index) => {
-      const cell = nodes[index]?.querySelector('td');
+      const cell = nodes[index]?.querySelector(id==='current-recommendations'?'td':'td:nth-child(2)');
       if (!cell || !this.catalog.has(row.method_id)) return;
       const text = cell.textContent;
       const button = element('button', undefined, 'method-info-trigger');
@@ -255,14 +275,17 @@ class LottoPanelTools extends HTMLElement {
   }
   tickClock(now = Date.now() + (this._clockOffset || 0)) {
     const state = countdownState(this.schedule, now);
-    const section = this.shadowRoot.querySelector('.countdown'); section.hidden = !state;
+    const section = this.shadowRoot.querySelector('.countdown'); section.hidden = true;
     if (!state) return;
-    const set = (selector, value) => { const n = this.shadowRoot.querySelector(selector); if (n.textContent !== value) n.textContent = value; };
-    set('.clock-label', `${state.waiting ? '결과 확인 대기' : '다음 추첨까지'} · 제 ${state.round.toLocaleString('ko-KR')}회`);
     const pad = n => String(n).padStart(2, '0');
-    set('.clock-value', state.waiting ? '추첨 예정 시각이 지났어요' : `${state.days}일 ${pad(state.hours)}시간 ${pad(state.minutes)}분 ${pad(state.remainder)}초`);
+    const round=`제 ${state.round.toLocaleString('ko-KR')}회`;
+    const remaining=state.waiting?'추첨 예정 시각이 지났습니다.':`${state.days}일 ${pad(state.hours)}시간 ${pad(state.minutes)}분 ${pad(state.remainder)}초`;
     const time = new Intl.DateTimeFormat('ko-KR', {timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(state.at));
-    set('.clock-date', `${time}경 · 한국시간`);
+    const title=this.panel?.node('upcoming-round'),status=this.panel?.node('upcoming-state'),clock=this.panel?.node('upcoming-countdown'),date=this.panel?.node('upcoming-date');
+    if(title)title.textContent=state.waiting?`${round} · 결과 확인 대기`:`다가오는 ${round}`;
+    if(status)status.textContent=state.waiting?'결과 확인 대기':'추첨 예정';
+    if(clock)clock.textContent=remaining;
+    if(date)date.textContent=`${time}경 · 한국시간`;
   }
   async openGuide(id, opener) {
     if (!validId(id) || !this.catalog.has(id) || !this.isConnected || this.panel.node('editor')?.open) return;
@@ -324,15 +347,15 @@ class LottoPanelTools extends HTMLElement {
     else if (!event.shiftKey && active === last) { event.preventDefault(); first?.focus(); }
   }
 }
-if (!customElements.get('lotto-panel-tools-v2-2-5')) customElements.define('lotto-panel-tools-v2-2-5', LottoPanelTools);
+if (!customElements.get('lotto-panel-tools-v2-3-0')) customElements.define('lotto-panel-tools-v2-3-0', LottoPanelTools);
 
 export function applyPanelTools(panel) {
   const root = panel.shadowRoot, main = root?.querySelector('main'); if (!main) return;
-  if (!root.querySelector('style[data-lotto-panel-tools-v2-2-5]')) {
+  if (!root.querySelector('style[data-lotto-panel-tools-v2-3-0]')) {
     const style = element('style'); style.dataset.lottoPanelTools = VERSION; style.textContent = PANEL_STYLE; root.append(style);
   }
-  if (!root.querySelector('lotto-panel-tools-v2-2-5')) {
-    const tools = document.createElement('lotto-panel-tools-v2-2-5'); tools.panel = panel; main.prepend(tools);
+  if (!root.querySelector('lotto-panel-tools-v2-3-0')) {
+    const tools = document.createElement('lotto-panel-tools-v2-3-0'); tools.panel = panel; main.prepend(tools);
     if (panel._latestToolsData) tools.setData(panel._latestToolsData);
   }
   for (const id of ['current-recommendations', 'predictions', 'reviews']) {
@@ -346,7 +369,7 @@ export function applyPanelTools(panel) {
     const update = panel.updateResults;
     panel.updateResults = function (data, ...args) {
       const result = update.call(this, data, ...args); this._latestToolsData = data;
-      this.shadowRoot.querySelector('lotto-panel-tools-v2-2-5')?.setData(data); return result;
+      this.shadowRoot.querySelector('lotto-panel-tools-v2-3-0')?.setData(data); return result;
     };
   }
 }
