@@ -21,9 +21,9 @@ from .const import (
 from .coordinator import Lotto645Coordinator
 from .entity import Lotto645Entity
 from .methods import METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE, METHODS_BY_ID, method_catalog
+from .purchased_tickets import matching_purchase_games
 from .review import review_name, NOTICE as REVIEW_NOTICE
 from .result_details import decorate_result, winning_attributes
-from .purchased_tickets import matching_purchase_games
 
 PARALLEL_UPDATES = 0
 
