@@ -332,6 +332,8 @@ def test_panel_upgrade_accepts_recent_release_tags():
         "lotto-ticket-panel-v2-2-0",
         "lotto-ticket-panel-v2-2-1",
         "lotto-ticket-panel-v2-2-2",
+        "lotto-ticket-panel-v2-2-3",
+        "lotto-ticket-panel-v2-2-4",
     ):
         assert repr(tag) in source
-    assert "PANEL_TAG = 'lotto-ticket-panel-v2-2-4'" in source
+    assert "PANEL_TAG = 'lotto-ticket-panel-v2-2-5'" in source

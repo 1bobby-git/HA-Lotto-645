@@ -34,6 +34,20 @@ def test_overview_has_no_recommendation_summary():
     assert 'id="home-wallet-heading"' in text and 'class="draw-stage"' in text
 
 
+def test_home_wallet_renders_five_games_and_multiple_tickets_as_swiper():
+    view = (R / 'www/lotto-panel-view.js').read_text(encoding='utf-8')
+    core = (R / 'www/lotto-panel-core.js').read_text(encoding='utf-8')
+    backend = (R / 'ticket_panel.py').read_text(encoding='utf-8')
+    assert 'id="mini-swiper-track"' in view
+    assert 'id="mini-swiper-nav"' in view
+    assert 'scroll-snap-type:x mandatory' in view
+    assert "ticket_previews" in backend
+    assert "renderMiniWallet(data)" in core
+    assert "ticketRows(list,ticket.games||[],Infinity,matches)" in core
+    assert "games,3" not in core
+    assert "games.length>3" not in core
+
+
 def test_native_formula_entities_expose_purchase_match_marker():
     sensor = (R / 'sensor.py').read_text(encoding='utf-8')
     assert sensor.count('✓구매일치 |') == 2

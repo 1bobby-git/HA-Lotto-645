@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows, reviewPresentation, currentRecommendations } from './lotto-panel-view.js?v=2.2.4';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows, reviewPresentation, currentRecommendations } from './lotto-panel-view.js?v=2.2.5';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-2-4';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-2-5';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -19,6 +19,7 @@ class LottoTicketPanel extends HTMLElement {
     super(); this.attachShadow({mode:'open'});
     this._revision=''; this._editing=false; this._touched=new Set(); this._screen='home';
     this._ticketId=null;this._newTicket=false;this._newTicketId=null;this._visibleGames=1; this._walletData=null; this._cameraGeneration=0;
+    this._homeTicketId=null;this._miniSwiperFrame=0;
   }
   set hass(value) { this._hass=value; this.syncTheme(); this._start(); }
   set panel(value) { this._panel=value; this._start(); this._syncEntryOptions?.(); }
@@ -37,6 +38,7 @@ class LottoTicketPanel extends HTMLElement {
     window.removeEventListener('beforeunload',this._beforeUnload);
     this._themeMedia?.removeEventListener('change',this._themeListener);
     this.stopCamera(); clearInterval(this._poll); this._poll=null; this._requestEpoch=(this._requestEpoch||0)+1;
+    if(this._miniSwiperFrame)cancelAnimationFrame(this._miniSwiperFrame);this._miniSwiperFrame=0;
     // Never retain an invisible top-layer dialog after HA navigates elsewhere.
     if(this.node('editor')?.open)this.node('editor').close();
     this.removeAttribute('data-editor-open');
@@ -104,11 +106,13 @@ class LottoTicketPanel extends HTMLElement {
       button.onkeydown=e=>this.onTabKey(e);
     }
     for(const button of this.shadowRoot.querySelectorAll('[data-go]'))button.onclick=()=>this.showScreen(button.dataset.go,true);
+    this.node('mini-prev').onclick=()=>this.moveMiniSwiper(-1);
+    this.node('mini-next').onclick=()=>this.moveMiniSwiper(1);
     for(const button of this.shadowRoot.querySelectorAll('[data-register]'))button.onclick=()=>this.openEditor('import');
     this.node('entry').onchange=()=>{
       if(this._editing&&!window.confirm('저장하지 않은 번호를 버리고 로또 통합을 변경할까요?')){this.node('entry').value=this._activeEntry;return;}
       this._activeEntry=this.node('entry').value;this._requestEpoch=(this._requestEpoch||0)+1;this.stopCamera();this._ensureLiveSubscription?.();
-      this._editing=false;this._walletData=null;this._walletRound=null;this._loadedRound=null;
+      this._editing=false;this._walletData=null;this._walletRound=null;this._loadedRound=null;this._homeTicketId=null;
       this._queueLiveRefresh?.(true);
     };
     this.node('check').onclick=()=>this.operation(async()=>{
@@ -167,7 +171,7 @@ class LottoTicketPanel extends HTMLElement {
     this.node('add-game').onclick=()=>{if(this._visibleGames>=5)return;this.showGameSlots(this._visibleGames+1);this.node(`game_${slots[this._visibleGames-1]}`).focus();};
     this.showGameSlots(1);this.syncAvailability();
     if(this._activeEntry)this.operation(()=>this.load());
-    else{this.message('사용할 로또 통합이 없어요. 상단 설정에서 통합을 추가해 주세요.',true);this.node('drawtitle').textContent='통합 설정 필요';this.node('numbers').textContent='연결된 로또 통합이 없어요.';this.node('connection').textContent='통합 설정 필요';ticketRows(this.node('mini-games'),[]);ticketRows(this.node('wallet-games'),[]);}
+    else{this.message('사용할 로또 통합이 없어요. 상단 설정에서 통합을 추가해 주세요.',true);this.node('drawtitle').textContent='통합 설정 필요';this.node('numbers').textContent='연결된 로또 통합이 없어요.';this.node('connection').textContent='통합 설정 필요';this.renderMiniWallet({ticket_previews:[],purchased:{games:[]},generation_matches:[]});ticketRows(this.node('wallet-games'),[]);}
   }
   syncAvailability() {
     if(!this.node('entry'))return;
@@ -268,6 +272,76 @@ class LottoTicketPanel extends HTMLElement {
     if(Number(data.round)===this._walletRound||!this._walletRound)this.applyWallet(data);
     if(data.storage_error)this.message('구매번호 저장소 오류가 있어요. 기존 파일은 보존됩니다.',true);
   }
+  miniSwiperSlides() {
+    return [...(this.node('mini-swiper-track')?.querySelectorAll('.ticket-slide')||[])];
+  }
+  updateMiniSwiperState() {
+    const track=this.node('mini-swiper-track'),slides=this.miniSwiperSlides();
+    if(!track||!slides.length)return;
+    let index=0,distance=Infinity;
+    slides.forEach((slide,i)=>{const d=Math.abs(slide.offsetLeft-track.scrollLeft);if(d<distance){distance=d;index=i;}});
+    this._homeTicketId=slides[index].dataset.ticketId||null;
+    const dots=[...(this.node('mini-swiper-dots')?.children||[])];
+    dots.forEach((dot,i)=>{dot.dataset.active=String(i===index);dot.setAttribute('aria-current',i===index?'true':'false');});
+    const status=this.node('mini-swiper-status');if(status)status.textContent=`${index+1} / ${slides.length}`;
+    const prev=this.node('mini-prev'),next=this.node('mini-next');
+    if(prev)prev.disabled=index===0;if(next)next.disabled=index===slides.length-1;
+  }
+  moveMiniSwiper(delta) {
+    const track=this.node('mini-swiper-track'),slides=this.miniSwiperSlides();
+    if(!track||slides.length<2)return;
+    let index=slides.findIndex(slide=>slide.dataset.ticketId===this._homeTicketId);
+    if(index<0)index=0;index=Math.max(0,Math.min(slides.length-1,index+delta));
+    const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    track.scrollTo({left:slides[index].offsetLeft,behavior:reduce?'auto':'smooth'});
+  }
+  renderMiniWallet(data) {
+    const track=this.node('mini-swiper-track'),nav=this.node('mini-swiper-nav'),dots=this.node('mini-swiper-dots');
+    if(!track||!nav||!dots)return;
+    const detailed=Array.isArray(data.ticket_previews)?data.ticket_previews:[];
+    const fallback=data.purchased?.games?.length?[{
+      ticket_id:data.ticket_id||'',ticket_number:1,game_count:data.purchased.games.length,
+      status:data.purchased.status,highest_prize:data.purchased.highest_prize,games:data.purchased.games,
+    }]:[];
+    const tickets=detailed.length?detailed:fallback;
+    const matches=data.generation_matches||[];
+    track.replaceChildren();dots.replaceChildren();
+    this.node('mini-swiper')?.setAttribute('aria-label',tickets.length?`등록한 복권 ${tickets.length}장`:'등록한 복권 없음');
+    if(!tickets.length){
+      const card=document.createElement('article');card.className='ticket-paper ticket-slide';
+      const top=document.createElement('div');top.className='paper-top';
+      const label=document.createElement('span');label.className='paper-label';label.textContent='보관한 복권';
+      const meta=document.createElement('span');meta.className='paper-meta';meta.textContent='0게임';
+      const list=document.createElement('div');list.className='ticket-list';ticketRows(list,[]);
+      top.append(label,meta);card.append(top,list);track.append(card);nav.hidden=true;this._homeTicketId=null;return;
+    }
+    const active=tickets.some(ticket=>ticket.ticket_id===this._homeTicketId)
+      ?this._homeTicketId
+      :(tickets.some(ticket=>ticket.ticket_id===data.ticket_id)?data.ticket_id:tickets[0].ticket_id);
+    tickets.forEach((ticket,index)=>{
+      const card=document.createElement('article');card.className='ticket-paper ticket-slide';card.dataset.ticketId=ticket.ticket_id||'';
+      card.setAttribute('role','group');card.setAttribute('aria-roledescription','slide');
+      card.setAttribute('aria-label',`복권 ${index+1} / ${tickets.length}`);
+      const top=document.createElement('div');top.className='paper-top';
+      const label=document.createElement('span');label.className='paper-label';label.textContent=formatRound(data.round);
+      const meta=document.createElement('span');meta.className='paper-meta';meta.textContent=`${ticket.game_count||0}게임 · ${index+1}/${tickets.length}장`;
+      top.append(label,meta);
+      const list=document.createElement('div');list.className='ticket-list';
+      ticketRows(list,ticket.games||[],Infinity,matches);
+      const bottom=document.createElement('div');bottom.className='paper-bottom';
+      const note=document.createElement('span');note.textContent='등록한 번호는 결과 발표 후 자동 대조해요.';
+      const manage=document.createElement('button');manage.type='button';manage.textContent='복권 관리 ›';
+      manage.onclick=()=>this.operation(async()=>{this._homeTicketId=ticket.ticket_id;await this.load(Number(data.round),ticket.ticket_id);this.showScreen('wallet',true);});
+      bottom.append(note,manage);card.append(top,list,bottom);track.append(card);
+      const dot=document.createElement('button');dot.type='button';dot.className='swiper-dot';
+      dot.setAttribute('aria-label',`복권 ${index+1} 보기`);dot.dataset.active=String(ticket.ticket_id===active);
+      dot.onclick=()=>{const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;track.scrollTo({left:card.offsetLeft,behavior:reduce?'auto':'smooth'});};
+      dots.append(dot);
+    });
+    nav.hidden=tickets.length<=1;this._homeTicketId=active;
+    track.onscroll=()=>{if(this._miniSwiperFrame)cancelAnimationFrame(this._miniSwiperFrame);this._miniSwiperFrame=requestAnimationFrame(()=>{this._miniSwiperFrame=0;this.updateMiniSwiperState();});};
+    requestAnimationFrame(()=>{const target=this.miniSwiperSlides().find(slide=>slide.dataset.ticketId===active)||this.miniSwiperSlides()[0];if(target)track.scrollLeft=target.offsetLeft;this.updateMiniSwiperState();});
+  }
   applyWallet(data) {
     this._walletData=data;this._walletRound=Number(data.round)||null;this._ticketId=data.ticket_id||null;
     const slips=this.node('wallet-ticket');slips.replaceChildren();
@@ -275,10 +349,11 @@ class LottoTicketPanel extends HTMLElement {
     slips.value=this._ticketId||'';
     this.node('export-wallet').disabled=!(data.stored_rounds||[]).length;
     const games=data.purchased?.games||[];
-    this.node('mini-round').textContent=formatRound(data.round);this.node('ticket-round').textContent=formatRound(data.round);
-    this.node('mini-count').textContent=games.length>3?`${games.length}게임 중 3게임 표시`:`${games.length}게임 보관`;this.node('wallet-count').textContent=`${games.length}게임 · 이번 회차 ${data.tickets?.length||0}장`;
+    this.node('ticket-round').textContent=formatRound(data.round);
+    this.node('wallet-count').textContent=`${games.length}게임 · 이번 회차 ${data.tickets?.length||0}장`;
     const matches=data.generation_matches||[];
-    ticketRows(this.node('mini-games'),games,3,matches);ticketRows(this.node('wallet-games'),games,Infinity,matches);
+    this.renderMiniWallet(data);
+    ticketRows(this.node('wallet-games'),games,Infinity,matches);
     const select=this.node('wallet-round');const rounds=[...new Set([data.round,data.recommendation_target,...(data.stored_rounds||[])].map(Number).filter(n=>Number.isInteger(n)&&n>0))].sort((a,b)=>b-a);
     const signature=rounds.join(',');
     if(this._roundSignature!==signature){select.replaceChildren();for(const n of rounds){const option=document.createElement('option');option.value=String(n);option.textContent=formatRound(n);select.append(option);}this._roundSignature=signature;}
