@@ -11,7 +11,12 @@ from test_analysis_engine import ROOT, models
 
 def production_function(name, namespace):
     from custom_components.lotto_645.review_selection import review_method_ids, selected_round_review
-    namespace.update(review_method_ids=review_method_ids, selected_round_review=selected_round_review)
+    from custom_components.lotto_645.purchased_tickets import matching_purchase_games
+    namespace.update(
+        review_method_ids=review_method_ids,
+        selected_round_review=selected_round_review,
+        matching_purchase_games=matching_purchase_games,
+    )
     namespace.setdefault("__package__", "custom_components.lotto_645")
     tree=ast.parse((ROOT/'custom_components/lotto_645/ticket_panel.py').read_text(encoding="utf-8"))
     node=next(n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==name)
@@ -76,3 +81,66 @@ def test_pruner_keeps_guide_and_active_formula_but_removes_deselected():
     owner=SimpleNamespace(entry=entry,selected_method_ids=['uniform_fisher_yates'],configured_method_ids=['uniform_fisher_yates'],ai_enabled=False)
     env['_prune_stale_optional_sensor_entities'](object(),entry,owner)
     registry.async_remove.assert_called_once_with('method_personal_lucky')
+
+
+def test_view_marks_exact_same_round_purchase_matches():
+    rec = models.Recommendation(
+        1,
+        "uniform_fisher_yates",
+        "균등 공식",
+        "local",
+        (11, 13, 18, 22, 31, 32),
+        "reason",
+        None,
+        {"target_round": 31, "generation_id": "generated-31"},
+    )
+    current = models.AnalysisResult(31, 30, (rec,), {})
+    from custom_components.lotto_645.purchased_tickets import PurchaseBook
+
+    book = PurchaseBook().updated(
+        31, {"game_b": "11, 13, 18, 22, 31, 32"}, now=datetime.now(UTC)
+    )
+    ticket_id = book.selected_ticket_id
+    owner = SimpleNamespace(
+        result_draw=None,
+        purchase_book=book,
+        result_metadata={"status": "waiting"},
+        result_round=30,
+        data=SimpleNamespace(
+            analysis=current,
+            generated_at=datetime.now(UTC),
+            ai_recommendation=None,
+        ),
+        result_history=[],
+        winning_summary={"round": 30, "results": []},
+        entry=SimpleNamespace(entry_id="entry"),
+        purchase_storage_error=False,
+        local_generation_sequence=4,
+        configured_method_ids=("uniform_fisher_yates",),
+        ai_enabled=False,
+    )
+    view = production_function(
+        "_view",
+        {
+            "Any": object,
+            "_review_rows": lambda c: [],
+            "panel_metadata": lambda *args: {"draw_schedule": {"round": 31}},
+        },
+    )(owner)
+
+    current_row = view["recommendations"][0]
+    assert current_row["purchase_match"] is True
+    assert current_row["purchase_match_count"] == 1
+    assert current_row["purchase_matches"][0]["slot"] == "B"
+
+    assert view["generation_matches"] == [
+        {
+            "ticket_id": ticket_id,
+            "ticket_number": 1,
+            "slot": "B",
+            "numbers": [11, 13, 18, 22, 31, 32],
+            "formula_id": "uniform_fisher_yates",
+            "formula_label": "균등 공식",
+            "generation_id": "generated-31",
+        }
+    ]
