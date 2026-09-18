@@ -25,6 +25,24 @@ def test_removed_modules_and_endpoints_are_absent():
     assert not (ROOT/'scripts/audit_formulas.py').exists()
 
 
+def test_advanced_method_selector_restores_secondary_options():
+    expected = {
+        "uniform_floyd",
+        "uniform_rejection",
+        "uniform_sequential",
+        "calibrated_stratified",
+        "uniform_combination_rank",
+        "hot_numbers",
+        "recency_decay",
+    }
+    advanced = {item["value"] for item in methods.method_selector_options(advanced=True)}
+    basic = {item["value"] for item in methods.method_selector_options()}
+    assert set(methods.ADVANCED_METHOD_IDS) == expected
+    assert advanced == expected
+    assert not advanced & basic
+    assert "uniform_fisher_yates" in basic
+
+
 def test_option_cleanup_preserves_settings_and_does_not_mutate_input():
     raw={'selected_methods':['personal_lucky','uniform_floyd'],'advanced_methods':['portfolio_triplet_coverage'],
          'lucky_keyword':'private','lucky_theme':'dream','generation_rules':{'fixed':[7]},'saju_birth_date':'1990-01-01'}
