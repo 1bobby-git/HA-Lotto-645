@@ -298,7 +298,7 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
         recommendation = (
             data.analysis.recommendation_by_method(self.method_id) if data else None
         )
-        return f"✓구매 | {base}" if _purchase_matches(self.coordinator, recommendation) else base
+        return f"✓구매일치 | {base}" if _purchase_matches(self.coordinator, recommendation) else base
 
     @property
     def icon(self) -> str:
@@ -387,7 +387,7 @@ class LottoAiRecommendationSensor(Lotto645Entity, SensorEntity):
         base = review_name("Home Assistant AI 추천", review)
         data = self.coordinator.data
         recommendation = data.ai_recommendation if data else None
-        return f"✓구매 | {base}" if _purchase_matches(self.coordinator, recommendation) else base
+        return f"✓구매일치 | {base}" if _purchase_matches(self.coordinator, recommendation) else base
 
     @property
     def icon(self) -> str:
