@@ -52,9 +52,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def _connection_retry(_now):
         if coordinator.service.status in {
-            'not_connected', 'managed_connection_pending', 'connection_unavailable',
+            'not_connected', 'connection_pending', 'connection_unavailable',
             'service_unavailable', 'reauth_required', 'managed_storage_error',
-            'catalog_storage_error', 'operator_attention_required', 'member_connection_pending', 'member_service_unavailable'}:
+            'catalog_storage_error', 'operator_attention_required', 'usage_limited',
+            'automatic_connection_refused', 'invalid_enrollment_response',
+            'unexpected_enrollment_status'}:
             await coordinator.async_request_refresh()
 
     entry.async_on_unload(async_track_time_interval(hass, _connection_retry, timedelta(minutes=5)))
@@ -117,8 +119,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Retain existing identity, options and records while upgrading schema."""
-    if entry.version > 4:
+    if entry.version > 5:
         return False
-    if entry.version < 4:
-        hass.config_entries.async_update_entry(entry, version=4)
+    if entry.version < 5:
+        hass.config_entries.async_update_entry(entry, version=5)
     return True

@@ -307,3 +307,17 @@ def test_connection_client_can_update_token_without_replacing_journals():
     assert owner.generator is pending
     assert owner.ai_generator is ai
     assert owner.connection[TOKEN] == "rotated-access-token-1234567890"
+
+
+def test_config_entry_migration_targets_automatic_connection_schema_v5():
+    source = (R / "__init__.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    migrate = next(
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "async_migrate_entry"
+    )
+    text = ast.unparse(migrate)
+    assert "entry.version > 5" in text
+    assert "version=5" in text
+    assert "member_connection_pending" not in source
+    assert "member_service_unavailable" not in source
