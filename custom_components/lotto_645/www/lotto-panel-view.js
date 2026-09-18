@@ -119,6 +119,7 @@ main{padding-top:40px!important} .screen{outline:0}.page-heading{display:flex;al
 .game-label{font-size:12px;color:var(--muted);font-weight:600}.ticket-balls{display:flex;gap:9px;flex-wrap:wrap;--ball-size:33px}
 .ticket-balls .ball{font-size:13px;background:transparent;border:1px solid var(--line);color:var(--ink)}
 .ticket-status{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px}
+.formula-origin{max-width:190px;text-align:right;font-size:10px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
 .prize,.match-badge{font-size:11px;white-space:nowrap;border-radius:6px;padding:4px 8px}
 .prize{color:var(--muted);background:var(--soft)}
 .prize[data-purchase-match="true"],.match-badge{background:var(--blue-soft);color:var(--blue);font-weight:700}
@@ -284,15 +285,19 @@ export function ticketRows(root, games, limit=Infinity, matches=[]) {
     const isWinner=Number.isInteger(g.prize_rank)&&g.prize_rank>=1&&g.prize_rank<=5;
     numberBalls(nums,g.numbers||g.recommended_numbers||[],null,g);
     const status=document.createElement('span');status.className='ticket-status';
-    const linked=(Array.isArray(matches)?matches:[]).filter(m=>m.slot===g.slot&&(!g.ticket_id||m.ticket_id===g.ticket_id));
+    const current=(Array.isArray(matches)?matches:[]).filter(m=>m.slot===g.slot&&(!g.ticket_id||m.ticket_id===g.ticket_id));
+    const stored=Array.isArray(g.formula_links)?g.formula_links:[];
+    const linked=stored.length?stored:current;
     if(linked.length){
       const badge=document.createElement('span');badge.className='match-badge';
-      badge.textContent=linked.length===1?'공식 일치':`공식 ${linked.length}개 일치`;
+      badge.textContent=stored.length?(stored.length===1?'공식 저장':`공식 ${stored.length}개 저장`):(current.length===1?'현재 공식 일치':`현재 공식 ${current.length}개 일치`);
       const labels=[...new Set(linked.map(m=>m.formula_label||m.formula_id).filter(Boolean))];
-      if(labels.length)badge.title=`${labels.join(', ')} 생성번호와 6개 번호가 모두 같습니다.`;
-      status.append(badge);
+      if(labels.length){
+        badge.title=stored.length?`구매 저장 당시 ${labels.join(', ')} 생성번호와 연결되었습니다.`:`${labels.join(', ')} 현재 생성번호와 6개 번호가 모두 같습니다.`;
+        const origin=document.createElement('span');origin.className='formula-origin';origin.textContent=`공식: ${labels.join(', ')}`;status.append(badge,origin);
+      }else status.append(badge);
     }
-    const prize=document.createElement('span');prize.className='prize';prize.textContent=g.prize||'추첨 대기';prize.dataset.winning=String(isWinner);status.append(prize);
+    const prize=document.createElement('span');prize.className='prize';prize.textContent=g.prize||'복권 추첨 대기';prize.dataset.winning=String(isWinner);status.append(prize);
     row.append(slot,nums,status);root.append(row);
   }
 }
@@ -317,7 +322,19 @@ export function reviewPresentation(data) {
   const evaluated=['confirmed','provisional'].includes(report.status);
   const methods=(report.methods||[]).filter(row=>!row.target_round||Number(row.target_round)===round);
   const rows=methods.map(row=>evaluated?{...row,sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[]}:
-    {method_id:row.method_id,sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[],prize:'추첨 대기'});
+    {method_id:row.method_id,sensor_name:row.label||row.method_id,recommended_numbers:row.numbers||[],prize:'리뷰 추적 · 추첨 대기'});
+  const signatures=new Set(rows.map(row=>`${row.method_id}|${(row.recommended_numbers||[]).join(',')}`));
+  for(const linked of Array.isArray(data.purchase_formula_reviews)?data.purchase_formula_reviews:[]){
+    if(Number(linked.target_round)!==round||!Array.isArray(linked.recommended_numbers)||linked.recommended_numbers.length!==6)continue;
+    const signature=`${linked.method_id}|${linked.recommended_numbers.join(',')}`;
+    if(signatures.has(signature))continue;
+    signatures.add(signature);
+    rows.push({
+      ...linked,
+      sensor_name:linked.sensor_name||`${linked.formula_label||linked.method_id} · 구매추적`,
+      prize:evaluated?(linked.prize?`구매추적 · ${linked.prize}`:'구매추적 · 판정 대기'):'구매추적 · 추첨 대기'
+    });
+  }
   return {report,round,rows,evaluated};
 }
 

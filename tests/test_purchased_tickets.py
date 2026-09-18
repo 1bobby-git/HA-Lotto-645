@@ -167,3 +167,152 @@ def test_matching_purchase_games_is_exact_and_round_scoped():
     assert all(item["numbers"] == [11, 13, 18, 22, 31, 32] for item in matches)
     assert purchases.matching_purchase_games(book, 41, (11, 13, 18, 22, 31, 32)) == []
     assert purchases.matching_purchase_games(book, 40, (11, 13, 18, 22, 31, 33)) == []
+
+
+def formula_link(generation_id="gen-40", *, formula_id="uniform_floyd"):
+    return {
+        "formula_id": formula_id,
+        "formula_label": "균등 공식 · Floyd",
+        "source": "core_service",
+        "generated_at": "2026-09-12T06:30:00+00:00",
+        "based_on_round": 39,
+        "target_round": 40,
+        "generation_sequence": 3,
+        "formula_version": "1",
+        "core_version": "1.22.1",
+        "generation_id": generation_id,
+    }
+
+
+def test_formula_lineage_survives_reload_and_unchanged_ticket_edit():
+    book = purchases.PurchaseBook().updated(
+        40,
+        {"game_a": GOOD},
+        now=NOW,
+        formula_links_by_slot={"A": [formula_link()]},
+    )
+    stored = json.loads(json.dumps(book.to_storage()))
+    assert stored["version"] == 3
+    assert stored["tickets"][book.selected_ticket_id]["games"][0]["formula_links"][0]["formula_id"] == "uniform_floyd"
+
+    restored = purchases.PurchaseBook.from_storage(stored)
+    report = restored.report([DRAW], 40, restored.selected_ticket_id)
+    assert report["games"][0]["formula_match_count"] == 1
+    assert report["games"][0]["formula_links"][0]["generation_id"] == "gen-40"
+
+    edited = restored.updated(
+        40,
+        {"game_c": GOOD},
+        now=NOW,
+        ticket_id=restored.selected_ticket_id,
+    )
+    game = edited.ticket_record(40, edited.selected_ticket_id)["games"][0]
+    assert game["slot"] == "C"
+    assert game["formula_links"][0]["formula_id"] == "uniform_floyd"
+
+
+def test_formula_lineage_is_not_carried_to_changed_numbers_and_v2_still_loads():
+    linked = purchases.PurchaseBook().updated(
+        40,
+        {"game_a": GOOD},
+        now=NOW,
+        formula_links_by_slot={"A": [formula_link()]},
+    )
+    changed = linked.updated(
+        40,
+        {"game_a": "8 9 10 11 12 13"},
+        now=NOW,
+        ticket_id=linked.selected_ticket_id,
+    )
+    assert "formula_links" not in changed.ticket_record(40, changed.selected_ticket_id)["games"][0]
+
+    legacy = purchases.PurchaseBook().updated(40, {"game_a": GOOD}, now=NOW).to_storage()
+    legacy["version"] = 2
+    restored = purchases.PurchaseBook.from_storage(json.loads(json.dumps(legacy)))
+    assert restored.form_values(40)["game_a"] == GOOD
+    assert restored.to_storage()["version"] == 3
+
+
+def test_coordinator_captures_exact_current_formula_only():
+    import ast
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    path = Path(__file__).resolve().parents[1] / "custom_components/lotto_645/coordinator.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "Lotto645Coordinator")
+    method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == "_purchase_formula_links")
+    ns = {"Any": object, "parse_games": purchases.parse_games}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[])), str(path), "exec"), ns)
+
+    rec = models.Recommendation(
+        1,
+        "uniform_floyd",
+        "균등 공식 · Floyd",
+        "균등",
+        (1, 2, 3, 4, 5, 6),
+        "reason",
+        None,
+        {
+            "generated_at": "2026-09-12T06:20:00+00:00",
+            "formula_version": "1",
+            "core_version": "1.22.1",
+            "generation_id": "generation-old",
+        },
+        source="core_service",
+    )
+    owner = SimpleNamespace(
+        data=SimpleNamespace(
+            analysis=models.AnalysisResult(40, 39, (rec,), {}),
+            ai_recommendation=None,
+            ai_generated_at=None,
+        ),
+        _local_generated_at=NOW,
+        _local_generation_nonce=9,
+    )
+    links = ns["_purchase_formula_links"](owner, 40, {"game_b": GOOD, "game_c": "8 9 10 11 12 13"})
+    assert set(links) == {"B"}
+    assert links["B"][0]["formula_id"] == "uniform_floyd"
+    assert links["B"][0]["generation_id"] == "generation-old"
+    assert links["B"][0]["generation_sequence"] == 9
+    assert ns["_purchase_formula_links"](owner, 41, {"game_b": GOOD}) == {}
+
+
+def test_existing_purchase_backfills_only_evidenced_review_formula():
+    book = purchases.PurchaseBook().updated(40, {"game_a": GOOD}, now=NOW)
+    review_rounds = {
+        "40": {
+            "predictions": {
+                "uniform_floyd": {
+                    "numbers": [1, 2, 3, 4, 5, 6],
+                    "label": "균등 공식 · Floyd",
+                    "generated_at": "2026-09-12T06:20:00+00:00",
+                    "based_on_round": 39,
+                    "source": "core_service",
+                    "formula_version": "1",
+                    "core_version": "1.22.1",
+                    "generation_id": "historical-generation",
+                },
+                "uniform_rejection": {
+                    "numbers": [8, 9, 10, 11, 12, 13],
+                    "label": "균등 공식 · 중복거부",
+                    "generated_at": "2026-09-12T06:21:00+00:00",
+                    "based_on_round": 39,
+                    "source": "core_service",
+                },
+            },
+            "result": None,
+        }
+    }
+    migrated = book.with_review_formula_links(review_rounds)
+    links = migrated.ticket_record(40, migrated.selected_ticket_id)["games"][0]["formula_links"]
+    assert [row["formula_id"] for row in links] == ["uniform_floyd"]
+    assert links[0]["generation_id"] == "historical-generation"
+    # The source object remains untouched until the caller durably saves the migration.
+    assert "formula_links" not in book.ticket_record(40, book.selected_ticket_id)["games"][0]
+
+
+def test_existing_purchase_without_review_evidence_is_not_attributed():
+    book = purchases.PurchaseBook().updated(40, {"game_a": GOOD}, now=NOW)
+    migrated = book.with_review_formula_links({})
+    assert "formula_links" not in migrated.ticket_record(40, migrated.selected_ticket_id)["games"][0]

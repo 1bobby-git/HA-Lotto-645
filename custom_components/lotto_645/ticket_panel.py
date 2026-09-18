@@ -29,14 +29,15 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-2-3'
+PANEL_TAG = 'lotto-ticket-panel-v2-2-4'
 COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel',
     'lotto-ticket-panel-v2-0-0', 'lotto-ticket-panel-v2-0-1',
     'lotto-ticket-panel-v2-0-2', 'lotto-ticket-panel-v2-0-3',
     'lotto-ticket-panel-v2-1-0', 'lotto-ticket-panel-v2-1-1',
     'lotto-ticket-panel-v2-1-2', 'lotto-ticket-panel-v2-2-0',
-    'lotto-ticket-panel-v2-2-1', 'lotto-ticket-panel-v2-2-2', PANEL_TAG,
+    'lotto-ticket-panel-v2-2-1', 'lotto-ticket-panel-v2-2-2',
+    'lotto-ticket-panel-v2-2-3', PANEL_TAG,
 }
 WWW = Path(__file__).parent / 'www'
 FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
@@ -79,6 +80,52 @@ def _review_rows(coordinator) -> list[dict]:
     return rows
 
 
+def _purchase_formula_reviews(book, history, round_no: int) -> list[dict]:
+    """Return immutable purchase-linked generations for draw review display."""
+    report = book.report(history, round_no)
+    rows = []
+    for game in report.get("games", []):
+        for link in game.get("formula_links", []):
+            if link.get("target_round") != round_no:
+                continue
+            tracking = "|".join(
+                str(value or "")
+                for value in (
+                    game.get("ticket_id"), game.get("slot"), link.get("formula_id"),
+                    link.get("generation_id"), link.get("generated_at"),
+                )
+            )
+            rows.append({
+                "tracking_id": tracking,
+                "method_id": link["formula_id"],
+                "formula_id": link["formula_id"],
+                "formula_label": link["formula_label"],
+                "sensor_name": f"{link['formula_label']} · 구매추적 {game.get('slot', '')}".strip(),
+                "recommended_numbers": list(game.get("numbers", [])),
+                "numbers": list(game.get("numbers", [])),
+                "source": "purchased_generation",
+                "purchase_linked": True,
+                "purchase_ticket_id": game.get("ticket_id"),
+                "purchase_slot": game.get("slot"),
+                "generated_at": link.get("generated_at"),
+                "generation_id": link.get("generation_id"),
+                "generation_sequence": link.get("generation_sequence"),
+                "formula_version": link.get("formula_version"),
+                "core_version": link.get("core_version"),
+                "target_round": round_no,
+                "based_on_round": link.get("based_on_round"),
+                "status": game.get("status"),
+                "prize": game.get("prize"),
+                "prize_rank": game.get("prize_rank"),
+                "main_match_count": game.get("main_match_count"),
+                "matched_main_numbers": list(game.get("matched_main_numbers", [])),
+                "bonus_match": game.get("bonus_match"),
+                "matched_bonus_number": game.get("matched_bonus_number"),
+                "counts_toward_rating": False,
+            })
+    return rows
+
+
 def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None = None) -> dict:
     draw = coordinator.result_draw
     book = coordinator.purchase_book
@@ -114,6 +161,12 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
                     'formula_label': row.label,
                     'generation_id': row.details.get('generation_id'),
                 })
+    purchase_formula_reviews = _purchase_formula_reviews(
+        book, coordinator.result_history, active_round
+    )
+    purchased = book.report(
+        coordinator.result_history, round_no, record.get('ticket_id')
+    )
     return {**panel,
             'selected_method_ids': list(visible_ids),
             'reviews': _review_rows(coordinator),
@@ -126,7 +179,8 @@ def _view(coordinator: Any, round_no: int | None = None, ticket_id: str | None =
             'service_status':getattr(getattr(coordinator,'service',None),'status','unknown'),
             'values': book.form_values(round_no,record.get('ticket_id')) if round_no else {},
             'stored_rounds': sorted(map(int, book.records), reverse=True),
-            'purchased': book.report(coordinator.result_history, round_no,record.get('ticket_id')),
+            'purchased': purchased,
+            'purchase_formula_reviews': purchase_formula_reviews,
             'draw': draw.to_storage() if draw and metadata['status'] != 'conflict' else None,
             'result_round': coordinator.result_round,
             'result_verification': metadata, 'winning': coordinator.winning_summary,
