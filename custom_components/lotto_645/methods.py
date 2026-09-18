@@ -9,7 +9,18 @@ METHOD_MYUNGRI_HETU = "myungri_hetu_day_pillar"
 METHOD_SELECTED_MEDIAN = "selected_median_consensus"
 METHOD_SELECTED_VOTE = "selected_vote_consensus"
 DEFAULT_METHOD_IDS = ("uniform_fisher_yates",)
-ADVANCED_METHOD_IDS = set()
+# Alternative implementations/presets intentionally live in the secondary
+# selector so the primary formula list stays compact. These stable IDs match
+# the grouping used before the remote-catalog cutover.
+ADVANCED_METHOD_IDS = {
+    "uniform_floyd",
+    "uniform_rejection",
+    "uniform_sequential",
+    "calibrated_stratified",
+    "uniform_combination_rank",
+    "hot_numbers",
+    "recency_decay",
+}
 RETIRED_METHOD_LABELS = {"personal_lucky":"개인 행운 번호 (종료)",
                        "portfolio_triplet_coverage":"다중 조합 (종료)"}
 

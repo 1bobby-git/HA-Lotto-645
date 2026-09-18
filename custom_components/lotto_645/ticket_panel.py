@@ -29,14 +29,14 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-2-2'
+PANEL_TAG = 'lotto-ticket-panel-v2-2-3'
 COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel',
     'lotto-ticket-panel-v2-0-0', 'lotto-ticket-panel-v2-0-1',
     'lotto-ticket-panel-v2-0-2', 'lotto-ticket-panel-v2-0-3',
     'lotto-ticket-panel-v2-1-0', 'lotto-ticket-panel-v2-1-1',
     'lotto-ticket-panel-v2-1-2', 'lotto-ticket-panel-v2-2-0',
-    'lotto-ticket-panel-v2-2-1', PANEL_TAG,
+    'lotto-ticket-panel-v2-2-1', 'lotto-ticket-panel-v2-2-2', PANEL_TAG,
 }
 WWW = Path(__file__).parent / 'www'
 FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
