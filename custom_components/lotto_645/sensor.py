@@ -23,8 +23,21 @@ from .entity import Lotto645Entity
 from .methods import METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE, METHODS_BY_ID, method_catalog
 from .review import review_name, NOTICE as REVIEW_NOTICE
 from .result_details import decorate_result, winning_attributes
+from .purchased_tickets import matching_purchase_games
 
 PARALLEL_UPDATES = 0
+
+
+def _purchase_matches(coordinator: Lotto645Coordinator, recommendation) -> list[dict]:
+    """Return exact same-round matches against locally saved purchased tickets."""
+    if recommendation is None or coordinator.data is None:
+        return []
+    target_round = recommendation.details.get(
+        "target_round", coordinator.data.analysis.target_round
+    )
+    return matching_purchase_games(
+        coordinator.purchase_book, target_round, recommendation.numbers
+    )
 
 
 def _active_optional_sensor_unique_ids(coordinator: Lotto645Coordinator) -> set[str]:
@@ -266,6 +279,7 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
         "pillar_details", "current_daewoon", "target_interactions", "structural_analysis",
         "favorable_analysis", "luck_layers", "number_score_trace", "rule_sources",
         "calculation_warnings", "calendar_rules", "shensha", "target_draw_four_pillars",
+        "purchase_matches",
     })
     _attr_icon = "mdi:numeric"
 
@@ -279,7 +293,24 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
     @property
     def name(self) -> str:
         review = self.coordinator.review_for_method(self.method_id) if hasattr(self.coordinator, "review_for_method") else {}
-        return review_name(METHODS_BY_ID[self.method_id].label, review)
+        base = review_name(METHODS_BY_ID[self.method_id].label, review)
+        data = self.coordinator.data
+        recommendation = (
+            data.analysis.recommendation_by_method(self.method_id) if data else None
+        )
+        return f"✓구매 | {base}" if _purchase_matches(self.coordinator, recommendation) else base
+
+    @property
+    def icon(self) -> str:
+        data = self.coordinator.data
+        recommendation = (
+            data.analysis.recommendation_by_method(self.method_id) if data else None
+        )
+        return (
+            "mdi:ticket-confirmation"
+            if _purchase_matches(self.coordinator, recommendation)
+            else "mdi:numeric"
+        )
 
     @property
     def available(self) -> bool:
@@ -315,8 +346,16 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
                 }
             return {}
         method = METHODS_BY_ID[self.method_id]
+        matches = _purchase_matches(self.coordinator, recommendation)
         return {
             **recommendation.as_attributes(),
+            "purchase_match": bool(matches),
+            "purchase_match_count": len(matches),
+            "purchase_matches": matches,
+            "purchase_match_notice": (
+                "같은 회차에 저장한 구매번호와 6개 번호가 모두 같은 경우입니다. "
+                "실제 구매 사실을 인증하는 값은 아닙니다."
+            ),
             "local_review": self.coordinator.review_for_method(self.method_id) if hasattr(self.coordinator, "review_for_method") else {},
             "review_notice": REVIEW_NOTICE,
             "method_category": method.category,
@@ -336,6 +375,7 @@ class LottoAiRecommendationSensor(Lotto645Entity, SensorEntity):
 
     _attr_name = "Home Assistant AI 추천"
     _attr_icon = "mdi:creation-outline"
+    _unrecorded_attributes = frozenset({"purchase_matches"})
 
     def __init__(self, coordinator: Lotto645Coordinator) -> None:
         super().__init__(coordinator)
@@ -344,7 +384,20 @@ class LottoAiRecommendationSensor(Lotto645Entity, SensorEntity):
     @property
     def name(self) -> str:
         review = self.coordinator.review_for_method(AI_METHOD_ID) if hasattr(self.coordinator, "review_for_method") else {}
-        return review_name("Home Assistant AI 추천", review)
+        base = review_name("Home Assistant AI 추천", review)
+        data = self.coordinator.data
+        recommendation = data.ai_recommendation if data else None
+        return f"✓구매 | {base}" if _purchase_matches(self.coordinator, recommendation) else base
+
+    @property
+    def icon(self) -> str:
+        data = self.coordinator.data
+        recommendation = data.ai_recommendation if data else None
+        return (
+            "mdi:ticket-confirmation"
+            if _purchase_matches(self.coordinator, recommendation)
+            else "mdi:creation-outline"
+        )
 
     @property
     def native_value(self) -> str:
@@ -358,8 +411,16 @@ class LottoAiRecommendationSensor(Lotto645Entity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data
+        matches = _purchase_matches(self.coordinator, data.ai_recommendation)
         attributes = {
             "status": data.ai_status,
+            "purchase_match": bool(matches),
+            "purchase_match_count": len(matches),
+            "purchase_matches": matches,
+            "purchase_match_notice": (
+                "같은 회차에 저장한 구매번호와 6개 번호가 모두 같은 경우입니다. "
+                "실제 구매 사실을 인증하는 값은 아닙니다."
+            ),
             "local_review": self.coordinator.review_for_method(AI_METHOD_ID) if hasattr(self.coordinator, "review_for_method") else {},
             "review_notice": REVIEW_NOTICE,
             "error": data.ai_error,
