@@ -118,7 +118,7 @@ main{padding-top:40px!important} .screen{outline:0}.page-heading{display:flex;al
 .ticket-list{padding:0 24px}.ticket-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:14px;align-items:center;min-height:76px;border-bottom:1px solid var(--line)}.ticket-row:last-child{border:0}
 .game-label{font-size:12px;color:var(--muted);font-weight:600}.ticket-balls{display:flex;gap:9px;flex-wrap:wrap;--ball-size:33px}
 .ticket-balls .ball{font-size:13px;background:transparent;border:1px solid var(--line);color:var(--ink)}
-.ticket-status{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.ticket-status{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px}
 .prize,.match-badge{font-size:11px;white-space:nowrap;border-radius:6px;padding:4px 8px}
 .prize{color:var(--muted);background:var(--soft)}
 .prize[data-purchase-match="true"],.match-badge{background:var(--blue-soft);color:var(--blue);font-weight:700}
