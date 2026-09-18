@@ -130,7 +130,7 @@ def test_concurrent_setup_shares_one_enrollment():
     asyncio.run(case())
 
 
-def test_former_member_connection_becomes_automatic_and_preserves_local_scope():
+def test_member_connection_is_preserved_for_server_side_membership_tier():
     async def case():
         old = {
             "version": 1,
@@ -139,7 +139,7 @@ def test_former_member_connection_becomes_automatic_and_preserves_local_scope():
             "enrolled": True,
             "device_id": "d" * 32,
             "refresh_token": "r" * 64,
-            "access_expires_at": 0,
+            "access_expires_at": time.time() + 600,
             "context_secret": "context-secret",
         }
         old_scope = hashlib.sha256(
@@ -148,16 +148,14 @@ def test_former_member_connection_becomes_automatic_and_preserves_local_scope():
         store = MemoryStore(old)
         manager = ManagedConnection(store)
         await manager.load()
-        assert manager.state["source"] == "automatic"
-        assert re.fullmatch(r"[0-9a-f]{32}", manager.state["installation_id"])
+        assert manager.state["source"] == "member"
+        assert manager.state["device_id"] == "d" * 32
         assert manager.values[URL] == NEW_ORIGIN
-        assert manager.values[TOKEN] != "t" * 43
-        assert manager.state["enrolled"] is False
+        assert manager.values[TOKEN] == "t" * 43
         assert manager.journal_scope == old_scope
         assert manager.context_secret == "context-secret"
-        assert "refresh_token" not in manager.state
-        await manager.ensure_enrolled(Session())
-        assert manager.state["enrolled"] is True
+        assert manager.state["refresh_token"] == "r" * 64
+        assert manager.needs_refresh is False
     asyncio.run(case())
 
 
@@ -197,16 +195,16 @@ def test_clean_options_preserves_user_settings_and_removes_transport():
     }
 
 
-def test_config_flow_has_no_account_or_transport_steps():
+def test_config_flow_keeps_automatic_setup_and_optional_member_link():
     tree = ast.parse((R / "config_flow.py").read_text(encoding="utf-8"))
     names = {
         n.name
         for n in ast.walk(tree)
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
+    assert "async_step_account" in names
     assert not names & {
         "async_step_service",
-        "async_step_account",
         "async_step_formula_options",
         "async_step_generation_rules",
         "async_step_reauth_confirm",
@@ -218,7 +216,7 @@ def test_config_flow_has_no_account_or_transport_steps():
         for k in n.keywords
         if k.arg == "menu_options"
     ]
-    assert menus == [["recommendations", "saju", "purchases"]]
+    assert menus == [["account", "recommendations", "saju", "purchases"]]
     user = next(
         n for n in ast.walk(tree)
         if isinstance(n, ast.AsyncFunctionDef) and n.name == "async_step_user"
@@ -333,3 +331,45 @@ def test_panel_upgrade_accepts_recent_release_tags():
     ):
         assert repr(tag) in source
     assert "PANEL_TAG = 'lotto-ticket-panel-v2-2-1'" in source
+
+
+def test_member_refresh_preserves_identity_and_uses_one_rotation(monkeypatch):
+    from custom_components.lotto_645.member_link import state_from_tokens
+    import custom_components.lotto_645.member_link as link
+
+    async def case():
+        tokens = {
+            "access_token": "a" * 43,
+            "refresh_token": "b" * 64,
+            "device_id": "c" * 32,
+            "expires_in": 900,
+        }
+        saved = state_from_tokens(tokens)
+        saved["access_expires_at"] = 0
+        store = MemoryStore(saved)
+        manager = ManagedConnection(store)
+        await manager.load()
+        original_scope = manager.journal_scope
+        calls = []
+
+        async def exchange(session, path, body):
+            calls.append(dict(body))
+            return {
+                **tokens,
+                "token_type": "Bearer",
+                "access_token": "d" * 43,
+                "refresh_token": "e" * 64,
+            }
+
+        monkeypatch.setattr(link, "request", exchange)
+        await asyncio.gather(
+            manager.ensure_enrolled(None),
+            manager.ensure_enrolled(None),
+        )
+        assert len(calls) == 1
+        assert manager.state["source"] == "member"
+        assert manager.values[TOKEN] == "d" * 43
+        assert manager.journal_scope == original_scope
+        assert "pending_rotation" not in store.value
+
+    asyncio.run(case())
