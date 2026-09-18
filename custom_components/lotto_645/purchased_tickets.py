@@ -72,6 +72,81 @@ def parse_games(values: dict[str, Any]) -> list[dict[str, Any]]:
     return games
 
 
+def _formula_link(value: object, round_no: int) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError('invalid_formula_link')
+    formula_id = value.get('formula_id')
+    label = value.get('formula_label')
+    source = value.get('source', 'core_service')
+    generated_at = value.get('generated_at')
+    based_on_round = value.get('based_on_round')
+    target_round = value.get('target_round', round_no)
+    generation_sequence = value.get('generation_sequence', 0)
+    if (not isinstance(formula_id, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,100}', formula_id)
+            or not isinstance(label, str) or not 1 <= len(label) <= 180
+            or not isinstance(source, str) or not 1 <= len(source) <= 40
+            or type(based_on_round) is not int or not 0 < based_on_round < round_no
+            or type(target_round) is not int or target_round != round_no
+            or type(generation_sequence) is not int or generation_sequence < 0):
+        raise ValueError('invalid_formula_link')
+    when = datetime.fromisoformat(str(generated_at))
+    if when.tzinfo is None:
+        raise ValueError('invalid_formula_link_timestamp')
+    result = {
+        'formula_id': formula_id,
+        'formula_label': label,
+        'source': source,
+        'generated_at': when.isoformat(),
+        'based_on_round': based_on_round,
+        'target_round': round_no,
+        'generation_sequence': generation_sequence,
+    }
+    for key in ('formula_version', 'core_version', 'generation_id'):
+        raw = value.get(key)
+        if raw is not None:
+            raw = str(raw)
+            if not 1 <= len(raw) <= 128:
+                raise ValueError('invalid_formula_link')
+            result[key] = raw
+    return result
+
+
+def normalize_formula_links(value: object, round_no: int) -> list[dict[str, Any]]:
+    if value in (None, []):
+        return []
+    if not isinstance(value, list) or len(value) > 32:
+        raise ValueError('invalid_formula_links')
+    result = []
+    seen = set()
+    for raw in value:
+        item = _formula_link(raw, round_no)
+        identity = (
+            item['formula_id'], item.get('generation_id'), item['generated_at'],
+            item['generation_sequence'],
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+        result.append(item)
+    return result
+
+
+def _merge_formula_links(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result = []
+    seen = set()
+    for group in groups:
+        for item in group:
+            identity = (
+                item['formula_id'], item.get('generation_id'), item['generated_at'],
+                item['generation_sequence'],
+            )
+            if identity in seen:
+                continue
+            seen.add(identity)
+            result.append(deepcopy(item))
+    return result
+
+
 def matching_purchase_games(
     book: "PurchaseBook", round_no: int | None, numbers: Iterable[int]
 ) -> list[dict[str, Any]]:
@@ -180,9 +255,11 @@ class _LegacyPurchaseBook:
             outcome = (evaluate_ticket(tuple(row['numbers']), draw) if draw else
                        {'status': '판정 대기', 'prize': None, 'prize_rank': None,
                         'main_match_count': None, 'matched_main_numbers': [], 'bonus_match': None})
+            links = deepcopy(row.get('formula_links', []))
             games.append({'method_id': f"purchased_{row['slot']}", 'slot': row['slot'],
                           'sensor_name': f"직접 구매 {row['slot']}", 'source': 'purchased',
-                          'recommended_numbers': list(row['numbers']), 'numbers': list(row['numbers']), **outcome})
+                          'recommended_numbers': list(row['numbers']), 'numbers': list(row['numbers']),
+                          'formula_links': links, 'formula_match_count': len(links), **outcome})
         winners = [game for game in games if game['prize_rank'] is not None]
         return {**base, 'status': 'evaluated' if draw else 'waiting', 'saved_at': record['saved_at'],
                 'saved_game_count': len(games), 'checked_game_count': len(games) if draw else 0,
@@ -221,7 +298,8 @@ class PurchaseBook:
                 book.tickets[ticket_id]={'ticket_id':ticket_id,**deepcopy(row)}
             book.selected_round=old.selected_round
             book.selected_ticket_id='legacy-'+str(old.selected_round) if old.selected_round else None
-        elif payload.get('version')==2:
+        elif payload.get('version') in (2,3):
+            version=payload['version']
             tickets=payload.get('tickets')
             if not isinstance(tickets,dict) or len(tickets)>10000:
                 raise ValueError('invalid_ticket_storage')
@@ -231,7 +309,14 @@ class PurchaseBook:
                     raise ValueError('invalid_ticket_id')
                 number=parse_round(row.get('round'))
                 valid=_LegacyPurchaseBook.from_storage({'version':1,'records':{str(number):row},'selected_round':number})
-                book.tickets[key]={'ticket_id':key,**valid.records[str(number)]}
+                clean={'ticket_id':key,**valid.records[str(number)]}
+                if version==3:
+                    original_games=row.get('games',[])
+                    for clean_game, raw_game in zip(clean['games'], original_games, strict=True):
+                        links=normalize_formula_links(raw_game.get('formula_links',[]),number)
+                        if links:
+                            clean_game['formula_links']=links
+                book.tickets[key]=clean
             book.selected_round=payload.get('selected_round')
             book.selected_ticket_id=payload.get('selected_ticket_id')
             if book.selected_ticket_id is not None and book.selected_ticket_id not in book.tickets:
@@ -243,7 +328,7 @@ class PurchaseBook:
         return book
 
     def to_storage(self):
-        return {'version':2,'tickets':deepcopy(self.tickets),'records':self.records,
+        return {'version':3,'tickets':deepcopy(self.tickets),'records':self.records,
                 'selected_round':self.selected_round,'selected_ticket_id':self.selected_ticket_id}
 
     def ticket_record(self,round_no,ticket_id=None):
@@ -256,7 +341,8 @@ class PurchaseBook:
         if current and current['round']==round_no:return current
         return next((r for r in reversed(list(self.tickets.values())) if r['round']==round_no),{})
 
-    def updated(self,round_no,values,*,clear=False,now=None,ticket_id=None,new_ticket=False):
+    def updated(self,round_no,values,*,clear=False,now=None,ticket_id=None,new_ticket=False,
+                formula_links_by_slot=None):
         from uuid import uuid4
         round_no=parse_round(round_no)
         result=self.from_storage(self.to_storage())
@@ -280,14 +366,74 @@ class PurchaseBook:
                 raise PurchaseInputError('base','invalid_ticket_id')
             existing=result.tickets.get(ticket_id)
             if existing:
-                if existing['round']!=round_no or existing['games']!=games:
+                comparable=[{'slot':row['slot'],'numbers':list(row['numbers'])} for row in existing['games']]
+                if existing['round']!=round_no or comparable!=games:
                     raise PurchaseInputError('base','purchase_revision_conflict')
                 result.selected_ticket_id=ticket_id;result.selected_round=round_no
                 return result
         previous={} if new_ticket else result.ticket_record(round_no,ticket_id)
+        previous_by_numbers={}
+        for old_game in previous.get('games',[]):
+            links=normalize_formula_links(old_game.get('formula_links',[]),round_no)
+            if links:
+                previous_by_numbers.setdefault(tuple(old_game['numbers']),[]).extend(links)
+        provided=formula_links_by_slot or {}
+        if not isinstance(provided,dict):
+            raise ValueError('invalid_formula_links')
+        enriched=[]
+        for game in games:
+            current=normalize_formula_links(provided.get(game['slot'],[]),round_no)
+            retained=previous_by_numbers.get(tuple(game['numbers']),[])
+            links=_merge_formula_links(retained,current)
+            copy=deepcopy(game)
+            if links:
+                copy['formula_links']=links
+            enriched.append(copy)
         key=previous.get('ticket_id') or (ticket_id if new_ticket else None) or str(uuid4())
-        result.tickets[key]={'ticket_id':key,'round':round_no,'saved_at':when.isoformat(),'games':games}
+        result.tickets[key]={'ticket_id':key,'round':round_no,'saved_at':when.isoformat(),'games':enriched}
         result.selected_ticket_id=key;result.selected_round=round_no
+        return result
+
+    def with_review_formula_links(self, review_rounds: object) -> 'PurchaseBook':
+        """Backfill only exact, evidenced pre-draw formula matches from ReviewBook."""
+        if not isinstance(review_rounds, dict):
+            return self.from_storage(self.to_storage())
+        result = self.from_storage(self.to_storage())
+        for ticket in result.tickets.values():
+            round_no = ticket["round"]
+            review = review_rounds.get(str(round_no))
+            predictions = review.get("predictions") if isinstance(review, dict) else None
+            if not isinstance(predictions, dict):
+                continue
+            for game in ticket["games"]:
+                discovered = []
+                for formula_id, prediction in predictions.items():
+                    if not isinstance(formula_id, str) or not isinstance(prediction, dict):
+                        continue
+                    try:
+                        if parse_ticket(prediction.get("numbers")) != tuple(game["numbers"]):
+                            continue
+                        raw = {
+                            "formula_id": formula_id,
+                            "formula_label": str(prediction.get("label", formula_id))[:180],
+                            "source": str(prediction.get("source", "analysis"))[:40],
+                            "generated_at": prediction.get("generated_at"),
+                            "based_on_round": prediction.get("based_on_round"),
+                            "target_round": round_no,
+                            "generation_sequence": 0,
+                        }
+                        for key in ("formula_version", "core_version", "generation_id"):
+                            if prediction.get(key) is not None:
+                                raw[key] = prediction[key]
+                        discovered.append(_formula_link(raw, round_no))
+                    except (PurchaseInputError, TypeError, ValueError):
+                        continue
+                links = _merge_formula_links(
+                    normalize_formula_links(game.get("formula_links", []), round_no),
+                    discovered,
+                )
+                if links:
+                    game["formula_links"] = links
         return result
 
     def form_values(self,round_no,ticket_id=None):

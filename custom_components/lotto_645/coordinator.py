@@ -53,7 +53,7 @@ from .fast_result_state import FastResultState, evaluate_saved
 from .review import ReviewBook
 from .review_state import ReviewState
 from .published_results import draw_cutoff
-from .purchased_tickets import PurchaseBook, combined_result
+from .purchased_tickets import PurchaseBook, combined_result, parse_games
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -203,6 +203,53 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         """Return the latest persisted recommendation-vs-draw evaluation."""
         return self._draw_evaluation
 
+    def _purchase_formula_links(
+        self, round_no: int, values: dict[str, Any]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Capture exact current-generation provenance when a ticket is saved."""
+        if self.data is None or self.data.analysis.target_round != round_no:
+            return {}
+        games = parse_games(values)
+        recommendations = list(self.data.analysis.recommendations)
+        if self.data.ai_recommendation is not None:
+            recommendations.append(self.data.ai_recommendation)
+        result: dict[str, list[dict[str, Any]]] = {}
+        for game in games:
+            numbers = tuple(game["numbers"])
+            links = []
+            for recommendation in recommendations:
+                if recommendation.numbers != numbers:
+                    continue
+                generated = recommendation.details.get("generated_at")
+                if not generated:
+                    when = (
+                        self.data.ai_generated_at
+                        if recommendation.source in ("ai", "ai_task")
+                        else self._local_generated_at
+                    )
+                    generated = when.isoformat() if when else None
+                if not generated:
+                    # Without a real generation timestamp we can show a current
+                    # coincidence but must not claim durable formula provenance.
+                    continue
+                link = {
+                    "formula_id": recommendation.method_id,
+                    "formula_label": recommendation.label,
+                    "source": recommendation.source,
+                    "generated_at": str(generated),
+                    "based_on_round": self.data.analysis.based_on_round,
+                    "target_round": round_no,
+                    "generation_sequence": self._local_generation_nonce,
+                }
+                for key in ("formula_version", "core_version", "generation_id"):
+                    value = recommendation.details.get(key)
+                    if value is not None:
+                        link[key] = value
+                links.append(link)
+            if links:
+                result[game["slot"]] = links
+        return result
+
     async def async_save_purchase_record(
         self, round_no: int, values: dict[str, Any], *, clear: bool = False,
         expected_revision: str | None = None, ticket_id: str | None = None, new_ticket: bool = False
@@ -215,7 +262,11 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 current = "" if new_ticket else self.purchase_book.ticket_record(round_no,ticket_id).get("saved_at", "")
                 if current != expected_revision:
                     raise HomeAssistantError("purchase_revision_conflict")
-            updated = self.purchase_book.updated(round_no, values, clear=clear,ticket_id=ticket_id,new_ticket=new_ticket)
+            formula_links = {} if clear else self._purchase_formula_links(round_no, values)
+            updated = self.purchase_book.updated(
+                round_no, values, clear=clear, ticket_id=ticket_id, new_ticket=new_ticket,
+                formula_links_by_slot=formula_links,
+            )
             await self._purchase_store.async_save(updated.to_storage())
             # Do not replace the in-memory copy before a successful durable write.
             self.purchase_book = updated
@@ -234,6 +285,17 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             # Keep the bad file untouched and block writes; recommendations still work.
             self.purchase_storage_error = True
             _LOGGER.error("구매번호 저장소를 읽지 못했습니다. 원본 파일을 보존하며 덮어쓰지 않습니다")
+        if not self.purchase_storage_error and not self.review_storage_error:
+            migrated = self.purchase_book.with_review_formula_links(self.review_book.rounds)
+            if migrated.to_storage() != self.purchase_book.to_storage():
+                try:
+                    await self._purchase_store.async_save(migrated.to_storage())
+                except (OSError, HomeAssistantError):
+                    _LOGGER.warning(
+                        "기존 구매번호의 공식 연결 이관을 저장하지 못해 원본 구매기록을 유지합니다"
+                    )
+                else:
+                    self.purchase_book = migrated
         self._saju_profile_valid = bool(self.entry.options.get(CONF_PERSONAL_CONSENT)) and await self.hass.async_add_executor_job(
             has_complete_saju_profile, self.saju_profile
         )

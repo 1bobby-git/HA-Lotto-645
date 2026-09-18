@@ -29,6 +29,8 @@ def test_overview_has_no_recommendation_summary():
     assert "reviewPresentation(data)" in script
     assert "purchase_match" in text and "match-badge" in text
     assert "generation_matches" in script and "구매번호 일치" in text
+    assert "purchase_formula_reviews" in text and "formula_links" in text
+    assert "formula-origin" in text and "리뷰 추적번호" in script
     assert 'id="home-wallet-heading"' in text and 'class="draw-stage"' in text
 
 

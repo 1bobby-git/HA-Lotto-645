@@ -76,7 +76,8 @@ def test_wallet_and_review_number_sizes_are_preserved():
 def test_panel_shell_is_the_versioned_production_entry():
     ticket_panel = (WWW.parent / 'ticket_panel.py').read_text(encoding='utf-8')
     version = json.loads((WWW.parent / 'manifest.json').read_text(encoding='utf-8'))['version']
-    assert f"module_url': f'/lotto_645_static/lotto-panel-shell.js?v={{VERSION}}'" in ticket_panel
+    assert "FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'" in ticket_panel
+    assert "f'{FRONTEND_PATH}/lotto-panel-shell.js'" in ticket_panel
     assert f"data-lotto-ha-host-header', '{version}'" in SHELL
     assert f"data-lotto-official-ball-colors', '{version}'" in SHELL
     assert f"import './lotto-panel.js?v={version}';" in SHELL

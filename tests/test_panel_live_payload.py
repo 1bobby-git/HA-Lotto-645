@@ -19,6 +19,9 @@ def production_function(name, namespace):
     )
     namespace.setdefault("__package__", "custom_components.lotto_645")
     tree=ast.parse((ROOT/'custom_components/lotto_645/ticket_panel.py').read_text(encoding="utf-8"))
+    if name == '_view':
+        helper=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_purchase_formula_reviews')
+        exec(compile(ast.fix_missing_locations(ast.Module(body=[helper],type_ignores=[])),'production','exec'),namespace)
     node=next(n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==name)
     node.decorator_list=[]
     if name=='subscribe_updates':
@@ -144,3 +147,114 @@ def test_view_marks_exact_same_round_purchase_matches():
             "generation_id": "generated-31",
         }
     ]
+
+
+def test_purchase_formula_lineage_survives_later_regeneration_in_panel_payload():
+    from custom_components.lotto_645.purchased_tickets import PurchaseBook
+
+    old_numbers = (11, 13, 18, 22, 31, 32)
+    new_numbers = (2, 8, 17, 25, 34, 43)
+    link = {
+        "formula_id": "uniform_floyd",
+        "formula_label": "균등 공식 · Floyd",
+        "source": "core_service",
+        "generated_at": "2026-09-18T08:00:00+00:00",
+        "based_on_round": 30,
+        "target_round": 31,
+        "generation_sequence": 4,
+        "formula_version": "1",
+        "core_version": "1.22.1",
+        "generation_id": "old-generation",
+    }
+    book = PurchaseBook().updated(
+        31,
+        {"game_a": ", ".join(map(str, old_numbers))},
+        now=datetime(2026, 9, 18, 8, 5, tzinfo=UTC),
+        formula_links_by_slot={"A": [link]},
+    )
+    current_rec = models.Recommendation(
+        1,
+        "uniform_floyd",
+        "균등 공식 · Floyd",
+        "균등",
+        new_numbers,
+        "new",
+        None,
+        {"target_round": 31, "generation_id": "new-generation"},
+    )
+    current = models.AnalysisResult(31, 30, (current_rec,), {})
+    latest_review = {
+        "round": 31,
+        "status": "waiting",
+        "methods": [{
+            "method_id": "uniform_floyd",
+            "label": "균등 공식 · Floyd",
+            "numbers": list(new_numbers),
+            "target_round": 31,
+            "status": "waiting",
+        }],
+        "peer_count": 1,
+    }
+    owner = SimpleNamespace(
+        result_draw=None,
+        purchase_book=book,
+        result_metadata={"status": "waiting"},
+        result_round=30,
+        data=SimpleNamespace(
+            analysis=current,
+            generated_at=datetime.now(UTC),
+            ai_recommendation=None,
+        ),
+        result_history=[],
+        winning_summary={"round": 30, "results": []},
+        entry=SimpleNamespace(entry_id="entry"),
+        purchase_storage_error=False,
+        local_generation_sequence=5,
+        configured_method_ids=("uniform_floyd",),
+        ai_enabled=False,
+        review_for_round=lambda round_no: latest_review,
+    )
+    view = production_function(
+        "_view",
+        {
+            "Any": object,
+            "_review_rows": lambda c: [],
+            "panel_metadata": lambda *args: {"draw_schedule": {"round": 31}},
+        },
+    )(owner)
+
+    assert view["recommendations"][0]["numbers"] == list(new_numbers)
+    assert view["recommendations"][0]["purchase_match"] is False
+    tracked = view["purchase_formula_reviews"]
+    assert len(tracked) == 1
+    assert tracked[0]["formula_id"] == "uniform_floyd"
+    assert tracked[0]["recommended_numbers"] == list(old_numbers)
+    assert tracked[0]["generation_id"] == "old-generation"
+    assert tracked[0]["purchase_linked"] is True
+
+
+def test_purchase_linked_generation_gets_same_round_draw_result():
+    from custom_components.lotto_645.purchased_tickets import PurchaseBook
+    draw = models.LottoDraw(40, "2003-09-06", (1, 2, 3, 4, 5, 6), 7)
+    link = {
+        "formula_id": "uniform_floyd",
+        "formula_label": "균등 공식 · Floyd",
+        "source": "core_service",
+        "generated_at": "2026-09-18T08:00:00+00:00",
+        "based_on_round": 39,
+        "target_round": 40,
+        "generation_sequence": 3,
+        "generation_id": "generation-40",
+    }
+    book = PurchaseBook().updated(
+        40,
+        {"game_a": "1 2 3 4 5 6"},
+        now=datetime(2026, 9, 18, 8, 5, tzinfo=UTC),
+        formula_links_by_slot={"A": [link]},
+    )
+    rows = production_function("_purchase_formula_reviews", {})(book, [draw], 40)
+    assert len(rows) == 1
+    assert rows[0]["prize"] == "1등"
+    assert rows[0]["prize_rank"] == 1
+    assert rows[0]["main_match_count"] == 6
+    assert rows[0]["counts_toward_rating"] is False

@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows, reviewPresentation, currentRecommendations } from './lotto-panel-view.js?v=2.2.3';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, renderPredictionRows, reviewPresentation, currentRecommendations } from './lotto-panel-view.js?v=2.2.4';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-2-3';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-2-4';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -293,8 +293,8 @@ class LottoTicketPanel extends HTMLElement {
     const serviceStatus=data.service_status;
     const matchedFormulaCount=new Set((data.generation_matches||[]).map(row=>row.formula_id).filter(Boolean)).size;
     const matchNote=matchedFormulaCount
-      ? `저장한 구매번호와 ${matchedFormulaCount}개 공식의 번호가 정확히 일치합니다. 같은 회차의 6개 번호가 모두 같은 경우만 표시합니다.`
-      : '현재 센서의 번호이며 과거 검증 성적이나 실제 구매 내역이 아닙니다.';
+      ? `현재 생성번호와 저장한 구매번호가 ${matchedFormulaCount}개 공식에서 정확히 일치합니다. 복권 저장 시 연결된 공식은 이후 새 번호를 생성해도 복권 기록에 계속 남습니다.`
+      : '현재 생성번호는 새로 생성하면 바뀝니다. 구매 저장 당시 정확히 일치한 공식은 해당 복권에 고정 연결되어 추첨 결과까지 계속 추적합니다.';
     this.node('current-recommendations-note').textContent=(serviceStatus==='generating'?'새 번호를 생성 중입니다. 이전 저장번호를 유지합니다. ':serviceStatus&&serviceStatus!=='ready'?'서비스 상태: '+serviceStatus+' · 저장번호를 표시합니다. ':'')+matchNote;
     const awaiting=!presentation.evaluated;
     this._targetRound=Number(data.recommendation_target)||this._targetRound;
@@ -308,8 +308,8 @@ class LottoTicketPanel extends HTMLElement {
     this.node('result').textContent=w?.status==='evaluated'?`${w.round}회 · 당첨 ${w.winning_game_count}게임${Number(w.winning_game_count)>0?` · 최고 ${w.highest_prize}`:' · 당첨 없음'}`:w?.status==='conflict'?'출처 확인 후 다시 대조해요.':'대조할 추첨 전 추천 또는 구매번호가 아직 없어요.';
     renderPredictionRows(this.node('predictions'),presentation.rows,['아직 이번 회차에 저장된 추천번호가 없어요.','공식을 선택해 번호를 생성하면 추첨 대기 상태로 여기에 등록됩니다.']);
     const current=new Map((rr.methods||[]).map(r=>[r.method_id,r]));
-    this.node('predictions-heading').textContent=`${formatRound(presentation.round)} · ${awaiting?'추첨 대기':'추천번호 결과'}`;
-    this.node('predictions-note').textContent=awaiting?'추첨 전에 저장한 번호입니다. 같은 회차의 당첨번호가 발표되면 자동으로 대조합니다. 결과 발표 전에는 점수·등수·당첨 여부를 매기지 않습니다.':'추첨 전에 저장된 번호와 같은 회차의 당첨번호를 비교합니다. 본번호 일치는 실선, 보너스 일치는 점선으로 표시합니다.';
+    this.node('predictions-heading').textContent=`${formatRound(presentation.round)} · ${awaiting?'리뷰 추적번호':'추천번호 결과'}`;
+    this.node('predictions-note').textContent=awaiting?'추첨 전에 저장한 공식 생성번호와 구매 시 연결된 생성번호를 추적합니다. 이후 새 번호를 생성해도 구매 연결 번호는 유지되며, 같은 회차 당첨번호 발표 후 자동 대조합니다.':'추첨 전에 저장된 공식 생성번호와 구매 연결 번호를 같은 회차 당첨번호와 비교합니다. 구매추적 행은 공식 누적 별점을 중복 가산하지 않고 해당 복권의 생성 이력을 보존합니다.';
     this.rows('reviews',(data.reviews||[]).map(r=>{
       const now=current.get(r.method_id),rated=presentation.evaluated&&now&&Number.isFinite(now.review_score);
       const score=rated?`${rr.status==='provisional'?'잠정 ':''}${now.review_score.toFixed(1)}점`:now?'추첨 대기':'이번 회차 기록 없음';
