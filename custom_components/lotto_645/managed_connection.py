@@ -1,8 +1,8 @@
-"""Managed per-installation connection state; no user account is required.
+"""Managed per-installation connection state.
 
-Existing operator-provisioned identities remain valid. New and former member-linked
-installations use bounded anonymous enrollment at the fixed Formulab Lotto origin.
-No shared service credential is shipped in the integration.
+Anonymous enrollment remains the default and requires no account. A user may
+optionally link the installation to a Lotto Lab member so the server can apply
+that member's standard/paid Jev entitlement. No shared credential is shipped.
 """
 from __future__ import annotations
 
@@ -65,31 +65,6 @@ def _migrate_retired_origin(saved):
     return True
 
 
-def _member_to_automatic(saved):
-    """Replace the temporary member grant with an installation-local identity."""
-    if not isinstance(saved, dict) or saved.get("source") != "member":
-        return False
-    values = connection_values(saved.get("credentials"))
-    journal_scope = saved.get("journal_scope") or _scope(values)
-    context_secret = saved.get("context_secret") or values[CONF_SERVICE_TOKEN] or secrets.token_urlsafe(32)
-    saved.clear()
-    saved.update({
-        "version": 1,
-        "source": "automatic",
-        "installation_id": uuid.uuid4().hex,
-        "credentials": {
-            CONF_SERVICE_URL: DEFAULT_SERVICE_URL,
-            CONF_SERVICE_TOKEN: secrets.token_urlsafe(32),
-            CONF_SERVICE_CERT: "",
-        },
-        "enrolled": False,
-        "expires_at": 0,
-        "journal_scope": journal_scope,
-        "context_secret": context_secret,
-    })
-    return True
-
-
 class ManagedConnection:
     def __init__(self, store):
         self.store = store
@@ -111,13 +86,18 @@ class ManagedConnection:
             ):
                 raise ValueError("invalid_managed_storage")
             connection_values(saved.get("credentials"))
-            changed = _member_to_automatic(saved)
-            changed = _migrate_retired_origin(saved) or changed
+            changed = _migrate_retired_origin(saved)
             if saved["source"] == "automatic":
                 iid = str(saved.get("installation_id", ""))
                 if not re.fullmatch(r"[0-9a-f]{32}", iid):
                     raise ValueError("invalid_installation_id")
                 saved.setdefault("expires_at", 0)
+            elif saved["source"] == "member":
+                if not re.fullmatch(r"[0-9a-f]{32}", str(saved.get("device_id", ""))):
+                    raise ValueError("invalid_member_device_id")
+                if not isinstance(saved.get("refresh_token"), str):
+                    raise ValueError("invalid_member_refresh_token")
+                saved.setdefault("access_expires_at", 0)
             if changed:
                 connection_values(saved.get("credentials"))
                 try:
@@ -133,7 +113,6 @@ class ManagedConnection:
             if saved.get("source") != "member":
                 raise ValueError("invalid_member_bootstrap")
             connection_values(saved.get("credentials"))
-            _member_to_automatic(saved)
         elif legacy and legacy.get(CONF_SERVICE_URL) and legacy.get(CONF_SERVICE_TOKEN):
             saved = {
                 "version": 1,
@@ -160,7 +139,9 @@ class ManagedConnection:
         self.state = saved
 
     def invalidate(self):
-        if self.state and self.state["source"] == "automatic":
+        if self.state and self.state["source"] == "member":
+            self.state["access_expires_at"] = 0
+        elif self.state and self.state["source"] == "automatic":
             self.state["enrolled"] = False
             self.state["expires_at"] = 0
 
@@ -176,9 +157,13 @@ class ManagedConnection:
 
     @property
     def needs_refresh(self):
-        if not self.state or self.state["source"] != "automatic":
+        if not self.state:
             return False
-        return not self.state.get("enrolled") or float(self.state.get("expires_at") or 0) < time.time() + 7 * 86400
+        if self.state["source"] == "member":
+            return float(self.state.get("access_expires_at") or 0) < time.time() + 60
+        if self.state["source"] == "automatic":
+            return not self.state.get("enrolled") or float(self.state.get("expires_at") or 0) < time.time() + 7 * 86400
+        return False
 
     async def ensure_enrolled(self, session):
         async with self._refresh_lock:
@@ -188,6 +173,10 @@ class ManagedConnection:
         if not self.state:
             raise LabServiceError("managed_connection_missing")
         if self.state["source"] == "operator":
+            return
+        if self.state["source"] == "member":
+            if self.needs_refresh:
+                await self._refresh_member(session)
             return
         if self.state["source"] != "automatic":
             raise LabServiceError("managed_connection_invalid")
@@ -251,6 +240,50 @@ class ManagedConnection:
 
         saved["enrolled"] = True
         saved["expires_at"] = float(expires)
+        await self.store.async_save(saved)
+        self.state = saved
+        self.retry_at = 0.0
+
+    async def _refresh_member(self, session):
+        if not self.state or self.state.get("source") != "member":
+            raise LabServiceError("managed_connection_invalid")
+        if time.monotonic() < self.retry_at:
+            raise LabServiceError("member_connection_pending")
+        self.retry_at = time.monotonic() + 30
+        from .member_link import CLIENT_ID, request, valid_tokens
+
+        saved = copy.deepcopy(self.state)
+        if not saved.get("pending_rotation"):
+            saved["pending_rotation"] = secrets.token_urlsafe(24)
+            await self.store.async_save(saved)
+            self.state = saved
+        try:
+            tokens = valid_tokens(
+                await request(
+                    session,
+                    "/oauth/token",
+                    {
+                        "client_id": CLIENT_ID,
+                        "grant_type": "refresh_token",
+                        "refresh_token": saved["refresh_token"],
+                        "rotation_id": saved["pending_rotation"],
+                    },
+                )
+            )
+        except LabServiceError as exc:
+            if exc.code == "invalid_grant":
+                saved["link_required"] = True
+                await self.store.async_save(saved)
+                self.state = saved
+                raise LabServiceError("member_link_required") from exc
+            raise
+        if tokens["device_id"] != saved["device_id"]:
+            raise LabServiceError("invalid_member_response")
+        saved["credentials"][CONF_SERVICE_TOKEN] = tokens["access_token"]
+        saved["refresh_token"] = tokens["refresh_token"]
+        saved["access_expires_at"] = time.time() + tokens["expires_in"]
+        saved.pop("pending_rotation", None)
+        saved.pop("link_required", None)
         await self.store.async_save(saved)
         self.state = saved
         self.retry_at = 0.0
