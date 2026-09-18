@@ -30,3 +30,11 @@ def test_overview_has_no_recommendation_summary():
     assert "purchase_match" in text and "match-badge" in text
     assert "generation_matches" in script and "구매번호 일치" in text
     assert 'id="home-wallet-heading"' in text and 'class="draw-stage"' in text
+
+
+def test_native_formula_entities_expose_purchase_match_marker():
+    sensor = (R / 'sensor.py').read_text(encoding='utf-8')
+    assert sensor.count('✓구매일치 |') == 2
+    assert sensor.count('mdi:ticket-confirmation') >= 2
+    assert '"purchase_match": bool(matches)' in sensor
+    assert '"purchase_matches": matches' in sensor
