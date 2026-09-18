@@ -13,10 +13,6 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 from .const import CONF_PERSONAL_CONSENT
 from .lab_client import LabServiceError
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.storage import Store
-from .managed_connection import ManagedConnection
-from .member_link import start as start_member_link, poll as poll_member_link, state_from_tokens
 
 from .const import (
     CONF_AI_AUTO_GENERATE,
@@ -227,7 +223,7 @@ def _normalize_submitted_methods(raw_methods: object) -> tuple[str, ...]:
 class Lotto645ConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Lotto 6/45 Analysis."""
 
-    VERSION = 4
+    VERSION = 5
 
     @staticmethod
     @callback
@@ -236,24 +232,11 @@ class Lotto645ConfigFlow(ConfigFlow, domain=DOMAIN):
         return Lotto645OptionsFlow(config_entry)
 
     async def async_step_user(self, user_input=None):
+        """Create one local entry; service enrollment is automatic during setup."""
+        del user_input
         if self._async_current_entries():
             return self.async_abort(reason='single_instance_allowed')
-        errors={}
-        try:
-            session=async_get_clientsession(self.hass)
-            grant=getattr(self,'_member_grant',None)
-            if grant is None:
-                self._member_grant=await start_member_link(session)
-            elif user_input is not None:
-                tokens=await poll_member_link(session,grant)
-                return self.async_create_entry(title=NAME,data={'_member_link':state_from_tokens(tokens)})
-        except LabServiceError as exc:
-            errors['base']='member_waiting' if exc.code in ('authorization_pending','slow_down') else 'member_link_failed'
-            if exc.code in ('expired_token','access_denied','invalid_grant'):
-                self._member_grant=None
-        grant=getattr(self,'_member_grant',None) or {}
-        return self.async_show_form(step_id='user',data_schema=vol.Schema({}),errors=errors,
-            description_placeholders={'url':grant.get('url','https://lotto.formulab.kr'), 'code':grant.get('user_code','—')})
+        return self.async_create_entry(title=NAME, data={})
 
 
 class Lotto645OptionsFlow(OptionsFlow):
@@ -271,34 +254,9 @@ class Lotto645OptionsFlow(OptionsFlow):
         del user_input
         return self.async_show_menu(
             step_id="init",
-            menu_options=["account", "recommendations", "saju", "purchases"],
+            menu_options=["recommendations", "saju", "purchases"],
         )
 
-
-
-    async def async_step_account(self,user_input=None):
-        errors={};store=Store(self.hass,1,f'{DOMAIN}.connection.{self._entry.entry_id}')
-        try:
-            manager=ManagedConnection(store)
-            await manager.load({**dict(self._entry.data),**dict(self._entry.options)})
-            session=async_get_clientsession(self.hass)
-            grant=getattr(self,'_member_grant',None)
-            if grant is None:
-                self._member_grant=await start_member_link(session,manager.state)
-            elif user_input is not None:
-                tokens=await poll_member_link(session,grant)
-                state=state_from_tokens(tokens,manager.state)
-                await store.async_save(state)
-                self.hass.async_create_task(self.hass.config_entries.async_reload(self._entry.entry_id))
-                return self.async_create_entry(title='',data=self._options)
-        except (LabServiceError,OSError,ValueError) as exc:
-            code=getattr(exc,'code','member_link_failed')
-            errors['base']='member_waiting' if code in ('authorization_pending','slow_down') else 'member_link_failed'
-            if code in ('expired_token','access_denied','invalid_grant'):
-                self._member_grant=None
-        grant=getattr(self,'_member_grant',None) or {}
-        return self.async_show_form(step_id='account',data_schema=vol.Schema({}),errors=errors,
-            description_placeholders={'url':grant.get('url','https://lotto.formulab.kr'),'code':grant.get('user_code','—')})
 
     async def async_step_recommendations(
         self, user_input: dict[str, Any] | None = None

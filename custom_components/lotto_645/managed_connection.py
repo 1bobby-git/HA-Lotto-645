@@ -1,18 +1,22 @@
-"""Private per-installation connection state; never a user options form.
+"""Managed per-installation connection state; no user account is required.
 
-Existing operator-provisioned identities are migrated without changing token,
-origin or generation journal. New installations require explicit member approval at the fixed service
-origin. No shared credential is shipped.
+Existing operator-provisioned identities remain valid. New and former member-linked
+installations use bounded anonymous enrollment at the fixed Formulab Lotto origin.
+No shared service credential is shipped in the integration.
 """
 from __future__ import annotations
+
 import asyncio
 import copy
 import hashlib
+import json
 import re
 import secrets
 import time
 import uuid
+
 import aiohttp
+
 from .const import CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CERT
 from .lab_client import LabServiceError, service_origin, CLIENT_USER_AGENT
 
@@ -42,22 +46,47 @@ def without_user_connection(raw):
     return {k: v for k, v in dict(raw).items() if k not in CONNECTION_KEYS and k not in REMOVED_OPTIONS}
 
 
-def _migrate_retired_origin(saved):
-    """Rewrite the retired service origin in place, pinning the old journal scope.
+def _scope(values):
+    return hashlib.sha256(
+        (values.get(CONF_SERVICE_URL, "") + "\0" + values.get(CONF_SERVICE_TOKEN, "")).encode()
+    ).hexdigest()[:24]
 
-    Tokens, device identity and records are preserved; only the endpoint moves.
-    Returns True when the stored state changed and must be persisted.
-    """
+
+def _migrate_retired_origin(saved):
+    """Move the retired hostname without changing an automatic/operator identity."""
     if not isinstance(saved, dict):
         return False
-    creds = saved.get('credentials')
+    creds = saved.get("credentials")
     if not isinstance(creds, dict) or creds.get(CONF_SERVICE_URL) != RETIRED_SERVICE_ORIGIN:
         return False
-    if not saved.get('journal_scope'):
-        token = creds.get(CONF_SERVICE_TOKEN, '')
-        saved['journal_scope'] = hashlib.sha256(
-            (RETIRED_SERVICE_ORIGIN + '\0' + str(token)).encode()).hexdigest()[:24]
+    if not saved.get("journal_scope"):
+        saved["journal_scope"] = _scope(creds)
     creds[CONF_SERVICE_URL] = DEFAULT_SERVICE_URL
+    return True
+
+
+def _member_to_automatic(saved):
+    """Replace the temporary member grant with an installation-local identity."""
+    if not isinstance(saved, dict) or saved.get("source") != "member":
+        return False
+    values = connection_values(saved.get("credentials"))
+    journal_scope = saved.get("journal_scope") or _scope(values)
+    context_secret = saved.get("context_secret") or values[CONF_SERVICE_TOKEN] or secrets.token_urlsafe(32)
+    saved.clear()
+    saved.update({
+        "version": 1,
+        "source": "automatic",
+        "installation_id": uuid.uuid4().hex,
+        "credentials": {
+            CONF_SERVICE_URL: DEFAULT_SERVICE_URL,
+            CONF_SERVICE_TOKEN: secrets.token_urlsafe(32),
+            CONF_SERVICE_CERT: "",
+        },
+        "enrolled": False,
+        "expires_at": 0,
+        "journal_scope": journal_scope,
+        "context_secret": context_secret,
+    })
     return True
 
 
@@ -77,12 +106,19 @@ class ManagedConnection:
             return
         saved = await self.store.async_load()
         if saved is not None:
-            if not isinstance(saved, dict) or saved.get("version") != 1 or saved.get("source") not in ("operator", "automatic", "member"):
+            if not isinstance(saved, dict) or saved.get("version") != 1 or saved.get("source") not in (
+                "operator", "automatic", "member"
+            ):
                 raise ValueError("invalid_managed_storage")
             connection_values(saved.get("credentials"))
-            if saved["source"] == "automatic" and not re.fullmatch(r"[0-9a-f]{32}", str(saved.get("installation_id", ""))):
-                raise ValueError("invalid_installation_id")
-            if _migrate_retired_origin(saved):
+            changed = _member_to_automatic(saved)
+            changed = _migrate_retired_origin(saved) or changed
+            if saved["source"] == "automatic":
+                iid = str(saved.get("installation_id", ""))
+                if not re.fullmatch(r"[0-9a-f]{32}", iid):
+                    raise ValueError("invalid_installation_id")
+                saved.setdefault("expires_at", 0)
+            if changed:
                 connection_values(saved.get("credentials"))
                 try:
                     await self.store.async_save(saved)
@@ -91,83 +127,130 @@ class ManagedConnection:
                     raise
             self.state = saved
             return
-        if legacy and legacy.get('_member_link'):
-            saved=copy.deepcopy(legacy['_member_link'])
-            if saved.get('source')!='member':raise ValueError('invalid_member_bootstrap')
-            connection_values(saved.get('credentials'))
+
+        if legacy and legacy.get("_member_link"):
+            saved = copy.deepcopy(legacy["_member_link"])
+            if saved.get("source") != "member":
+                raise ValueError("invalid_member_bootstrap")
+            connection_values(saved.get("credentials"))
+            _member_to_automatic(saved)
         elif legacy and legacy.get(CONF_SERVICE_URL) and legacy.get(CONF_SERVICE_TOKEN):
-            saved = {"version": 1, "source": "operator", "credentials": connection_values(legacy), "enrolled": True}
+            saved = {
+                "version": 1,
+                "source": "operator",
+                "credentials": connection_values(legacy),
+                "enrolled": True,
+            }
         else:
-            saved = {"version": 1, "source": "automatic", "installation_id": uuid.uuid4().hex,
-                     "credentials": {CONF_SERVICE_URL: DEFAULT_SERVICE_URL,
-                                     CONF_SERVICE_TOKEN: secrets.token_urlsafe(32), CONF_SERVICE_CERT: ""},
-                     "enrolled": False}
-        # Persist the exact identity before network use. A timeout cannot create a
-        # second identity, and a failed save never removes the legacy credential.
+            saved = {
+                "version": 1,
+                "source": "automatic",
+                "installation_id": uuid.uuid4().hex,
+                "credentials": {
+                    CONF_SERVICE_URL: DEFAULT_SERVICE_URL,
+                    CONF_SERVICE_TOKEN: secrets.token_urlsafe(32),
+                    CONF_SERVICE_CERT: "",
+                },
+                "enrolled": False,
+                "expires_at": 0,
+            }
         if _migrate_retired_origin(saved):
             connection_values(saved.get("credentials"))
         await self.store.async_save(saved)
         self.state = saved
 
     def invalidate(self):
-        if self.state and self.state['source']=='member':
-            self.state['access_expires_at']=0
-        elif self.state and self.state['source']=='automatic':
-            self.state['enrolled']=False
+        if self.state and self.state["source"] == "automatic":
+            self.state["enrolled"] = False
+            self.state["expires_at"] = 0
 
     @property
     def journal_scope(self):
-        if self.state and self.state.get('journal_scope'):
-            return self.state['journal_scope']
-        import hashlib
-        values=self.values
-        return hashlib.sha256((values.get(CONF_SERVICE_URL,'')+'\0'+values.get(CONF_SERVICE_TOKEN,'')).encode()).hexdigest()[:24]
+        if self.state and self.state.get("journal_scope"):
+            return self.state["journal_scope"]
+        return _scope(self.values)
 
     @property
     def context_secret(self):
-        return (self.state or {}).get('context_secret') or self.values.get(CONF_SERVICE_TOKEN,'')
+        return (self.state or {}).get("context_secret") or self.values.get(CONF_SERVICE_TOKEN, "")
 
     @property
     def needs_refresh(self):
-        return bool(self.state and self.state['source']=='member' and self.state.get('access_expires_at',0)<time.time()+60)
+        if not self.state or self.state["source"] != "automatic":
+            return False
+        return not self.state.get("enrolled") or float(self.state.get("expires_at") or 0) < time.time() + 7 * 86400
 
     async def ensure_enrolled(self, session):
-        # Concurrent sensor refreshes share one token rotation and persisted result.
         async with self._refresh_lock:
             await self._ensure_enrolled(session)
 
     async def _ensure_enrolled(self, session):
         if not self.state:
-            raise LabServiceError('member_link_required')
-        if self.state['source']=='operator':
-            return  # Explicitly operator-provisioned identity, not anonymous enrollment.
-        if self.state['source']!='member':
-            raise LabServiceError('member_link_required')
-        if self.state.get('link_required'):
-            raise LabServiceError('member_link_required')
+            raise LabServiceError("managed_connection_missing")
+        if self.state["source"] == "operator":
+            return
+        if self.state["source"] != "automatic":
+            raise LabServiceError("managed_connection_invalid")
         if not self.needs_refresh:
             return
-        if time.monotonic()<self.retry_at:
-            raise LabServiceError('member_connection_pending')
-        self.retry_at=time.monotonic()+30
-        from .member_link import request,valid_tokens,CLIENT_ID
-        saved=copy.deepcopy(self.state)
-        if not saved.get('pending_rotation'):
-            saved['pending_rotation']=secrets.token_urlsafe(24)
-            await self.store.async_save(saved);self.state=saved
+        if time.monotonic() < self.retry_at:
+            raise LabServiceError("connection_pending")
+        self.retry_at = time.monotonic() + 30
+
+        saved = copy.deepcopy(self.state)
+        values = connection_values(saved["credentials"])
+        body = {
+            "installation_id": saved["installation_id"],
+            "credential": values[CONF_SERVICE_TOKEN],
+        }
         try:
-            tokens=valid_tokens(await request(session,'/oauth/token',{
-                'client_id':CLIENT_ID,'grant_type':'refresh_token',
-                'refresh_token':saved['refresh_token'],'rotation_id':saved['pending_rotation']}))
-        except LabServiceError as exc:
-            if exc.code=='invalid_grant':
-                saved['link_required']=True;await self.store.async_save(saved);self.state=saved
-                raise LabServiceError('member_link_required') from exc
+            async with session.post(
+                values[CONF_SERVICE_URL] + "/v1/ha/installations",
+                json=body,
+                headers={"Accept": "application/json", "User-Agent": CLIENT_USER_AGENT},
+                timeout=aiohttp.ClientTimeout(total=15),
+                allow_redirects=False,
+                ssl=True,
+            ) as response:
+                if response.content_type != "application/json":
+                    raise LabServiceError("invalid_enrollment_response")
+                parts, size = [], 0
+                async for part in response.content.iter_chunked(2048):
+                    size += len(part)
+                    if size > 16384:
+                        raise LabServiceError("invalid_enrollment_response")
+                    parts.append(part)
+                try:
+                    payload = json.loads(b"".join(parts))
+                except (ValueError, UnicodeError) as exc:
+                    raise LabServiceError("invalid_enrollment_response") from exc
+                if response.status == 429:
+                    raise LabServiceError("usage_limited")
+                if response.status in (403, 409):
+                    raise LabServiceError(payload.get("error") or "automatic_connection_refused")
+                if response.status >= 500:
+                    raise LabServiceError(payload.get("error") or "service_unavailable")
+                if response.status not in (200, 201):
+                    raise LabServiceError("unexpected_enrollment_status")
+        except LabServiceError:
             raise
-        if tokens['device_id']!=saved['device_id']:
-            raise LabServiceError('invalid_member_response')
-        saved['credentials'][CONF_SERVICE_TOKEN]=tokens['access_token']
-        saved['refresh_token']=tokens['refresh_token']
-        saved['access_expires_at']=time.time()+tokens['expires_in']
-        saved.pop('pending_rotation',None)
-        await self.store.async_save(saved);self.state=saved;self.retry_at=0
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            raise LabServiceError("connection_unavailable") from exc
+
+        expires = payload.get("expires_at")
+        expected_device = "ha-" + saved["installation_id"]
+        if (
+            payload.get("contract_version") != 1
+            or payload.get("installation_id") != saved["installation_id"]
+            or payload.get("device_id") != expected_device
+            or payload.get("enrolled") is not True
+            or not isinstance(expires, (int, float))
+            or expires < time.time() + 3600
+        ):
+            raise LabServiceError("invalid_enrollment_response")
+
+        saved["enrolled"] = True
+        saved["expires_at"] = float(expires)
+        await self.store.async_save(saved)
+        self.state = saved
+        self.retry_at = 0.0
