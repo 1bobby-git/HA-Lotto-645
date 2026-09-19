@@ -22,7 +22,8 @@
         "menu_options": {
           "recommendations": "Draw formulas, AI, and data source",
           "saju": "Personal Four Pillars profile",
-          "purchases": "Purchased tickets: enter / edit"
+          "purchases": "Purchased tickets: enter / edit",
+          "account": "Lotto Lab account (optional)"
         }
       },
       "recommendations": {
@@ -87,6 +88,10 @@
           "game_e": "Game E (six numbers)",
           "clear_round": "Delete this round (ignore input lines)"
         }
+      },
+      "account": {
+        "title": "Connect Lotto Lab account",
+        "description": "Open [Lotto Lab]({url}), sign in, verify code **{code}**, and approve the connection. Without an account, Home Assistant continues in the standard/free selection mode. A linked account uses the server-side membership entitlement for Jev selection."
       }
     },
     "error": {
@@ -102,7 +107,9 @@
       "purchase_game_limit": "Enter at most five games (A–E) per draw.",
       "select_korean_birthplace": "Choose one of the 17 South Korean regions.",
       "invalid_generation_rules": "조건이 서로 충돌하거나 입력 범위가 올바르지 않습니다. 위 안내를 확인하세요.",
-      "service_connection_failed": "서버 주소·토큰·인증서 또는 입력 조건을 확인하세요. 기존 기록은 유지됩니다."
+      "service_connection_failed": "서버 주소·토큰·인증서 또는 입력 조건을 확인하세요. 기존 기록은 유지됩니다.",
+      "member_waiting": "Approval is pending. Approve the connection in Lotto Lab, then submit again.",
+      "member_link_failed": "Unable to link the Lotto Lab account. Try again."
     },
     "abort": {
       "purchase_integration_not_ready": "Wait for the integration to finish setup.",
