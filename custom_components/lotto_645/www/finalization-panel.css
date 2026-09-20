@@ -1,0 +1,24 @@
+lotto-finalization-panel{display:block;min-width:0;max-width:100%;color:var(--ink,#333d4b);font:14px/1.6 var(--font-family,inherit)}
+.finalization-panel{border:1px solid var(--line,#e5e8eb);border-radius:12px;background:var(--surface,#fff);margin:10px 0;min-width:0}
+.finalization-panel>summary{padding:12px 14px;cursor:pointer;font-size:15px;font-weight:650}
+.finalization-content{padding:0 14px 14px;max-height:60vh;overflow:auto;overscroll-behavior:contain;box-sizing:border-box}
+.finalization-content>p{margin:7px 0}.finalization-note{font-size:12px;color:var(--muted,#6b7684);line-height:1.6}
+.finalization-content select{width:100%;min-width:0;max-width:100%;font:inherit;padding:8px;border-radius:7px;border:1px solid var(--line,#e5e8eb);background:var(--surface,#fff);color:inherit}
+.finalization-controls{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0;align-items:center}
+.finalization-controls button{font:inherit;min-height:38px;padding:6px 10px;border:1px solid var(--line,#e5e8eb);border-radius:7px;background:var(--surface,#fff);color:inherit;cursor:pointer}
+.finalization-controls button:disabled{opacity:.45;cursor:not-allowed}.finalization-controls input{font:inherit;width:70px;padding:6px;border:1px solid var(--line,#e5e8eb);border-radius:7px;background:var(--surface,#fff);color:inherit}
+.finalization-controls label{font-size:13px}.finalization-blocked{font-size:12px;overflow-wrap:anywhere}.finalization-blocked p{margin:5px 0}
+.finalization-results h3{font-size:15px;margin:12px 0 6px}.finalization-game{display:flex;align-items:center;gap:8px;margin:8px 0;min-width:0}
+.finalization-game>span{font-size:12px;flex:0 1 180px;overflow-wrap:anywhere}.finalization-balls{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
+.final-ball{display:inline-grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:50%;font-size:13px;font-weight:700;text-decoration:none!important;text-shadow:none!important;box-shadow:none!important}
+.finalization-results table{width:100%;font-size:12px;border-collapse:collapse}.finalization-results th,.finalization-results td{padding:5px;text-align:right;border-bottom:1px solid var(--line,#e5e8eb);position:static!important}
+.finalization-results th:first-child,.finalization-results td:first-child{text-align:left}.finalization-results caption{text-align:left;font-size:12px;color:var(--muted,#6b7684)}
+.finalization-provenance{font-size:11px;overflow-wrap:anywhere;color:var(--muted,#6b7684)}
+.finalization-content [hidden]{display:none!important}.finalization-content :focus-visible{outline:2px solid #0063cc;outline-offset:2px}
+@media(max-width:600px){.finalization-controls input,.finalization-content select{font-size:16px}.finalization-controls button{min-height:44px}.finalization-game>span{flex-basis:76px}.finalization-results table{font-size:11px}.finalization-content{padding-inline:10px}}
+@media(prefers-reduced-motion:reduce){.finalization-content *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+.finalization-panel .finalization-table-scroll{overflow-x:auto;max-width:100%;overscroll-behavior:contain}
+.finalization-panel .finalization-table-scroll table{min-width:420px;width:100%;border-collapse:collapse}
+.finalization-panel .finalization-table-scroll caption{text-align:left;font-size:12px;line-height:1.5;padding:8px 0}
+.finalization-panel select[aria-label="보존된 최종 실행 기록"]{margin-top:8px;min-width:0;width:100%}

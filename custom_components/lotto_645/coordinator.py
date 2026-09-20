@@ -53,7 +53,8 @@ from .fast_result_state import FastResultState, evaluate_saved
 from .review import ReviewBook
 from .review_state import ReviewState
 from .published_results import draw_cutoff
-from .purchased_tickets import PurchaseBook, combined_result, parse_games
+from .purchased_tickets import combined_result, parse_games
+from .finalization_purchase import FinalizationPurchaseBook as PurchaseBook
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -278,6 +279,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             updated = self.purchase_book.updated(
                 round_no, values, clear=clear, ticket_id=ticket_id, new_ticket=new_ticket,
                 formula_links_by_slot=formula_links,
+                finalization_links_by_slot=self.service.finalizer.purchase_matches(round_no,values) if not clear and getattr(self.service,'finalizer',None) else {},
             )
             await self._purchase_store.async_save(updated.to_storage())
             # Do not replace the in-memory copy before a successful durable write.

@@ -196,3 +196,44 @@ class LottoLabClient:
                                     requested_ids=ids, expected_generation_id=gid)
         except (ContractError, TypeError, ValueError) as exc:
             raise LabServiceError("invalid_generation_response") from exc
+
+    async def async_finalization_sources(self):
+        value=await self._request('GET','/v1/finalizations/sources')
+        if not isinstance(value,dict) or value.get('capability')!='post_generation_ticket_set_v1':
+            raise LabServiceError('finalization_not_supported')
+        return value
+
+    async def async_finalization_readiness(self,batch,ids):
+        from urllib.parse import urlencode
+        from .finalization_contract import parse_readiness
+        path='/v1/finalizations/readiness?'+urlencode({'source_batch_id':identifier(batch),'formula_ids':','.join(method_ids(ids))})
+        try:return parse_readiness(await self._request('GET',path))
+        except (ContractError,TypeError,ValueError):raise LabServiceError('invalid_finalization_response') from None
+
+    async def _final_record(self,method,path,body=None,*,expected_run_id=None):
+        from .finalization_contract import parse_finalization
+        try:return parse_finalization(await self._request(method,path,body=body,request_key=body.get('request_key') if body else None),expected_run_id=expected_run_id,expected_snapshot=body.get('input_snapshot_hash') if body else None)
+        except (ContractError,TypeError,ValueError,KeyError):raise LabServiceError('invalid_finalization_response') from None
+
+    async def async_start_finalization(self,body):
+        return await self._final_record('POST','/v1/finalizations',body)
+
+    async def async_get_finalization(self,run):
+        return await self._final_record('GET','/v1/finalizations/'+identifier(run),expected_run_id=run)
+
+    async def async_finalization_by_key(self,key):
+        return await self._final_record('GET','/v1/finalizations/by-key/'+identifier(key))
+
+    async def async_cancel_finalization(self,run):
+        return await self._final_record('POST','/v1/finalizations/'+identifier(run)+'/cancel',{},expected_run_id=run)
+
+    async def async_cancel_finalization_request(self,key):
+        from .finalization_contract import parse_finalization
+        value=await self._request('POST','/v1/finalizations/by-key/'+identifier(key)+'/cancel',body={})
+        if isinstance(value,dict) and value.get('cancelled_request') is True:
+            if value.get('request_key')!=key or value.get('job_created') is not False:
+                raise LabServiceError('invalid_finalization_response')
+            return {'cancelled_request':True,'request_key':key,'job_created':False}
+        try:return parse_finalization(value)
+        except (ContractError,ValueError,TypeError,KeyError):
+            raise LabServiceError('invalid_finalization_response') from None

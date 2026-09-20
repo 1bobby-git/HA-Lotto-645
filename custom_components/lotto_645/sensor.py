@@ -97,6 +97,7 @@ async def async_setup_entry(
         LottoDrawNumbersSensor(coordinator),
         LottoWinningStatusSensor(coordinator),
         LottoPurchasedTicketsSensor(coordinator),
+        LottoFinalizationSensor(coordinator),
     ]
     if METHOD_MYUNGRI_HETU in coordinator.configured_method_ids:
         entities.append(LottoSajuProfileSensor(coordinator))
@@ -599,3 +600,27 @@ class LottoLatestDrawSensor(Lotto645Entity, SensorEntity):
             "data_source": SOURCE_NAME,
             "source_url": SOURCE_RESULT_URL,
         }
+
+
+class LottoFinalizationSensor(Lotto645Entity, SensorEntity):
+    """Small stable summary only; never store ticket sets or optimization samples."""
+    _attr_name = '최종 번호 산출 상태'
+    _attr_icon = 'mdi:selection-multiple'
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator)
+        self._attr_unique_id = f'{coordinator.entry.entry_id}_finalization'
+
+    @property
+    def available(self):
+        return super().available and 'post_generation_ticket_set_v1' in self.coordinator.service.info.get('capabilities', [])
+
+    @property
+    def native_value(self):
+        return self.coordinator.service.final_summary.get('job_status', 'not_started')
+
+    @property
+    def extra_state_attributes(self):
+        summary = self.coordinator.service.final_summary
+        return {key: summary.get(key) for key in ('input_state','expected_count','completed_count','game_count','completed_at')}
