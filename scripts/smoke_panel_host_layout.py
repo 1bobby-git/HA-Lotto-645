@@ -28,7 +28,7 @@ async def verify_panel_host_layout(page: Page) -> None:
     await page.evaluate("""() => {
         window.hostLayoutPrevious={parent:el.parentNode,next:el.nextSibling,
             css:el.style.cssText,hass:el._hass,narrow:el.narrow,screen:el._screen};
-        window.hostLayoutRequests=requests.length;
+        window.hostLayoutRequests=requests.filter(r=>r.type!=='lotto_645/finalization').length;
         const fixture=document.createElement('lotto-ha-layout-fixture');
         fixture.id='ha-layout-fixture';
         fixture.style.cssText='display:block;height:100%;min-width:0;';
@@ -62,8 +62,8 @@ async def verify_panel_host_layout(page: Page) -> None:
     # Moving a live panel deliberately reconnects it. Settle that read-only
     # refresh before proving CSS/sidebar changes themselves do not fetch data.
     await page.wait_for_function('!el._busy && !el._livePending && !el._liveQueued')
-    assert await page.evaluate("requests.slice(hostLayoutRequests).every(r=>r.type==='lotto_645/purchases_get')")
-    await page.evaluate('hostLayoutRequests=requests.length;el._clearSmartSync()')
+    assert await page.evaluate("requests.filter(r=>r.type!=='lotto_645/finalization').slice(hostLayoutRequests).every(r=>r.type==='lotto_645/purchases_get')")
+    await page.evaluate("hostLayoutRequests=requests.filter(r=>r.type!=='lotto_645/finalization').length;el._clearSmartSync()")
     checked = 0
     try:
         for layout in ('padding', 'margin', 'flex'):
@@ -96,7 +96,7 @@ async def verify_panel_host_layout(page: Page) -> None:
                             header:getComputedStyle(q('.ha-host-header')).display,
                             brand:box(q('.brand-logo')),tabs:box(q('.main-tabs')),
                             title:box(q('#screen-'+el._screen+' h1')),
-                            clock:box(q('lotto-panel-tools-v2-3-4'))};
+                            clock:box(q('lotto-panel-tools-v2-4-0'))};
                     }""")
                     label = (layout, width, height, sidebar, narrow, direction, screen)
                     left = sidebar if direction == 'ltr' else 0
@@ -138,7 +138,7 @@ async def verify_panel_host_layout(page: Page) -> None:
             old.remove();return result;
         }""")
         assert regression['left'] < 256 and regression['width'] > 1110, regression
-        assert await page.evaluate('requests.length===hostLayoutRequests')
+        assert await page.evaluate("requests.filter(r=>r.type!=='lotto_645/finalization').length===hostLayoutRequests && requests.filter(r=>r.type==='lotto_645/finalization').every(r=>r.action==='refresh')")
     finally:
         await page.evaluate("""() => {
             const previous=hostLayoutPrevious;

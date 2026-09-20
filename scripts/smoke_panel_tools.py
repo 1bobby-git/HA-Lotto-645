@@ -42,10 +42,10 @@ async def verify_panel_tools(page):
     await page.route('**/lotto_645_static/methods/**', serve_guide)
     await page.wait_for_function('!el._busy')
     await page.evaluate("""catalog => {
-        window.tools=el.shadowRoot.querySelector('lotto-panel-tools-v2-3-4');
+        window.tools=el.shadowRoot.querySelector('lotto-panel-tools-v2-4-0');
         window.toolsFixture={...el._latestToolsData,method_catalog:catalog,
             draw_schedule:{round:1242,basis:'regular_schedule',scheduled_at:'2026-09-19T20:35:00+09:00',
-                sales_reopen_at:'2026-09-20T06:00:00+09:00',rollover_at:'2026-09-20T06:00:00+09:00',server_now:new Date().toISOString()},
+                sales_reopen_at:'2026-09-20T06:00:00+09:00',rollover_at:'2026-09-20T06:00:00+09:00',server_now:'2026-09-18T12:00:00+00:00'},
             winning:{status:'evaluated',round:1241,winning_game_count:0,results:[]},
             reviews:catalog.map(m=>({method_id:m.method_id,label:m.name,display_name:'★1.0 · '+m.name,reviewed_rounds:1,mean_score:20,stars:1,total_score:20,history_preview:[{round:1241,review_score:20,exact_match_count:1}]})),
             review_round:{},
@@ -61,16 +61,16 @@ async def verify_panel_tools(page):
             return previousWS(msg);
         }};
         el.updateResults(toolsFixture);el._clearSmartSync();el.showScreen('home');
-        window.wsBeforeTools=requests.length;
+        window.wsBeforeTools=requests.filter(r=>r.type!=='lotto_645/finalization').length;
     }""", catalog)
     assert await page.locator('#predictions .method-info-trigger').count() == len(catalog)
     assert await page.locator('#reviews .method-info-trigger').count() == len(catalog)
-    assert await page.locator('lotto-panel-tools-v2-3-4').count() == 1
+    assert await page.locator('lotto-panel-tools-v2-4-0').count() == 1
     assert await page.locator('#upcoming-countdown').is_visible()
     assert '다가오는 제 1,242회' in await page.locator('#upcoming-round').text_content()
     assert '한국시간' in await page.locator('#upcoming-date').text_content()
-    assert not await page.locator('lotto-panel-tools-v2-3-4 .countdown').is_visible()
-    assert await page.locator('lotto-panel-tools-v2-3-4').evaluate('n=>n.getBoundingClientRect().height===0')
+    assert not await page.locator('lotto-panel-tools-v2-4-0 .countdown').is_visible()
+    assert await page.locator('lotto-panel-tools-v2-4-0').evaluate('n=>n.getBoundingClientRect().height===0')
     await page.evaluate("el.showScreen('review')")
 
     # Test unpositioned, sidebar-offset HA layouts as well as a positioned box.
@@ -88,8 +88,8 @@ async def verify_panel_tools(page):
     # The two fixture moves above run real disconnect/connect callbacks.
     # Allow their read-only refreshes, then keep the no-layout/no-timer-I/O gate.
     await page.wait_for_function('!el._busy && !el._livePending && !el._liveQueued')
-    assert await page.evaluate("requests.slice(wsBeforeTools).every(r=>r.type==='lotto_645/purchases_get')")
-    await page.evaluate('wsBeforeTools=requests.length;el._clearSmartSync()')
+    assert await page.evaluate("requests.filter(r=>r.type!=='lotto_645/finalization').slice(wsBeforeTools).every(r=>r.type==='lotto_645/purchases_get')")
+    await page.evaluate("wsBeforeTools=requests.filter(r=>r.type!=='lotto_645/finalization').length;el._clearSmartSync()")
     for width in (320,390,560,615,870,871,1366):
         await page.set_viewport_size({'width':width,'height':900})
         await page.evaluate('(narrow)=>{el.narrow=narrow;el.scrollTop=0}', width <= 870)
@@ -170,7 +170,7 @@ async def verify_panel_tools(page):
     # Explicit instants: count reaches zero at draw time, remains zero until the
     # Sunday 06:00 sales boundary, then starts the following-round countdown.
     result = await page.evaluate("""async () => {
-        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=2.3.4');
+        const {countdownState,renderGuideMarkdown}=await import('/lotto_645_static/lotto-panel-tools.js?v=2.4.0');
         const s=toolsFixture.draw_schedule;
         const prior=countdownState(s,Date.parse(s.scheduled_at)-1000);
         const at=countdownState(s,Date.parse(s.scheduled_at));
@@ -205,7 +205,7 @@ async def verify_panel_tools(page):
     assert result['scripts'] == 0 and result['links'] == ['https:']
     # A timer tick must never send purchases_get/result_check/generate requests.
     await page.wait_for_timeout(1150)
-    assert await page.evaluate('requests.length===wsBeforeTools')
+    assert await page.evaluate("requests.filter(r=>r.type!=='lotto_645/finalization').length===wsBeforeTools && requests.filter(r=>r.type==='lotto_645/finalization').every(r=>r.action==='refresh')")
     await page.evaluate("Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'))")
     assert await page.evaluate('tools._clockTimer===null')
     await page.evaluate("delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));el.remove()")

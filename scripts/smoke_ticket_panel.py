@@ -40,7 +40,7 @@ async def run():
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.on('dialog', lambda dialog: dialog.accept())
         resources = {f'/lotto_645_static/{name}': WWW / name for name in (
-            'lotto-panel-live.js', 'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js', 'lotto-panel-design.js', 'lotto-panel-tools.js'
+            'lotto-panel-live.js', 'jsQR.js', 'lotto-panel-shell.js', 'lotto-panel.js', 'lotto-panel-core.js', 'lotto-panel-view.js', 'lotto-panel-design.js', 'lotto-panel-tools.js', 'finalization-ha.js', 'finalization-panel.js', 'finalization-panel.css'
         )}
         resources['/lotto_645_brand/logo.png'] = logo
 
@@ -51,7 +51,7 @@ async def run():
                 await route.fulfill(content_type='text/html', body='''<!doctype html><html lang="ko"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{height:100%;margin:0}</style><script type="module" src="/lotto_645_static/lotto-panel-shell.js"></script></head><body></body></html>''')
             elif url.path in resources:
                 assets.add(url.path)
-                await route.fulfill(path=str(resources[url.path]), content_type='image/png' if url.path.endswith('.png') else 'text/javascript')
+                await route.fulfill(path=str(resources[url.path]), content_type='image/png' if url.path.endswith('.png') else 'text/css' if url.path.endswith('.css') else 'text/javascript')
             else:
                 await route.fulfill(status=404, body='Not found')
 

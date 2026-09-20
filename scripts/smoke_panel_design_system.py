@@ -24,7 +24,7 @@ async def verify_component_design(page: Page) -> None:
         const { applyComponentDesign } = await import('/lotto_645_static/lotto-panel-design.js?v=1.14.0');
         applyComponentDesign(el); applyComponentDesign(el);
         el._clearSmartSync();
-        window.designRequestsBefore = requests.length;
+        window.designRequestsBefore = requests.filter(r=>r.type!=='lotto_645/finalization').length;
     }""")
     assert await page.locator('style[data-lotto-component-design]').count() == 1
     assert await page.locator('style[data-lotto-official-ball-colors]').count() == 1
@@ -106,7 +106,7 @@ async def verify_component_design(page: Page) -> None:
             assert state['headerFont'] == state['bodyFont'] == state['baseFont'], (label, state)
             assert state['lead'] == '15px' and state['footer'] == '12px', (label, state)
             assert state['kicker'] == '12px' and state['kickerWeight'] == '800', (label, state)
-            assert state['mainTop'] == ('28px' if mobile else '38px'), (label, state)
+            assert state['mainTop'] == ('22px' if mobile else '30px'), (label, state)
             assert state['hero'] == ('16px' if mobile else '18px'), (label, state)
             assert state['card'] == '14px' and state['button'] == '10px', (label, state)
             assert (state['shadow'] == 'none') == dark, (label, state)
@@ -144,5 +144,5 @@ async def verify_component_design(page: Page) -> None:
         el.showScreen('home');el.scrollTop=0;
     }""")
     # Design application, theme/width switches and local tabs must not fetch data.
-    assert await page.evaluate('requests.length===designRequestsBefore')
+    assert await page.evaluate("requests.filter(r=>r.type!=='lotto_645/finalization').length===designRequestsBefore && requests.filter(r=>r.type==='lotto_645/finalization').every(r=>r.action==='refresh')")
     print(f'PASS: {checked} shared design fixtures, darker screenshot palette and unchanged layout')

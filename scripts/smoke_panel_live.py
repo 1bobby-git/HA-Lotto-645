@@ -16,7 +16,7 @@ async def verify_live_sync(page):
         addEventListener:(type,fn)=>{if(type==='ready')readyHandlers.add(fn);},
         removeEventListener:(type,fn)=>readyHandlers.delete(fn)
       };
-      window.liveWS=async msg=>{liveReads++;return liveResponse(msg);};
+      window.liveWS=async msg=>{if(msg.type==='lotto_645/finalization')return {readiness:{input_state:'not_configured',expected_count:0,completed_count:0},state:{results:[]}};liveReads++;return liveResponse(msg);};
       el.hass={...el._hass,connection:liveConnection,callWS:msg=>liveWS(msg)};
       // The preceding tools fixture intentionally detaches the panel to verify
       // cleanup. Reattach only after installing this test's connection/data.
@@ -44,7 +44,7 @@ async def verify_live_sync(page):
     assert await page.evaluate("el.node('game_a').value==='1, 2, 3, 4, 5, 6' && el._revision==='draft-revision'")
     await page.evaluate('''() => {
       el._editing=false;window.releaseLive=null;window.holdLive=true;
-      window.liveWS=async msg=>{liveReads++;const answer=liveResponse(msg);if(holdLive){holdLive=false;await new Promise(resolve=>releaseLive=resolve);}return answer;};
+      window.liveWS=async msg=>{if(msg.type==='lotto_645/finalization')return {readiness:{input_state:'not_configured',expected_count:0,completed_count:0},state:{results:[]}};liveReads++;const answer=liveResponse(msg);if(holdLive){holdLive=false;await new Promise(resolve=>releaseLive=resolve);}return answer;};
       invalidate('test');
     }''')
     await page.wait_for_function('Boolean(releaseLive) && el._busy')

@@ -29,7 +29,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-3-4'
+PANEL_TAG = 'lotto-ticket-panel-v2-4-0'
 COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel',
     'lotto-ticket-panel-v2-0-0', 'lotto-ticket-panel-v2-0-1',
@@ -39,7 +39,7 @@ COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel-v2-2-1', 'lotto-ticket-panel-v2-2-2',
     'lotto-ticket-panel-v2-2-3', 'lotto-ticket-panel-v2-2-4',
     'lotto-ticket-panel-v2-3-0', 'lotto-ticket-panel-v2-3-1',
-    'lotto-ticket-panel-v2-3-2', 'lotto-ticket-panel-v2-3-3', PANEL_TAG,
+    'lotto-ticket-panel-v2-3-2', 'lotto-ticket-panel-v2-3-3', 'lotto-ticket-panel-v2-3-4', PANEL_TAG,
 }
 WWW = Path(__file__).parent / 'www'
 FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
@@ -386,7 +386,7 @@ async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
                 StaticPathConfig('/lotto_645_brand', str(Path(__file__).parent / 'brand'), False)])
             shared['brand_registered'] = True
         if not shared.get('commands_registered', shared.get('registered', False)):
-            for handler in (purchases_get, purchases_export, qr_preview, purchases_save, result_check, subscribe_updates):
+            for handler in (purchases_get, purchases_export, qr_preview, purchases_save, result_check, subscribe_updates, finalization_action):
                 websocket_api.async_register_command(hass, handler)
             shared['commands_registered'] = True
         shared['source_logo_verified'] = await hass.async_add_executor_job(_source_logo_available)
@@ -418,3 +418,25 @@ def async_remove_ticket_panel(hass: HomeAssistant, entry_id: str, *, permanent: 
         existing = hass.data.get(frontend.DATA_PANELS, {}).get(PATH)
         if existing and (getattr(existing, 'config', None) or {}).get('_panel_custom', {}).get('name') in COMPATIBLE_PANEL_TAGS:
             frontend.async_remove_panel(hass, PATH)
+
+
+@websocket_api.websocket_command({
+    'type':'lotto_645/finalization',vol.Required('entry_id'):str,
+    vol.Optional('action',default='refresh'):vol.In(('refresh','select','start','cancel')),
+    vol.Optional('source_batch_id'):vol.All(str,vol.Length(max=160)),
+    vol.Optional('source_selection_revision'):vol.All(str,vol.Length(max=128)),
+    vol.Optional('input_snapshot_hash'):vol.All(str,vol.Length(min=64,max=64)),
+    vol.Optional('game_count'):vol.All(int,vol.Range(min=1,max=20)),
+    vol.Optional('additional',default=False):bool,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def finalization_action(hass,connection,msg):
+    from .lab_client import LabServiceError
+    try:
+        coordinator=_coordinator(hass,msg)
+        result=await coordinator.service.finalization_state(msg.get('action','refresh'),msg)
+    except (LabServiceError,HomeAssistantError,ValueError,OSError) as error:
+        code=error.code if isinstance(error,LabServiceError) else 'finalization_unavailable'
+        connection.send_error(msg['id'],code,'선택한 원본의 완료 여부·권한·출력 게임 수를 확인하세요. 기존 결과는 보존됩니다.')
+    else:connection.send_result(msg['id'],result)

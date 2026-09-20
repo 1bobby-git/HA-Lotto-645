@@ -17,7 +17,9 @@ from .service_contract import Catalog, numbers
 from .methods import install_catalog, METHOD_MYUNGRI_HETU, METHODS_BY_ID
 from .models import AnalysisResult, Recommendation
 
-class ServiceRuntime:
+from .finalization_runtime import FinalizationRuntime
+
+class ServiceRuntime(FinalizationRuntime):
     def __init__(self, owner):
         self.owner = owner
         self.hass = owner.hass
@@ -35,6 +37,9 @@ class ServiceRuntime:
         self.catalog_store = Store(self.hass,1,f'{DOMAIN}.catalog.{self.entry.entry_id}')
         self.generator = None
         self.ai_generator = None
+        self.finalizer = None
+        self.final_follow = None
+        self.final_summary = {}
 
     def _configure_connection(self, values):
         scope = self.connection_manager.journal_scope
@@ -46,6 +51,9 @@ class ServiceRuntime:
             self.client.set_access_token(values[CONF_SERVICE_TOKEN])
             self.connection = dict(values)
             return
+        if getattr(self,'final_follow',None) and not self.final_follow.done():self.final_follow.cancel()
+        self.finalizer=None
+        self.final_summary={}
         self._configured_scope = scope
         self.connection = dict(values)
         self.client = LottoLabClient(async_get_clientsession(self.hass),
@@ -89,6 +97,8 @@ class ServiceRuntime:
             install_catalog(catalog)
             self.status = 'ready'
             self.catalog_updated_at = time.monotonic()
+            try:await self._resume_finalizer()
+            except (LabServiceError,OSError,ValueError):self.final_summary={'connection_status':'unavailable'}
         except (LabServiceError, OSError, ValueError) as exc:
             self.status = exc.code if isinstance(exc,LabServiceError) else 'catalog_storage_error'
             if self.status == 'reauth_required':
@@ -165,7 +175,11 @@ class ServiceRuntime:
 
     async def analysis(self):
         async with self.lock:
-            return await self._analysis()
+            result=await self._analysis()
+            if 'post_generation_ticket_set_v1' in self.info.get('capabilities',[]):
+                try:await self.finalization_state()
+                except (LabServiceError,OSError,ValueError):pass
+            return result
 
     async def _analysis(self):
         if self.connection_manager.needs_refresh:
@@ -276,6 +290,9 @@ class ServiceRuntime:
         return result
 
     async def close(self):
+        if self.final_follow and not self.final_follow.done():
+            self.final_follow.cancel()
+            await asyncio.gather(self.final_follow,return_exceptions=True)
         if self.retry_task and not self.retry_task.done():
             self.retry_task.cancel()
             await asyncio.gather(self.retry_task,return_exceptions=True)
