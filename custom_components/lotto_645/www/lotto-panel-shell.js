@@ -1,9 +1,9 @@
 import { applyFinalizationPanel } from './finalization-ha.js';
 /* Production entry: component presentation with HA-owned narrow-state decisions. */
-import './lotto-panel.js?v=2.4.1';
-import { PANEL_TAG } from './lotto-panel-core.js?v=2.4.1';
-import { applyComponentDesign } from './lotto-panel-design.js?v=2.4.1';
-import { applyPanelTools } from './lotto-panel-tools.js?v=2.4.1';
+import './lotto-panel.js?v=2.4.2';
+import { PANEL_TAG } from './lotto-panel-core.js?v=2.4.2';
+import { applyComponentDesign } from './lotto-panel-design.js?v=2.4.2';
+import { applyPanelTools } from './lotto-panel-tools.js?v=2.4.2';
 
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
@@ -181,7 +181,7 @@ Panel.prototype.render = function (...args) {
       hostStyle = document.createElement('style');
       root.append(hostStyle);
     }
-    hostStyle.setAttribute('data-lotto-ha-host-header', '2.4.1');
+    hostStyle.setAttribute('data-lotto-ha-host-header', '2.4.2');
     hostStyle.textContent = HA_HOST_HEADER_STYLE;
   }
   removeLegacyHeroCountdown(this);
@@ -195,7 +195,7 @@ Panel.prototype.render = function (...args) {
       root.append(ballStyle);
     }
     /* Refresh stale style nodes instead of accepting their old text. */
-    ballStyle.setAttribute('data-lotto-official-ball-colors', '2.4.1');
+    ballStyle.setAttribute('data-lotto-official-ball-colors', '2.4.2');
     ballStyle.textContent = LOTTO_BALL_AND_COUNTDOWN_STYLE;
   }
   const tools = root?.querySelector('lotto-panel-tools-v2-4-0');

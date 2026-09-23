@@ -77,16 +77,27 @@ jobs:
         if: steps.existing.outputs.exists != 'true'
         shell: bash
         run: |
-          rm -rf dist lotto_645.zip
-          mkdir -p dist
-          cp -a custom_components/lotto_645 dist/lotto_645
-          find dist -type d -name __pycache__ -prune -exec rm -rf {} +
-          find dist -type f -name '*.pyc' -delete
+          rm -f lotto_645.zip
+          find custom_components/lotto_645 -type d -name __pycache__ -prune -exec rm -rf {} +
+          find custom_components/lotto_645 -type f -name '*.pyc' -delete
           (
-            cd dist
-            zip -q -r ../lotto_645.zip lotto_645
+            cd custom_components/lotto_645
+            zip -q -r ../../../lotto_645.zip .
           )
           test -s lotto_645.zip
+
+      - name: Verify HACS zip layout
+        if: steps.existing.outputs.exists != 'true'
+        shell: bash
+        run: |
+          unzip -Z1 lotto_645.zip > /tmp/lotto_zip_entries.txt
+          grep -qx 'manifest.json' /tmp/lotto_zip_entries.txt
+          grep -qx '__init__.py' /tmp/lotto_zip_entries.txt
+          grep -q '^www/' /tmp/lotto_zip_entries.txt
+          if grep -q '^lotto_645/' /tmp/lotto_zip_entries.txt; then
+            echo "Invalid nested lotto_645 directory in HACS archive" >&2
+            exit 1
+          fi
 
       - name: Publish HACS release
         if: steps.existing.outputs.exists != 'true'
