@@ -82,7 +82,7 @@ jobs:
           find custom_components/lotto_645 -type f -name '*.pyc' -delete
           (
             cd custom_components/lotto_645
-            zip -q -r ../../../lotto_645.zip .
+            zip -q -r ../../lotto_645.zip .
           )
           test -s lotto_645.zip
 
