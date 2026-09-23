@@ -1,6 +1,6 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows } from './lotto-panel-view.js?v=2.4.0';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows } from './lotto-panel-view.js?v=2.4.1';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
 export const PANEL_TAG = 'lotto-ticket-panel-v2-4-0';
@@ -13,6 +13,37 @@ const labels = {
 };
 const slots = [...'abcde'];
 const formatRound = n => Number.isInteger(Number(n)) && Number(n)>0 ? `제 ${Number(n).toLocaleString('ko-KR')}회` : '보관한 복권';
+const formatReceiptTime = value => {
+  const time=Date.parse(value||'');
+  return Number.isFinite(time)
+    ? new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(time))
+    : '—';
+};
+const createReceiptHeader = (card,round,ticket,index,total) => {
+  card.classList.add('ticket-receipt');
+  const ribbon=document.createElement('span');ribbon.className='receipt-ribbon';ribbon.setAttribute('aria-hidden','true');card.append(ribbon);
+  const top=document.createElement('div');top.className='paper-top receipt-top';
+  const head=document.createElement('div');head.className='receipt-head';
+  const brand=document.createElement('div');brand.className='receipt-brand';
+  const word=document.createElement('strong');word.textContent='LOTTO';
+  const game=document.createElement('span');game.textContent='6/45';brand.append(word,game);
+  const mark=document.createElement('span');mark.className='receipt-qr';mark.setAttribute('aria-hidden','true');head.append(brand,mark);
+  const roundText=document.createElement('div');roundText.className='receipt-round';roundText.textContent=Number.isInteger(round)?`제 ${round.toLocaleString('ko-KR')} 회`:formatRound(round);
+  const info=document.createElement('div');info.className='receipt-info';
+  const saved=document.createElement('span');saved.textContent=`등록일 : ${formatReceiptTime(ticket.saved_at)}`;
+  const detail=document.createElement('span');detail.textContent=`추첨회차 : ${formatRound(round)} · ${ticket.game_count||0}게임 · ${index+1}/${total}장`;
+  info.append(saved,detail);top.append(head,roundText,info);return top;
+};
+const createReceiptTotal = (round,ticket,index) => {
+  const foot=document.createElement('div');foot.className='receipt-total';
+  const amount=document.createElement('div');amount.className='receipt-amount';
+  const label=document.createElement('span');label.textContent='금액';
+  const strong=document.createElement('strong');const count=Math.max(0,Number(ticket.game_count)||0);strong.textContent=`₩ ${(count*1000).toLocaleString('ko-KR')}`;amount.append(label,strong);
+  const barcodeWrap=document.createElement('div');barcodeWrap.className='receipt-barcode-wrap';
+  const barcode=document.createElement('span');barcode.className='receipt-barcode';barcode.setAttribute('aria-hidden','true');
+  const code=document.createElement('small');code.textContent=`HOME ASSISTANT · ${String(round||0).padStart(4,'0')}-${String(index+1).padStart(2,'0')} · 보관용 표시`;
+  barcodeWrap.append(barcode,code);foot.append(amount,barcodeWrap);return foot;
+};
 
 class LottoTicketPanel extends HTMLElement {
   constructor() {
@@ -399,14 +430,9 @@ class LottoTicketPanel extends HTMLElement {
     tickets.forEach((ticket,index)=>{
       const card=document.createElement('article');card.className='ticket-paper wallet-ticket-card ticket-slide';card.dataset.ticketId=ticket.ticket_id||'';
       card.setAttribute('role','group');card.setAttribute('aria-roledescription','slide');card.setAttribute('aria-label',`복권 ${index+1} / ${tickets.length}`);
-      const top=document.createElement('div');top.className='paper-top';
-      const label=document.createElement('span');label.className='paper-label';label.textContent=`${formatRound(round)} · 복권 ${index+1}`;
-      const meta=document.createElement('span');meta.className='paper-meta';
-      const games=document.createElement('span');games.textContent=`${ticket.game_count||0}게임`;
-      const state=document.createElement('span');state.className='ticket-state';state.dataset.done=String(ticket.status==='evaluated');state.textContent=ticket.status==='evaluated'?'결과 확인 완료':'추첨 전';
-      meta.append(games,state);top.append(label,meta);
-      const list=document.createElement('div');list.className='ticket-list';ticketRows(list,ticket.games||[],Infinity,matches);
-      card.append(top,list);
+      const top=createReceiptHeader(card,round,ticket,index,tickets.length);
+      const list=document.createElement('div');list.className='ticket-list receipt-lines';ticketRows(list,ticket.games||[],Infinity,matches,true);
+      card.append(top,list,createReceiptTotal(round,ticket,index));
       if(ticket.status==='evaluated'){
         const details=document.createElement('details');details.className='ticket-review';
         const totalMatches=(ticket.games||[]).reduce((sum,g)=>sum+(Number.isFinite(Number(g.main_match_count))?Number(g.main_match_count):0),0);
