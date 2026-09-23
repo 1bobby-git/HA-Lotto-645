@@ -1,0 +1,102 @@
+name: HACS Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "custom_components/lotto_645/**"
+      - ".github/workflows/hacs-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hacs-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Read and validate version
+        id: version
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          manifest = json.loads(Path("custom_components/lotto_645/manifest.json").read_text(encoding="utf-8"))
+          version = str(manifest["version"]).strip()
+
+          const_text = Path("custom_components/lotto_645/const.py").read_text(encoding="utf-8")
+          match = re.search(r'^VERSION\s*=\s*["\']([^"\']+)["\']', const_text, re.MULTILINE)
+          if not match:
+              raise SystemExit("const.py VERSION을 찾지 못했습니다.")
+          if match.group(1) != version:
+              raise SystemExit(f"버전 불일치: manifest={version}, const={match.group(1)}")
+          if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+              raise SystemExit(f"지원하지 않는 버전 형식: {version}")
+
+          with open(Path(".github") / "hacs-release-version.txt", "w", encoding="utf-8") as handle:
+              handle.write(version)
+          PY
+          VERSION="$(cat .github/hacs-release-version.txt)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate integration
+        if: steps.existing.outputs.exists != 'true'
+        run: |
+          python -m compileall -q custom_components/lotto_645
+
+      - name: Build HACS zip
+        if: steps.existing.outputs.exists != 'true'
+        shell: bash
+        run: |
+          rm -rf dist lotto_645.zip
+          mkdir -p dist
+          cp -a custom_components/lotto_645 dist/lotto_645
+          find dist -type d -name __pycache__ -prune -exec rm -rf {} +
+          find dist -type f -name '*.pyc' -delete
+          (
+            cd dist
+            zip -q -r ../lotto_645.zip lotto_645
+          )
+          test -s lotto_645.zip
+
+      - name: Publish HACS release
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          gh release create "$TAG" lotto_645.zip \
+            --target "$GITHUB_SHA" \
+            --title "$TAG · HACS 업데이트" \
+            --generate-notes
