@@ -1,8 +1,8 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '2.4.0';
+const VERSION = '2.4.1';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
-import {lastReviewPresentation,currentRecommendations} from './lotto-panel-view.js?v=2.4.0';
+import {lastReviewPresentation,currentRecommendations} from './lotto-panel-view.js?v=2.4.1';
 const AI_ID = 'home_assistant_ai';
 const validId = id => typeof id === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(id);
 const element = (tag, text, className) => {
