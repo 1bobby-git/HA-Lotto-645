@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Connect Lotto Lab service",
-        "description": "The integration connects automatically to https://lotto.formulab.kr with a unique installation credential. No Lotto Lab account or approval code is required."
+        "description": "The integration connects automatically to the Lotto Lab service (lotto.formulab.kr) with a unique installation credential. No Lotto Lab account or approval code is required."
       }
     },
     "abort": {

@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Lotto Lab 서비스 연결",
-        "description": "통합을 추가하면 https://lotto.formulab.kr 에 설치별 고유 자격정보로 자동 연결됩니다. Lotto Lab 계정 로그인이나 승인 코드는 필요하지 않습니다."
+        "description": "통합을 추가하면 Lotto Lab 서비스(lotto.formulab.kr)에 설치별 고유 자격정보로 자동 연결됩니다. Lotto Lab 계정 로그인이나 승인 코드는 필요하지 않습니다."
       }
     },
     "abort": {
