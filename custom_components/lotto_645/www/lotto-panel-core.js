@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows } from './lotto-panel-view.js?v=2.4.3';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows } from './lotto-panel-view.js?v=2.4.4';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-4-3';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-4-4';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -13,36 +13,119 @@ const labels = {
 };
 const slots = [...'abcde'];
 const formatRound = n => Number.isInteger(Number(n)) && Number(n)>0 ? `제 ${Number(n).toLocaleString('ko-KR')}회` : '보관한 복권';
+const KST_RECEIPT_TIME=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 const formatReceiptTime = value => {
   const time=Date.parse(value||'');
-  return Number.isFinite(time)
-    ? new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(time))
-    : '—';
+  if(!Number.isFinite(time))return '—';
+  const part=Object.fromEntries(KST_RECEIPT_TIME.formatToParts(new Date(time)).map(p=>[p.type,p.value]));
+  return `${part.year}/${part.month}/${part.day} (${part.weekday}) ${part.hour}:${part.minute}:${part.second}`;
+};
+// Same rule as published_results.draw_date: round 1 was drawn on 2002-12-07, then weekly.
+const FIRST_DRAW_UTC=Date.UTC(2002,11,7);
+const formatDrawDate = round => {
+  if(!Number.isInteger(round)||round<1||round>10000)return '—';
+  const date=new Date(FIRST_DRAW_UTC+(round-1)*7*86400000);
+  return `${date.getUTCFullYear()}/${String(date.getUTCMonth()+1).padStart(2,'0')}/${String(date.getUTCDate()).padStart(2,'0')} (${'일월화수목금토'[date.getUTCDay()]})`;
+};
+/* Decorative slip art only: deterministic per local ticket, never a real or scannable ticket code. */
+const SVG_NS='http://www.w3.org/2000/svg';
+const receiptSeed = text => {let hash=2166136261;for(const ch of String(text)){hash^=ch.codePointAt(0);hash=Math.imul(hash,16777619);}return hash>>>0;};
+const receiptRandom = seed => () => {seed=(seed+0x6D2B79F5)|0;let t=Math.imul(seed^(seed>>>15),1|seed);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};
+const receiptSvg = (viewBox,d,aspect) => {
+  const svg=document.createElementNS(SVG_NS,'svg');svg.setAttribute('viewBox',viewBox);svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');svg.setAttribute('shape-rendering','crispEdges');
+  if(aspect)svg.setAttribute('preserveAspectRatio',aspect);
+  const path=document.createElementNS(SVG_NS,'path');path.setAttribute('d',d);path.setAttribute('fill','currentColor');svg.append(path);return svg;
+};
+const receiptQr = seed => {
+  const size=25,next=receiptRandom(seed);let d='';
+  const finder=(x,y)=>{
+    for(const [fx,fy] of [[0,0],[size-7,0],[0,size-7]]){
+      const dx=x-fx,dy=y-fy;
+      if(dx<-1||dx>7||dy<-1||dy>7)continue;
+      if(dx<0||dy<0||dx>6||dy>6)return false;
+      return dx===0||dy===0||dx===6||dy===6||(dx>=2&&dx<=4&&dy>=2&&dy<=4);
+    }
+    return null;
+  };
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    let on=finder(x,y);
+    if(on===null){
+      const ax=x-16,ay=y-16;
+      if(ax>=0&&ax<=4&&ay>=0&&ay<=4)on=ax===0||ay===0||ax===4||ay===4||(ax===2&&ay===2);
+      else if(y===6)on=x%2===0;
+      else if(x===6)on=y%2===0;
+      else on=next()<.5;
+    }
+    if(on)d+=`M${x} ${y}h1v1h-1z`;
+  }
+  return receiptSvg(`-1 -1 ${size+2} ${size+2}`,d);
+};
+const receiptBarcode = seed => {
+  const next=receiptRandom(seed^0x9E3779B9);let x=0,d='';
+  const bar=w=>{d+=`M${x} 0h${w}v1h-${w}z`;x+=w;},gap=w=>{x+=w;};
+  bar(1);gap(1);bar(1);
+  for(let i=0;i<88;i++){const w=1+Math.floor(next()*3);if(i%2===0)gap(w);else bar(w);}
+  gap(1);bar(1);gap(1);bar(1);
+  return receiptSvg(`0 0 ${x} 1`,d,'none');
+};
+const receiptWatermark = at => {
+  const mark=document.createElement('span');mark.className='receipt-watermark';mark.dataset.at=at;mark.setAttribute('aria-hidden','true');
+  const word=document.createElement('span');word.textContent='LOTTO';const game=document.createElement('small');game.textContent='6/45';
+  mark.append(word,game);return mark;
+};
+const receiptInfoLine = (label,value) => {
+  const line=document.createElement('span');const term=document.createElement('b');term.textContent=label;
+  line.append(term,` : ${value}`);return line;
 };
 const createReceiptHeader = (card,round,ticket,index,total) => {
   card.classList.add('ticket-receipt');
-  const ribbon=document.createElement('span');ribbon.className='receipt-ribbon';ribbon.setAttribute('aria-hidden','true');card.append(ribbon);
   const top=document.createElement('div');top.className='paper-top receipt-top';
   const head=document.createElement('div');head.className='receipt-head';
   const brand=document.createElement('div');brand.className='receipt-brand';
-  const word=document.createElement('strong');word.textContent='LOTTO';
-  const game=document.createElement('span');game.textContent='6/45';brand.append(word,game);
-  const mark=document.createElement('span');mark.className='receipt-qr';mark.setAttribute('aria-hidden','true');head.append(brand,mark);
+  const word=document.createElement('strong');word.className='receipt-word';word.textContent='LOTTO';
+  const game=document.createElement('span');game.className='receipt-game';game.textContent='6/45';brand.append(receiptWatermark('head'),word,game);
+  const mark=document.createElement('span');mark.className='receipt-qr';mark.setAttribute('aria-hidden','true');mark.append(receiptQr(receiptSeed(`${round}:${ticket.ticket_id||index}`)));
+  head.append(brand,mark);
   const roundText=document.createElement('div');roundText.className='receipt-round';roundText.textContent=Number.isInteger(round)?`제 ${round.toLocaleString('ko-KR')} 회`:formatRound(round);
   const info=document.createElement('div');info.className='receipt-info';
-  const saved=document.createElement('span');saved.textContent=`등록일 : ${formatReceiptTime(ticket.saved_at)}`;
-  const detail=document.createElement('span');detail.textContent=`추첨회차 : ${formatRound(round)} · ${ticket.game_count||0}게임 · ${index+1}/${total}장`;
-  info.append(saved,detail);top.append(head,roundText,info);return top;
+  const count=Math.max(0,Number(ticket.game_count)||0);
+  info.append(
+    receiptInfoLine('등록일',formatReceiptTime(ticket.saved_at)),
+    receiptInfoLine('추첨일',formatDrawDate(round)),
+    receiptInfoLine('게임수',`${count}게임 · ${index+1}/${total}장`),
+    receiptWatermark('info'),
+  );
+  top.append(head,roundText,info);return top;
 };
 const createReceiptTotal = (round,ticket,index) => {
   const foot=document.createElement('div');foot.className='receipt-total';
   const amount=document.createElement('div');amount.className='receipt-amount';
   const label=document.createElement('span');label.textContent='금액';
   const strong=document.createElement('strong');const count=Math.max(0,Number(ticket.game_count)||0);strong.textContent=`₩ ${(count*1000).toLocaleString('ko-KR')}`;amount.append(label,strong);
-  const barcodeWrap=document.createElement('div');barcodeWrap.className='receipt-barcode-wrap';
-  const barcode=document.createElement('span');barcode.className='receipt-barcode';barcode.setAttribute('aria-hidden','true');
-  const code=document.createElement('small');code.textContent=`HOME ASSISTANT · ${String(round||0).padStart(4,'0')}-${String(index+1).padStart(2,'0')} · 보관용 표시`;
-  barcodeWrap.append(barcode,code);foot.append(amount,barcodeWrap);return foot;
+  const code=document.createElement('small');code.className='receipt-serial';code.textContent=`HOME ASSISTANT · ${String(round||0).padStart(4,'0')}-${String(index+1).padStart(2,'0')} · 보관용 표시`;
+  const barcode=document.createElement('span');barcode.className='receipt-barcode';barcode.setAttribute('aria-hidden','true');barcode.append(receiptBarcode(receiptSeed(`${ticket.ticket_id||index}:${round}`)));
+  foot.append(receiptWatermark('total'),amount,code,barcode);return foot;
+};
+// Printed-slip presentation of the shared ticket rows: two-digit numbers and a short waiting label.
+const decorateReceiptRows = list => {
+  list.querySelectorAll('.ticket-balls .ball').forEach(ball=>{const n=Number(ball.textContent);if(Number.isInteger(n)&&n>=1&&n<=45)ball.textContent=String(n).padStart(2,'0');});
+  list.querySelectorAll('.ticket-row').forEach(row=>{
+    const prize=row.querySelector('.prize');
+    if(prize&&row.querySelector('.ticket-balls')?.dataset.evaluated!=='true'&&prize.textContent==='복권 추첨 대기')prize.textContent='추첨 대기';
+  });
+};
+const receiptLegend = list => {
+  const kinds=[['main','당첨번호 일치'],['bonus','보너스 일치']].filter(([kind])=>list.querySelector(`.ball[data-hit="${kind}"]`));
+  if(!kinds.length)return null;
+  const legend=document.createElement('p');legend.className='receipt-legend';
+  for(const [kind,text] of kinds){const item=document.createElement('span');item.dataset.kind=kind;item.textContent=text;legend.append(item);}
+  return legend;
+};
+const createReceiptSheet = (...parts) => {
+  const sheet=document.createElement('div');sheet.className='receipt-sheet';
+  const ribbon=document.createElement('span');ribbon.className='receipt-ribbon';ribbon.setAttribute('aria-hidden','true');
+  for(let i=0;i<2;i++){const text=document.createElement('span');text.textContent='LOTTO 6/45';ribbon.append(text);}
+  sheet.append(ribbon,...parts.filter(Boolean));return sheet;
 };
 
 class LottoTicketPanel extends HTMLElement {
@@ -431,8 +514,8 @@ class LottoTicketPanel extends HTMLElement {
       const card=document.createElement('article');card.className='ticket-paper wallet-ticket-card ticket-slide';card.dataset.ticketId=ticket.ticket_id||'';
       card.setAttribute('role','group');card.setAttribute('aria-roledescription','slide');card.setAttribute('aria-label',`복권 ${index+1} / ${tickets.length}`);
       const top=createReceiptHeader(card,round,ticket,index,tickets.length);
-      const list=document.createElement('div');list.className='ticket-list receipt-lines';ticketRows(list,ticket.games||[],Infinity,matches,true);
-      card.append(top,list,createReceiptTotal(round,ticket,index));
+      const list=document.createElement('div');list.className='ticket-list receipt-lines';ticketRows(list,ticket.games||[],Infinity,matches,true);decorateReceiptRows(list);
+      card.append(createReceiptSheet(top,list,receiptLegend(list),createReceiptTotal(round,ticket,index)));
       if(ticket.status==='evaluated'){
         const details=document.createElement('details');details.className='ticket-review';
         const totalMatches=(ticket.games||[]).reduce((sum,g)=>sum+(Number.isFinite(Number(g.main_match_count))?Number(g.main_match_count):0),0);

@@ -122,8 +122,10 @@ async def run():
         assert saves[-1]['revision'] == ''
         assert 'qr' not in saves[-1] and 'image' not in saves[-1]
         assert saves[-1]['values']['game_a'] == '1, 7, 15, 24, 33, 45'
-        assert await page.locator('#wallet-swiper-track .wallet-ticket-card .ticket-row').count() == 1
+        assert await page.locator('#wallet-swiper-track .wallet-ticket-card .ticket-row[data-empty="false"]').count() == 1
+        assert await page.locator('#wallet-swiper-track .wallet-ticket-card .ticket-row[data-empty="true"]').count() == 4
         assert await page.locator('#wallet-swiper-track .wallet-ticket-card .ball').count() == 6
+        assert await page.locator('#wallet-swiper-track .receipt-sheet .ball').first.text_content() == '01'
 
         await page.locator('#edit-wallet').click()
         await page.locator('#game_a').fill('2, 3, 4, 5, 6, 7')

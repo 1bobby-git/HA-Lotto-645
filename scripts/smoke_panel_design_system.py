@@ -83,7 +83,11 @@ async def verify_component_design(page: Page) -> None:
                   drawOverflow:q('.draw-numbers').scrollWidth>q('.draw-numbers').clientWidth+1,
                   overflow:el.scrollWidth>el.clientWidth+1,
                   palette:palette('.draw-numbers'),
-                  ticketPalette:palette('#wallet-swiper-track')
+                  ticketPalette:palette('#mini-swiper-track'),
+                  slipInk:[...q('#wallet-swiper-track').querySelectorAll('.receipt-sheet .ball')].map(n=>({
+                    bg:getComputedStyle(n).backgroundColor,color:getComputedStyle(n).color,
+                    textShadow:getComputedStyle(n).textShadow
+                  }))
                 };
             }""")
             label = (viewport, width, narrow, dark)
@@ -129,6 +133,10 @@ async def verify_component_design(page: Page) -> None:
                     assert ball['bg'] == expected[ball['band']], (label, ball)
                     assert ball['color'] == 'rgb(255, 255, 255)', (label, ball)
                     assert ball['image'] == 'none' and ball['textShadow'] != 'none', (label, ball)
+            # Registered wallet tickets are printed slips: black numbers on paper in both themes.
+            assert len(state['slipInk']) >= 6, (label, state['slipInk'])
+            for ball in state['slipInk']:
+                assert ball == {'bg': 'rgba(0, 0, 0, 0)', 'color': 'rgb(29, 29, 33)', 'textShadow': 'none'}, (label, ball)
             for name in ('home', 'wallet', 'review'):
                 await page.locator(f'#tab-{name}').click()
                 assert await page.evaluate('el.scrollWidth<=el.clientWidth+1'), (label, name)

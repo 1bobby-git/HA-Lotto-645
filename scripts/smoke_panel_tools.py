@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -10,6 +11,8 @@ from smoke_panel_host_layout import verify_panel_host_layout
 
 ROOT = Path(__file__).resolve().parents[1]
 WWW = ROOT / 'custom_components/lotto_645/www'
+VERSION = json.loads((WWW.parent / 'manifest.json').read_text(encoding='utf-8'))['version']
+TOOLS_TAG = 'lotto-panel-tools-v' + VERSION.replace('.', '-')
 
 
 def guide_catalog():
@@ -42,7 +45,7 @@ async def verify_panel_tools(page):
     await page.route('**/lotto_645_static/methods/**', serve_guide)
     await page.wait_for_function('!el._busy')
     await page.evaluate("""catalog => {
-        window.tools=el.shadowRoot.querySelector('lotto-panel-tools-v2-4-0');
+        window.tools=[...el.shadowRoot.querySelectorAll('*')].find(n=>n.localName.startsWith('lotto-panel-tools-v'));
         window.toolsFixture={...el._latestToolsData,method_catalog:catalog,
             draw_schedule:{round:1242,basis:'regular_schedule',scheduled_at:'2026-09-19T20:35:00+09:00',
                 sales_reopen_at:'2026-09-20T06:00:00+09:00',rollover_at:'2026-09-20T06:00:00+09:00',server_now:'2026-09-18T12:00:00+00:00'},
@@ -65,12 +68,12 @@ async def verify_panel_tools(page):
     }""", catalog)
     assert await page.locator('#predictions .method-info-trigger').count() == len(catalog)
     assert await page.locator('#reviews .method-info-trigger').count() == len(catalog)
-    assert await page.locator('lotto-panel-tools-v2-4-0').count() == 1
+    assert await page.locator(TOOLS_TAG).count() == 1
     assert await page.locator('#upcoming-countdown').is_visible()
     assert '다가오는 제 1,242회' in await page.locator('#upcoming-round').text_content()
     assert '한국시간' in await page.locator('#upcoming-date').text_content()
-    assert not await page.locator('lotto-panel-tools-v2-4-0 .countdown').is_visible()
-    assert await page.locator('lotto-panel-tools-v2-4-0').evaluate('n=>n.getBoundingClientRect().height===0')
+    assert not await page.locator(f'{TOOLS_TAG} .countdown').is_visible()
+    assert await page.locator(TOOLS_TAG).evaluate('n=>n.getBoundingClientRect().height===0')
     await page.evaluate("el.showScreen('review')")
 
     # Test unpositioned, sidebar-offset HA layouts as well as a positioned box.

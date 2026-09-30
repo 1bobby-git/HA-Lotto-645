@@ -6,7 +6,7 @@ export const icons = {
   arrow: svg('<path d="m9 5 7 7-7 7"/>'),
   back: svg('<path d="m14 6-6 6 6 6"/>'),
   close: svg('<path d="m6 6 12 12M6 18 18 6"/>'),
-  scan: svg('<path d="M8 3H4a1 1 0 0 0-1 1v4m13-5h4a1 1 0 0 1 1 1v4M3 16v4a1 1 0 0 0 1 1h4m8 0h4a1 1 0 0 0 1-1-1v-4M3 12h18"/><path d="M8 7h2v2H8zm6 8h2v2h-2z"/>'),
+  scan: svg('<path d="M8 3H4a1 1 0 0 0-1 1v4m13-5h4a1 1 0 0 1 1 1v4M3 16v4a1 1 0 0 0 1 1h4m8 0h4a1 1 0 0 0 1-1v-4M3 12h18"/><path d="M8 7h2v2H8zm6 8h2v2h-2z"/>'),
   photo: svg('<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.3"/><path d="m3 16 5-5 4 4 3-3 6 6"/>'),
   edit: svg('<path d="m15 5 4 4M4 20l5-1L20 8a2.8 2.8 0 0 0-4-4L5 15l-1 5Z"/>'),
   refresh: svg('<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6a8 8 0 0 1 13.2 3M4.7 15A8 8 0 0 0 18 18"/>'),
@@ -222,58 +222,99 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
 @container wallet (max-width:560px){.upcoming-hero{padding:18px 16px;gap:12px;border-radius:18px}.upcoming-title{font-size:27px}.upcoming-clock{margin-top:10px}.upcoming-clock strong{font-size:22px}.hero-actions{align-items:flex-start;margin-top:11px;gap:8px}.hero-actions button{flex:none;min-width:0;padding-inline:10px}.hero-ticket-summary{flex:1 1 180px}.upcoming-status{grid-template-columns:1fr}.status-card{padding:11px 13px}.draw-stage.last-draw{padding:18px 16px 0}.draw-stage.last-draw h2{font-size:24px}.draw-stage.last-draw .draw-numbers{--ball-size:clamp(27px,calc((100cqw - 126px)/7),40px);gap:5px}.overview-grid{margin-top:12px}.paper-top{flex-wrap:wrap;align-items:flex-start}.paper-meta{white-space:normal!important}.ticket-row,.wallet-paper .ticket-row{grid-template-columns:18px minmax(0,1fr)!important;align-items:start}.ticket-status{grid-column:2;align-items:flex-start;width:100%;text-align:left}.match-badge{max-width:100%;text-align:left}.ticket-balls{max-width:100%}.wallet-ticket-card::after{margin:0 16px}.ticket-review{margin:0 16px}.ticket-review-line{grid-template-columns:20px minmax(0,1fr)}.ticket-review-line small{grid-column:2;text-align:left}.ticket-card-actions{padding:10px 16px 14px;flex-wrap:wrap}.ticket-card-actions button{flex:1 1 130px;min-width:0;white-space:normal}.wallet-toolbar .select-wrap{display:grid!important;grid-template-columns:1fr;width:100%;gap:5px}.wallet-toolbar select{width:100%!important;max-width:100%!important}.wallet-actions{display:flex;width:100%;flex-wrap:wrap}.wallet-actions button{flex:1 1 120px;min-width:0;white-space:normal}.review-kpis{grid-template-columns:1fr 1fr}.review-kpi{padding:12px}.review-toolbar{display:grid;grid-template-columns:1fr 1fr}.review-toolbar label{display:block}.review-toolbar select{display:block;width:100%;margin-top:4px}}
 @container wallet (max-width:350px){.upcoming-hero{padding:18px 14px}.upcoming-title{font-size:24px}.upcoming-clock strong{font-size:20px}.hero-actions button{flex-basis:100%}.draw-stage.last-draw .draw-numbers{--ball-size:clamp(24px,calc((100cqw - 100px)/7),34px);gap:3px}.review-kpis{grid-template-columns:1fr}.review-toolbar{grid-template-columns:1fr}.main-tabs{gap:14px!important}.main-tabs button{font-size:13px!important}.ticket-list,.wallet-paper .ticket-list{padding-inline:10px!important}.paper-top,.paper-bottom{padding-inline:12px!important}}
 
-/* Registered wallet tickets use a real paper-ticket visual while keeping HA-only data/actions intact. */
+/* Registered wallet tickets: a printed Lotto 6/45 slip on a mint stage, following the
+   user-supplied receipt vector. Numbers are black print on purpose here; the draw result,
+   home and review screens keep the official ball palette. These selectors are more specific
+   than the shell palette so its hot-updated !important colors cannot repaint the slip. */
 .ticket-receipt{
-  --receipt-paper:#fff;--receipt-ink:#17191d;--receipt-muted:#6f7379;--receipt-line:#787b80;--receipt-pink:#ef8da8;
-  position:relative!important;overflow:hidden!important;padding-right:16px;background:var(--receipt-paper)!important;color:var(--receipt-ink)!important;
-  border:1px solid #e3e5e8!important;border-radius:4px 4px 14px 14px!important;box-shadow:0 12px 34px rgba(25,31,40,.09)!important
+  --receipt-stage:#a9d6cf;--receipt-stage-shadow:#8bb8b0;--receipt-paper:#fff;--receipt-ink:#1d1d21;
+  --receipt-muted:#565a61;--receipt-soft:#aeb2b8;--receipt-pink:#f28fab;--receipt-watermark:#fbd2de;
+  --receipt-hit:#e0457b;--receipt-hit-text:#c42a60;--receipt-bonus:#2563eb;
+  --receipt-display:"Arial Black","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --receipt-width:520px;--receipt-ribbon:34px;--receipt-pad:30px;--receipt-drop:16px;
+  --receipt-title:46px;--receipt-qr:84px;--receipt-label:26px;--receipt-state:70px;--receipt-gap:10px;
+  --receipt-number:26px;--receipt-number-box:40px;--receipt-ring:10px;
+  position:relative!important;overflow:hidden!important;padding:46px 28px 28px!important;
+  background:var(--receipt-stage)!important;color:var(--receipt-ink)!important;
+  border:0!important;border-radius:22px!important;box-shadow:none!important
 }
+:host([data-theme="dark"]) .ticket-receipt{--receipt-stage:#3d6b64;--receipt-stage-shadow:#284743}
 .ticket-receipt::after{display:none!important}
-.ticket-receipt .receipt-ribbon{position:absolute;z-index:3;top:0;right:0;bottom:0;width:16px;background:var(--receipt-pink);pointer-events:none}
-.ticket-receipt .receipt-ribbon::after{content:"LOTTO 6/45";position:absolute;top:20px;left:50%;transform:translateX(-50%);writing-mode:vertical-rl;text-orientation:mixed;color:#fff;font-size:9px;font-weight:800;letter-spacing:.14em;white-space:nowrap}
-.ticket-receipt .receipt-top{position:relative;display:block!important;padding:28px 30px 14px 26px!important;background:var(--receipt-paper)!important;border-bottom:1px dashed var(--receipt-line)!important;color:var(--receipt-ink)!important}
-.ticket-receipt .receipt-top::before{content:"";position:absolute;top:-1px;left:0;right:0;height:13px;background:radial-gradient(circle at 9px 0,var(--bg) 0 8px,transparent 8.5px) 0 0/30px 13px repeat-x;pointer-events:none}
-.receipt-head{display:flex;align-items:center;justify-content:space-between;gap:20px;min-width:0}
-.receipt-brand{display:flex;align-items:baseline;gap:7px;min-width:0;line-height:1}
-.receipt-brand strong{font-size:34px;font-weight:900;letter-spacing:-.055em;color:var(--receipt-ink)}
-.receipt-brand span{font-size:17px;font-weight:850;letter-spacing:-.04em;color:var(--receipt-ink)}
-.receipt-qr{display:block;flex:none;width:54px;height:54px;border:3px solid var(--receipt-ink);background:repeating-conic-gradient(from 90deg,var(--receipt-ink) 0 25%,transparent 0 50%) 0 0/9px 9px;box-shadow:inset 0 0 0 3px var(--receipt-paper),inset 0 0 0 6px var(--receipt-ink)}
-.receipt-round{text-align:center;margin:14px 0 11px;font-size:18px;font-weight:850;letter-spacing:-.035em;color:var(--receipt-ink);font-variant-numeric:tabular-nums}
-.receipt-info{display:grid;gap:2px;padding-top:9px;border-top:1px dashed #b7b9bc;font-size:11px;line-height:1.55;color:var(--receipt-muted);font-variant-numeric:tabular-nums}
-.ticket-receipt .ticket-list.receipt-lines{padding:7px 28px 8px 24px!important;background:var(--receipt-paper);border-bottom:1px dashed var(--receipt-line)}
-.ticket-receipt .ticket-row,.ticket-receipt .wallet-paper .ticket-row{grid-template-columns:24px minmax(0,1fr) minmax(74px,auto)!important;gap:10px!important;min-height:46px!important;padding:4px 0;border:0!important;align-items:center!important;color:var(--receipt-ink)}
-.ticket-receipt .ticket-row[data-empty="true"]{opacity:.38}
-.ticket-receipt .game-label{font-size:13px!important;font-weight:850!important;color:var(--receipt-ink)!important}
-.ticket-receipt .ticket-balls{display:grid!important;grid-template-columns:repeat(6,minmax(24px,1fr));gap:5px!important;align-items:center;min-width:0}
-.ticket-receipt .ticket-balls .ball{width:auto!important;min-width:0!important;height:30px!important;border:0!important;border-radius:3px!important;background:transparent!important;color:var(--receipt-ink)!important;font:850 16px/30px ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;box-shadow:none!important}
-.ticket-receipt .ticket-balls.result-balls .ball[data-hit="main"]{outline:2px solid var(--green)!important;outline-offset:-2px!important;background:#eef9f3!important}
-.ticket-receipt .ticket-balls.result-balls .ball[data-hit="bonus"]{outline:2px dashed var(--blue)!important;outline-offset:-2px!important;background:#eff4ff!important}
-.ticket-empty-number{display:flex;align-items:center;justify-content:center;min-width:0;height:30px;color:#a5a7aa;font:700 14px/30px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.ticket-receipt .ticket-status{align-items:flex-end;gap:3px;min-width:0}
-.ticket-receipt .prize,.ticket-receipt .match-badge{max-width:160px;padding:2px 5px;border-radius:4px;font-size:9px;line-height:1.45;text-align:right;white-space:normal;overflow-wrap:anywhere}
-.ticket-receipt .prize{background:#f1f2f4;color:#60646a}.ticket-receipt .match-badge{background:#edf3ff;color:#2563eb}
-.receipt-empty-status{font-size:9px;color:#8b8f94!important}
-.receipt-total{display:grid;grid-template-columns:auto minmax(120px,1fr);gap:16px;align-items:end;padding:13px 30px 17px 26px;background:var(--receipt-paper);color:var(--receipt-ink)}
-.receipt-amount{display:flex;align-items:baseline;gap:12px;white-space:nowrap}.receipt-amount span{font-size:12px;font-weight:800}.receipt-amount strong{font-size:18px;font-weight:900;font-variant-numeric:tabular-nums}
-.receipt-barcode-wrap{min-width:0}.receipt-barcode{display:block;width:100%;height:34px;background:repeating-linear-gradient(90deg,var(--receipt-ink) 0 2px,transparent 2px 4px,var(--receipt-ink) 4px 5px,transparent 5px 8px,var(--receipt-ink) 8px 11px,transparent 11px 13px)}
-.receipt-barcode-wrap small{display:block;margin-top:3px;text-align:right;color:var(--receipt-muted);font-size:8px;letter-spacing:.08em;font-variant-numeric:tabular-nums}
-.ticket-receipt .ticket-review{margin:0 26px 0 22px;color:#666b72;border-top:1px dashed #b7b9bc}
-.ticket-receipt .ticket-card-actions{padding:12px 28px 15px 22px;background:var(--receipt-paper);border-top:1px dashed #d2d4d7}
+.receipt-sheet{position:relative;isolation:isolate;overflow:hidden;max-width:var(--receipt-width);margin:0 auto calc(var(--receipt-drop) + 18px);padding-right:var(--receipt-ribbon);background:var(--receipt-paper);color:var(--receipt-ink);box-shadow:var(--receipt-drop) var(--receipt-drop) 0 var(--receipt-stage-shadow)}
+.receipt-sheet:last-child{margin-bottom:var(--receipt-drop)}
+.receipt-sheet::before{content:"";position:absolute;z-index:2;top:0;left:0;right:var(--receipt-ribbon);height:12px;background:radial-gradient(circle at 50% 0,var(--receipt-stage) 0 10.5px,transparent 11px) 0 0/38px 12px round no-repeat;pointer-events:none}
+.receipt-ribbon{position:absolute;z-index:3;top:0;right:0;bottom:0;width:var(--receipt-ribbon);display:flex;flex-direction:column;align-items:center;justify-content:space-around;overflow:hidden;background:var(--receipt-pink);color:#fff;pointer-events:none}
+.receipt-ribbon span{writing-mode:vertical-rl;text-orientation:mixed;white-space:nowrap;font:900 13px/1 var(--receipt-display);letter-spacing:.22em}
+.receipt-watermark{position:absolute;z-index:-1;display:flex;align-items:baseline;gap:.1em;color:var(--receipt-watermark);font:900 var(--receipt-title)/1 var(--receipt-display);letter-spacing:-.02em;white-space:nowrap;pointer-events:none;user-select:none}
+.receipt-watermark small{font:inherit;font-size:.42em}
+.receipt-watermark[data-at="head"]{top:-.8em;left:-1em}
+.receipt-watermark[data-at="info"]{right:.1em;bottom:.12em}
+.receipt-watermark[data-at="total"]{left:calc(var(--receipt-pad) - .12em);bottom:calc(var(--receipt-number-box) + 40px)}
+.ticket-receipt .receipt-top{position:relative;display:block!important;padding:54px var(--receipt-pad) 18px!important;background:transparent!important;border:0!important;color:var(--receipt-ink)!important}
+.receipt-head{display:flex;align-items:center;justify-content:center;gap:18px;min-width:0}
+.receipt-brand{position:relative;display:flex;align-items:baseline;gap:.14em;min-width:0;font-size:var(--receipt-title);line-height:1}
+.receipt-word{font:900 1em/1 var(--receipt-display);letter-spacing:-.02em;color:var(--receipt-ink)}
+.receipt-game{font:900 .42em/1 var(--receipt-display);color:var(--receipt-ink)}
+.receipt-qr{display:block;flex:none;width:var(--receipt-qr);height:var(--receipt-qr);color:var(--receipt-ink)}
+.receipt-qr svg,.receipt-barcode svg{display:block;width:100%;height:100%}
+.receipt-round{margin:20px 0 18px;text-align:center;font-size:22px;font-weight:800;line-height:1.2;letter-spacing:-.01em;color:var(--receipt-ink);font-variant-numeric:tabular-nums}
+.receipt-info{position:relative;display:grid;gap:2px;font-size:15px;font-weight:600;line-height:1.6;color:var(--receipt-ink);font-variant-numeric:tabular-nums}
+.receipt-info>span{min-width:0;overflow-wrap:anywhere}
+.receipt-info b{display:inline-block;min-width:4.7em;font-weight:700;letter-spacing:.5em}
+.ticket-receipt .ticket-list.receipt-lines{margin:0 calc(var(--receipt-pad) - 10px);padding:14px 10px!important;border:0!important;background:linear-gradient(90deg,var(--receipt-ink) 0 8px,transparent 8px 14px) 0 0/14px 2px repeat-x,linear-gradient(90deg,var(--receipt-ink) 0 8px,transparent 8px 14px) 0 100%/14px 2px repeat-x}
+.ticket-receipt .receipt-lines .ticket-row{display:grid!important;grid-template-columns:var(--receipt-label) var(--receipt-state) minmax(0,1fr)!important;column-gap:var(--receipt-gap)!important;row-gap:0!important;align-items:center!important;min-height:0!important;padding:1px 0!important;border:0!important;color:var(--receipt-ink)}
+.ticket-receipt .receipt-lines .game-label{grid-column:1;grid-row:1;color:var(--receipt-ink)!important;font-size:20px!important;font-weight:600!important;line-height:1}
+.ticket-receipt .receipt-lines .ticket-status{display:contents!important}
+.ticket-receipt .receipt-lines .prize{grid-column:2;grid-row:1;justify-self:start;max-width:100%;padding:0!important;border-radius:0!important;background:none!important;color:var(--receipt-muted)!important;font-size:14px!important;font-weight:600!important;line-height:1.25!important;letter-spacing:.08em;white-space:normal!important;word-break:keep-all;text-align:left!important}
+.ticket-receipt .receipt-lines .prize[data-winning="true"]{color:var(--receipt-hit-text)!important;font-weight:800!important}
+.ticket-receipt .receipt-lines .match-badge{grid-column:3;grid-row:2;justify-self:start;max-width:100%;margin:0 0 4px;padding:0!important;border-radius:0!important;background:none!important;color:var(--receipt-bonus)!important;font-size:11px!important;font-weight:650!important;line-height:1.4!important;text-align:left!important}
+.ticket-receipt .receipt-lines .ticket-status.receipt-empty-status{display:block!important;grid-column:2;grid-row:1;color:var(--receipt-soft)!important;font-size:14px;font-weight:600;letter-spacing:.08em}
+.ticket-receipt .receipt-lines .ticket-row[data-empty="true"]{opacity:1}
+.ticket-receipt .receipt-lines .ticket-row[data-empty="true"] .game-label{color:var(--receipt-soft)!important}
+.ticket-receipt .receipt-lines .ticket-balls{grid-column:3;grid-row:1;display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr));gap:0!important;justify-items:center;align-items:center;min-width:0;max-width:none}
+.ticket-receipt .receipt-sheet .receipt-lines .ticket-row .ticket-balls.result-balls .ball[data-band]{position:relative!important;width:var(--receipt-number-box)!important;height:var(--receipt-number-box)!important;min-width:0!important;border:0!important;border-radius:0!important;background:transparent!important;background-image:none!important;color:var(--receipt-ink)!important;text-shadow:none!important;box-shadow:none!important;outline:none!important;opacity:1!important;filter:none!important;transform:none!important;font:900 var(--receipt-number)/1 var(--receipt-display)!important;letter-spacing:-.01em}
+.ticket-receipt .receipt-sheet .receipt-lines .ticket-row .ticket-balls.result-balls .ball[data-band][data-hit="main"]::before,
+.ticket-receipt .receipt-sheet .receipt-lines .ticket-row .ticket-balls.result-balls .ball[data-band][data-hit="bonus"]::before{content:"";position:absolute;left:50%;top:50%;width:calc(var(--receipt-number-box) + var(--receipt-ring));height:calc(var(--receipt-number-box) - 2px);border:3px solid var(--receipt-hit);border-radius:50%;transform:translate(-50%,-50%) rotate(-9deg);pointer-events:none}
+.ticket-receipt .receipt-sheet .receipt-lines .ticket-row .ticket-balls.result-balls .ball[data-band][data-hit="bonus"]::before{border-style:dashed;border-color:var(--receipt-bonus)}
+.ticket-receipt .receipt-lines .ticket-empty-number{display:flex;align-items:center;justify-content:center;height:var(--receipt-number-box);color:var(--receipt-soft);font:900 calc(var(--receipt-number) * .85)/1 var(--receipt-display)}
+.receipt-legend{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:4px 14px;margin:8px var(--receipt-pad) 0;color:var(--receipt-muted);font-size:11px;font-weight:600;line-height:1.4}
+.receipt-legend span{display:inline-flex;align-items:center;gap:6px}
+.receipt-legend span::before{content:"";width:16px;height:11px;border:2px solid var(--receipt-hit);border-radius:50%;transform:rotate(-9deg)}
+.receipt-legend span[data-kind="bonus"]::before{border-style:dashed;border-color:var(--receipt-bonus)}
+.receipt-total{position:relative;padding:16px var(--receipt-pad) 26px;color:var(--receipt-ink)}
+.receipt-amount{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:20px;line-height:1.3;white-space:nowrap}
+.receipt-amount span{font-weight:700}
+.receipt-amount strong{font-size:22px;font-weight:800;letter-spacing:.01em;font-variant-numeric:tabular-nums}
+.receipt-serial{display:block;margin-top:6px;overflow:hidden;color:var(--receipt-ink);font:600 13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;letter-spacing:.06em;white-space:nowrap;text-overflow:ellipsis}
+.receipt-barcode{display:block;height:54px;margin:10px 4px 0;color:var(--receipt-ink)}
+.ticket-receipt .ticket-review{max-width:var(--receipt-width);margin:0 auto!important;padding:10px 16px!important;border:0!important;border-radius:12px;background:rgba(255,255,255,.86);color:#40444b;font-size:12px}
+.ticket-receipt .ticket-review summary,.ticket-receipt .ticket-review-line strong{color:var(--receipt-ink)}
+.ticket-receipt .ticket-review-line small{color:#555a62}
+.ticket-receipt .ticket-card-actions{max-width:var(--receipt-width);margin:12px auto 0;padding:0!important;background:transparent!important;border:0!important}
+.ticket-receipt .ticket-card-actions button{background:#fff!important;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.ticket-receipt .ticket-card-actions button.soft-blue{color:#2563eb}.ticket-receipt .ticket-card-actions button.danger{color:#b4233d}
+@media(forced-colors:active){
+  .receipt-watermark,.receipt-sheet::before{display:none}
+  .ticket-receipt .receipt-sheet .receipt-lines .ticket-row .ticket-balls.result-balls .ball[data-band][data-hit]::before,.receipt-legend span::before{border-color:Highlight}
+}
 @container wallet (max-width:560px){
-  .ticket-receipt{padding-right:12px}
-  .ticket-receipt .receipt-ribbon{width:12px}.ticket-receipt .receipt-ribbon::after{font-size:8px}
-  .ticket-receipt .receipt-top{padding:25px 18px 12px 16px!important}
-  .receipt-brand strong{font-size:27px}.receipt-brand span{font-size:14px}.receipt-qr{width:44px;height:44px;background-size:8px 8px}
-  .receipt-round{font-size:16px;margin:12px 0 9px}.receipt-info{font-size:10px}
-  .ticket-receipt .ticket-list.receipt-lines{padding:6px 18px 8px 14px!important}
-  .ticket-receipt .ticket-row,.ticket-receipt .wallet-paper .ticket-row{grid-template-columns:18px minmax(0,1fr)!important;gap:5px!important;min-height:48px!important;padding:5px 0}
-  .ticket-receipt .ticket-balls{grid-template-columns:repeat(6,minmax(20px,1fr));gap:2px!important}
-  .ticket-receipt .ticket-balls .ball{height:27px!important;font-size:13px!important;line-height:27px!important}
-  .ticket-empty-number{height:27px;font-size:12px;line-height:27px}
-  .ticket-receipt .ticket-status{grid-column:2!important;align-items:flex-start!important;width:100%;text-align:left!important}
-  .ticket-receipt .prize,.ticket-receipt .match-badge{max-width:100%;text-align:left}
-  .receipt-total{grid-template-columns:1fr;padding:11px 18px 15px 14px;gap:8px}.receipt-amount{justify-content:space-between}
-  .receipt-barcode{height:28px}.ticket-receipt .ticket-review{margin-inline:14px 18px}.ticket-receipt .ticket-card-actions{padding:10px 18px 14px 14px}
+  .ticket-receipt{--receipt-ribbon:20px;--receipt-pad:14px;--receipt-drop:10px;--receipt-title:34px;--receipt-qr:62px;--receipt-label:15px;--receipt-state:38px;--receipt-gap:5px;--receipt-number:18px;--receipt-number-box:28px;--receipt-ring:6px;padding:30px 10px 18px!important;border-radius:18px!important}
+  .receipt-watermark[data-at="head"]{top:-.72em;left:-.55em}
+  .ticket-receipt .receipt-top{padding:38px var(--receipt-pad) 12px!important}
+  .receipt-head{gap:12px}.receipt-round{margin:14px 0 12px;font-size:18px}.receipt-info{font-size:13px}
+  .ticket-receipt .receipt-lines .game-label{font-size:16px!important}
+  .ticket-receipt .receipt-lines .prize,.ticket-receipt .receipt-lines .ticket-status.receipt-empty-status{font-size:11px!important;letter-spacing:0}
+  .receipt-ribbon span{font-size:10px;letter-spacing:.18em}
+  .receipt-amount{font-size:16px}.receipt-amount strong{font-size:18px}
+  .receipt-serial{font-size:10px;letter-spacing:.02em}.receipt-barcode{height:42px}
+  .ticket-receipt .ticket-card-actions{flex-wrap:wrap}.ticket-receipt .ticket-card-actions button{flex:1 1 130px;min-width:0;white-space:normal}
+}
+@container wallet (max-width:350px){
+  .ticket-receipt{--receipt-ribbon:16px;--receipt-pad:10px;--receipt-drop:8px;--receipt-title:28px;--receipt-qr:50px;--receipt-label:12px;--receipt-state:32px;--receipt-gap:4px;--receipt-number:15px;--receipt-number-box:24px;--receipt-ring:4px;padding:22px 8px 14px!important}
+  .receipt-info{font-size:12px}.receipt-info b{min-width:4.3em;letter-spacing:.3em}
+  .ticket-receipt .receipt-lines .game-label{font-size:14px!important}
+  .ticket-receipt .receipt-lines .prize,.ticket-receipt .receipt-lines .ticket-status.receipt-empty-status{font-size:10px!important;letter-spacing:0}
+  .receipt-ribbon span{font-size:9px}
 }
 </style>
 <div class="shell">
