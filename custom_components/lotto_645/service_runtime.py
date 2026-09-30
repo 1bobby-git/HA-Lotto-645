@@ -11,7 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from .const import DOMAIN, CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CERT, CONF_PERSONAL_CONSENT
 from .lab_client import LottoLabClient, LabServiceError
-from .remote_generation import RemoteGeneration
+from .remote_generation import RemoteGeneration, retry_due
 from .managed_connection import ManagedConnection, CONNECTION_KEYS, without_user_connection
 from .service_contract import Catalog, numbers
 from .methods import install_catalog, METHOD_MYUNGRI_HETU, METHODS_BY_ID
@@ -31,7 +31,6 @@ class ServiceRuntime(FinalizationRuntime):
         self.info = {}
         self.retry_task = None
         self.lock = asyncio.Lock()
-        self._failed_context = None
         self.connection = {}
         self.connection_manager = ManagedConnection(Store(self.hass, 1, f'{DOMAIN}.connection.{self.entry.entry_id}'))
         self.catalog_store = Store(self.hass,1,f'{DOMAIN}.catalog.{self.entry.entry_id}')
@@ -205,7 +204,10 @@ class ServiceRuntime(FinalizationRuntime):
                 result=await self._finish_or_schedule(manager,result)
             except LabServiceError as exc:
                 pending=state['pending']
-                if exc.code=='not_found' and not pending.get('generation_id') and pending.get('context_tag')==context_tag:
+                if exc.code!='not_found':
+                    self.status='pending_recovery_required'
+                    return self._previous_analysis(state)
+                if not pending.get('generation_id') and pending.get('context_tag')==context_tag:
                     result=await manager.start(target_round=target,formula_ids=ids,options=options,
                         personal_profile=profile,personal_consent=bool(self.entry.options.get(CONF_PERSONAL_CONSENT)),
                         context_tag=context_tag,mode=pending.get('mode','generate'),
@@ -213,8 +215,9 @@ class ServiceRuntime(FinalizationRuntime):
                         material_context=material,nonce=self.owner._local_generation_nonce)
                     result=await self._finish_or_schedule(manager,result)
                 else:
-                    self.status='pending_recovery_required'
-                    return self._previous_analysis(state)
+                    # The service has no record of this job (e.g. its job store was reset).
+                    # Nothing was charged; drop the orphan and continue with a normal request.
+                    await manager.discard_pending()
             state=await manager.state()
             if state.get('pending'):
                 self.status='generating'
@@ -228,8 +231,9 @@ class ServiceRuntime(FinalizationRuntime):
         if not ids:
             self.status='profile_or_selection_required'
             return self._previous_analysis(state)
-        if self._failed_context==context_tag or (state.get('last_failure') or {}).get('context_tag')==context_tag:
-            self.status=(state.get('last_failure') or {}).get('status','failed')
+        failure=state.get('last_failure') or {}
+        if failure.get('context_tag')==context_tag and not retry_due(failure):
+            self.status=failure.get('status','failed')
             return self._previous_analysis(state)
         if any(METHODS_BY_ID[x].status=='withdrawn' for x in ids):
             self.status='formula_withdrawn'
@@ -254,13 +258,21 @@ class ServiceRuntime(FinalizationRuntime):
                 self.owner._needs_storage_save=True
                 return self.analysis_from_saved(asdict(result),ids,self.owner._local_generation_nonce,self.status)
             self.status='generating' if result.status in ('queued','running') else result.status
-            if result.status in ('failed','cancelled'):
-                self._failed_context=context_tag
         except (LabServiceError,OSError,ValueError) as exc:
             self.status=exc.code if isinstance(exc,LabServiceError) else 'service_storage_error'
             if self.status=='reauth_required':
                 self.connection_manager.invalidate()
         return self._previous_analysis(state)
+
+    async def generation_retry_due(self):
+        """True when a stored server-side generation failure is ready for an automatic retry."""
+        if self.generator is None:
+            return False
+        try:
+            state=await self.generator.state()
+        except (LabServiceError,OSError,ValueError):
+            return False
+        return retry_due(state.get('last_failure'))
 
     def _previous_analysis(self,state):
         old=state.get('last_result')

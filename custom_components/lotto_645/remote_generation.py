@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from dataclasses import asdict
-from datetime import datetime, UTC
+from datetime import datetime, timedelta, UTC
 from hashlib import sha256
 import json
 from typing import Any, Protocol
@@ -15,6 +15,33 @@ from uuid import uuid4
 
 from .lab_client import LottoLabClient, LabServiceError
 from .service_contract import Generation, method_ids, positive
+
+# A server-side failed/cancelled job (for example one interrupted by a service
+# restart) is retried automatically with exponential backoff instead of blocking
+# the round until the user presses regenerate.
+RETRY_BASE_SECONDS = 600
+RETRY_MAX_SECONDS = 6 * 3600
+
+
+def _attempts(failure: dict) -> int:
+    try:
+        return min(max(int(failure.get("attempts") or 1), 1), 99)
+    except (TypeError, ValueError):
+        return 1
+
+
+def retry_due(failure: dict | None, now: datetime | None = None) -> bool:
+    """Return True when a stored generation failure may be retried automatically."""
+    if not failure:
+        return False
+    try:
+        failed_at = datetime.fromisoformat(failure["failed_at"])
+    except (KeyError, TypeError, ValueError):
+        return True  # Records written before 2.4.5 carry no time: retry once now.
+    if failed_at.tzinfo is None:
+        failed_at = failed_at.replace(tzinfo=UTC)
+    delay = min(RETRY_MAX_SECONDS, RETRY_BASE_SECONDS * 2 ** min(_attempts(failure) - 1, 10))
+    return (now or datetime.now(UTC)) - failed_at >= timedelta(seconds=delay)
 
 
 class Store(Protocol):
@@ -110,7 +137,13 @@ class RemoteGeneration:
         if result.status == "completed":
             updated.update(pending=None, last_result=asdict(result), last_context=deepcopy(pending))
         elif result.status in ("failed", "cancelled"):
-            updated.update(pending=None, last_failure={"generation_id": result.generation_id, "status": result.status, "context_tag":pending.get("context_tag")})
+            previous = updated.get("last_failure") or {}
+            same = previous.get("context_tag") == pending.get("context_tag")
+            updated.update(pending=None, last_failure={
+                "generation_id": result.generation_id, "status": result.status,
+                "context_tag": pending.get("context_tag"),
+                "failed_at": datetime.now(UTC).isoformat(),
+                "attempts": _attempts(previous) + 1 if same else 1})
         else:
             updated["pending"] = {**pending, "generation_id": result.generation_id}
         await self._save(updated)
@@ -120,6 +153,13 @@ class RemoteGeneration:
         async with self._lock:
             await self._load()
             return deepcopy(self._state["last_result"])
+
+    async def discard_pending(self) -> None:
+        """Drop a pending job the service reports as unknown; nothing was charged for it."""
+        async with self._lock:
+            await self._load()
+            if self._state.get("pending") is not None:
+                await self._save({**deepcopy(self._state), "pending": None})
 
     async def state(self):
         async with self._lock:

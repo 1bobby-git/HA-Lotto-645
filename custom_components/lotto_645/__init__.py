@@ -51,12 +51,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(async_track_utc_time_change(hass, _publication_tick, second=15))
 
     async def _connection_retry(_now):
-        if coordinator.service.status in {
+        status = coordinator.service.status
+        if status in {
             'not_connected', 'connection_pending', 'connection_unavailable',
             'service_unavailable', 'reauth_required', 'managed_storage_error',
             'catalog_storage_error', 'operator_attention_required', 'usage_limited',
             'automatic_connection_refused', 'invalid_enrollment_response',
-            'unexpected_enrollment_status'}:
+            'unexpected_enrollment_status', 'generating', 'pending_recovery_required'} or (
+                status in {'failed', 'cancelled'}
+                and await coordinator.service.generation_retry_due()):
             await coordinator.async_request_refresh()
 
     entry.async_on_unload(async_track_time_interval(hass, _connection_retry, timedelta(minutes=5)))
