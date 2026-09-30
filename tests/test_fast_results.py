@@ -145,7 +145,7 @@ def coordinator_method(name):
     import logging
     from pathlib import Path
     path=Path(__file__).resolve().parents[1]/'custom_components/lotto_645/coordinator.py'
-    cls=next(n for n in ast.parse(path.read_text()).body if isinstance(n,ast.ClassDef) and n.name=='Lotto645Coordinator')
+    cls=next(n for n in ast.parse(path.read_text(encoding='utf-8')).body if isinstance(n,ast.ClassDef) and n.name=='Lotto645Coordinator')
     body=next(n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name==name)
     module=ast.Module(body=[ast.ImportFrom(module='__future__',names=[ast.alias(name='annotations')],level=0),body],type_ignores=[])
     ns={'datetime':datetime,'UTC':UTC,'evaluate_saved':state_mod.evaluate_saved,

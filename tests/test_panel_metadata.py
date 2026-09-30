@@ -87,8 +87,8 @@ def test_all_local_guides_are_packaged_verbatim_and_ai_is_separate():
 def test_shell_and_packaged_tools_use_the_same_tools_cache_version():
     # A presentation-only release may leave the tools module byte-for-byte
     # unchanged.  Its own cache version and the shell import must still match.
-    tools = (COMPONENT / 'www/lotto-panel-tools.js').read_text()
-    shell = (COMPONENT / 'www/lotto-panel-shell.js').read_text()
+    tools = (COMPONENT / 'www/lotto-panel-tools.js').read_text(encoding='utf-8')
+    shell = (COMPONENT / 'www/lotto-panel-shell.js').read_text(encoding='utf-8')
     tools_version = re.search(r"const VERSION = '([^']+)'", tools)
     shell_version = re.search(r"\./lotto-panel-tools\.js\?v=([0-9.]+)", shell)
     assert tools_version and shell_version

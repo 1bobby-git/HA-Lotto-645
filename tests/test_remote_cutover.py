@@ -16,9 +16,9 @@ def test_no_private_code_in_component():
     for name in ('analysis','sampling','consensus','voting_consensus','saju_rules','formula_cache','formula_settings'):
         assert not (R/(name+'.py')).exists()
     for p in R.glob('*.py'):
-        assert 'from .lotto_core' not in p.read_text()
-    assert json.loads((R/'manifest.json').read_text())['requirements']==[]
-    assert len(Catalog.parse(json.loads((R/'catalog_seed.json').read_text())).methods)==22
+        assert 'from .lotto_core' not in p.read_text(encoding='utf-8')
+    assert json.loads((R/'manifest.json').read_text(encoding='utf-8'))['requirements']==[]
+    assert len(Catalog.parse(json.loads((R/'catalog_seed.json').read_text(encoding='utf-8'))).methods)==22
 
 def test_legacy_ticket_migration_multiple_slips_and_idempotency():
     old={'version':1,'selected_round':40,'records':{'40':{'round':40,'saved_at':'2026-09-16T00:00:00+00:00',
