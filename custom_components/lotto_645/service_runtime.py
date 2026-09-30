@@ -13,6 +13,7 @@ from .const import DOMAIN, CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CE
 from .lab_client import LottoLabClient, LabServiceError
 from .remote_generation import RemoteGeneration, retry_due
 from .managed_connection import ManagedConnection, CONNECTION_KEYS, without_user_connection
+from .member_link import poll as poll_member_link, state_from_tokens
 from .service_contract import Catalog, numbers
 from .methods import install_catalog, METHOD_MYUNGRI_HETU, METHODS_BY_ID
 from .models import AnalysisResult, Recommendation
@@ -39,6 +40,9 @@ class ServiceRuntime(FinalizationRuntime):
         self.finalizer = None
         self.final_follow = None
         self.final_summary = {}
+        self.health = {}
+        self.member_link = None
+        self.member_task = None
 
     def _configure_connection(self, values):
         scope = self.connection_manager.journal_scope
@@ -82,6 +86,7 @@ class ServiceRuntime(FinalizationRuntime):
             self._configure_connection(self.connection_manager.values)
         except (OSError, ValueError, LabServiceError) as exc:
             self.status = exc.code if isinstance(exc,LabServiceError) else 'managed_storage_error'
+            self._record_health(False, error=self.status)
             return
         try:
             catalog = await self.client.async_catalog()
@@ -95,11 +100,13 @@ class ServiceRuntime(FinalizationRuntime):
             self.info = info
             install_catalog(catalog)
             self.status = 'ready'
+            self._record_health(True, info)
             self.catalog_updated_at = time.monotonic()
             try:await self._resume_finalizer()
             except (LabServiceError,OSError,ValueError):self.final_summary={'connection_status':'unavailable'}
         except (LabServiceError, OSError, ValueError) as exc:
             self.status = exc.code if isinstance(exc,LabServiceError) else 'catalog_storage_error'
+            self._record_health(False, error=self.status)
             if self.status == 'reauth_required':
                 self.connection_manager.invalidate()
 
@@ -264,6 +271,78 @@ class ServiceRuntime(FinalizationRuntime):
                 self.connection_manager.invalidate()
         return self._previous_analysis(state)
 
+    def _record_health(self, ok, info=None, error=None):
+        """Keep attributes stable between checks: only transitions change `since`."""
+        previous = self.health or {}
+        now = datetime.now(UTC).isoformat()
+        self.health = {
+            'ok': ok,
+            'error': None if ok else error,
+            'since': previous['since'] if previous.get('ok') is ok and previous.get('since') else now,
+            'latest_round': (info or {}).get('latest_round', previous.get('latest_round')),
+            'core_version': (info or {}).get('core_version', previous.get('core_version')),
+        }
+
+    async def health_check(self):
+        """Authenticated lightweight check (GET /v1/service) of this installation's connection."""
+        async with self.lock:
+            if self.client is None:
+                self._record_health(False, error=self.status)
+                return False
+            try:
+                if self.connection_manager.needs_refresh:
+                    await self.connection_manager.ensure_enrolled(async_get_clientsession(self.hass))
+                    self._configure_connection(self.connection_manager.values)
+                info = await self.client.async_service_info()
+            except (LabServiceError, OSError, ValueError) as exc:
+                code = exc.code if isinstance(exc, LabServiceError) else 'health_check_failed'
+                self._record_health(False, error=code)
+                if code == 'reauth_required':
+                    self.status = code
+                    self.connection_manager.invalidate()
+                elif self.status == 'ready' and code in ('connection_unavailable', 'service_unavailable'):
+                    self.status = code
+                return False
+            self.info = info
+            self._record_health(True, info)
+            return True
+
+    def watch_member_link(self, grant):
+        """Complete an approved member link in the background; HA needs no second confirmation."""
+        if self.member_task is not None and not self.member_task.done():
+            self.member_task.cancel()
+        link = {'grant': grant, 'status': 'pending'}
+        self.member_link = link
+        self.member_task = self.hass.async_create_background_task(
+            self._complete_member_link(link), 'lotto-member-link')
+        return link
+
+    async def _complete_member_link(self, link):
+        session = async_get_clientsession(self.hass)
+        grant = link['grant']
+        while True:
+            await asyncio.sleep(max(1.0, grant['next_poll'] - time.time()))
+            try:
+                tokens = await poll_member_link(session, grant)
+            except LabServiceError as exc:
+                if exc.code in ('authorization_pending', 'slow_down', 'member_service_unavailable'):
+                    continue  # poll() raises expired_token once the grant lifetime ends
+                link['status'] = exc.code
+                self.owner.async_update_listeners()
+                return
+            try:
+                await self.connection_manager.store.async_save(
+                    state_from_tokens(tokens, self.connection_manager.state))
+            except (OSError, ValueError):
+                link['status'] = 'member_storage_error'
+                self.owner.async_update_listeners()
+                return
+            link['status'] = 'linked'
+            self.owner.async_update_listeners()
+            # Separate task: unloading this entry must not cancel the reload itself.
+            self.hass.async_create_task(self.hass.config_entries.async_reload(self.entry.entry_id))
+            return
+
     async def generation_retry_due(self):
         """True when a stored server-side generation failure is ready for an automatic retry."""
         if self.generator is None:
@@ -302,6 +381,9 @@ class ServiceRuntime(FinalizationRuntime):
         return result
 
     async def close(self):
+        if self.member_task and not self.member_task.done():
+            self.member_task.cancel()
+            await asyncio.gather(self.member_task,return_exceptions=True)
         if self.final_follow and not self.final_follow.done():
             self.final_follow.cancel()
             await asyncio.gather(self.final_follow,return_exceptions=True)

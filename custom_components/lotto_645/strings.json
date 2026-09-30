@@ -91,7 +91,7 @@
       },
       "account": {
         "title": "Connect Lotto Lab account",
-        "description": "Open [Lotto Lab]({url}), sign in, verify code **{code}**, and approve the connection. Without an account, Home Assistant continues in the standard/free selection mode. A linked account uses the server-side membership entitlement for Jev selection."
+        "description": "Open [Lotto Lab]({url}), sign in, verify code **{code}**, and approve the connection. Home Assistant completes the link automatically after approval, and the **Lotto Lab 연결** diagnostic entity shows the connection state. Without an account, Home Assistant continues in the standard/free selection mode. A linked account uses the server-side membership entitlement for Jev selection."
       }
     },
     "error": {

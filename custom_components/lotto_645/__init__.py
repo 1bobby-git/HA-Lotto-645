@@ -51,6 +51,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(async_track_utc_time_change(hass, _publication_tick, second=15))
 
     async def _connection_retry(_now):
+        # Health check first so the connectivity entity reflects the live service.
+        await coordinator.service.health_check()
+        coordinator.async_update_listeners()
         status = coordinator.service.status
         if status in {
             'not_connected', 'connection_pending', 'connection_unavailable',

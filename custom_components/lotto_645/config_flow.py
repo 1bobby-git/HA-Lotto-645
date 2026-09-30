@@ -274,8 +274,22 @@ class Lotto645OptionsFlow(OptionsFlow):
             session = async_get_clientsession(self.hass)
             grant = getattr(self, "_member_grant", None)
             if grant is None:
-                self._member_grant = await start_member_link(session, manager.state)
+                self._member_grant = grant = await start_member_link(session, manager.state)
+                # The running integration finishes the link as soon as it is approved
+                # on the web, so the user does not have to come back and submit.
+                service = getattr(getattr(self._entry, "runtime_data", None), "service", None)
+                self._member_service = service
+                if service is not None:
+                    service.watch_member_link(grant)
             elif user_input is not None:
+                service = getattr(self, "_member_service", None)
+                link = getattr(service, "member_link", None) if service is not None else None
+                if link is not None and link.get("grant") is grant:
+                    if link["status"] == "linked":
+                        return self.async_create_entry(title="", data=self._options)
+                    raise LabServiceError(
+                        "authorization_pending" if link["status"] == "pending" else link["status"]
+                    )
                 tokens = await poll_member_link(session, grant)
                 state = state_from_tokens(tokens, manager.state)
                 await store.async_save(state)
@@ -290,7 +304,7 @@ class Lotto645OptionsFlow(OptionsFlow):
                 if code in ("authorization_pending", "slow_down")
                 else "member_link_failed"
             )
-            if code in ("expired_token", "access_denied", "invalid_grant"):
+            if code not in ("authorization_pending", "slow_down", "member_service_unavailable"):
                 self._member_grant = None
         grant = getattr(self, "_member_grant", None) or {}
         return self.async_show_form(
