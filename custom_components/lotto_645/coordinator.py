@@ -46,6 +46,7 @@ from .const import (
     STORAGE_VERSION,
     UPDATE_INTERVAL,
 )
+from .game_batches import normalize_counts, requested_count
 from .history import LottoHistoryError, load_bundled_history
 from .methods import DEFAULT_METHOD_IDS, METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE, normalize_method_ids
 from .models import AnalysisResult, Lotto645Data, LottoDraw, Recommendation

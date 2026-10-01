@@ -450,3 +450,81 @@ def test_a_missing_field_falls_back_to_a_single_game():
         UNIFORM: 1, HOT: 1,
     }
 
+
+def _coordinator_count_accessors():
+    """Load the coordinator's game-count accessors without Home Assistant.
+
+    Returns a class carrying the real property and method bodies.
+    """
+    tree = ast.parse((BASE / 'coordinator.py').read_text(encoding='utf-8'))
+    wanted = {'formula_game_counts', 'game_count'}
+    picked = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in wanted:
+            picked.append(node)
+            wanted.discard(node.name)
+    assert not wanted, f'coordinator lost {sorted(wanted)}'
+    namespace = {
+        'normalize_counts': batches.normalize_counts,
+        'requested_count': batches.requested_count,
+        'CONF_GAME_COUNTS': 'game_counts',
+    }
+    # The nodes keep their own decorators, so `formula_game_counts` arrives
+    # already wrapped in `property` and must not be wrapped again.
+    exec(compile(ast.Module(body=picked, type_ignores=[]), '<coordinator>', 'exec'), namespace)
+    assert isinstance(namespace['formula_game_counts'], property)
+    return type('Coordinator', (), {
+        'configured_method_ids': (),
+        'formula_game_counts': namespace['formula_game_counts'],
+        'game_count': namespace['game_count'],
+    })
+
+
+def test_the_coordinator_count_accessors_filter_stored_options():
+    """Exercise the real accessor bodies, which no test could import before.
+
+    coordinator.py needs Home Assistant, so the property and method are lifted
+    out by AST and given the helpers directly. This covers their filtering
+    rules; `test_module_imports.py` is what proves the real module binds those
+    helpers, because injecting them here would hide a missing import.
+    """
+    coordinator_class = _coordinator_count_accessors()
+
+    def coordinator(options, configured=(UNIFORM, HOT)):
+        instance = coordinator_class()
+        instance.entry = SimpleNamespace(options=options)
+        instance.configured_method_ids = configured
+        return instance
+
+    # Simply calling them is the regression check: an unbound helper name
+    # raises NameError here exactly as it did during 2.4.7 setup.
+    instance = coordinator({'game_counts': {UNIFORM: 4, HOT: 2}})
+    assert instance.formula_game_counts == {UNIFORM: 4, HOT: 2}
+    assert instance.game_count(UNIFORM) == 4
+    assert instance.game_count(HOT) == 2
+
+    # A formula left at the default, a deselected formula, junk and out-of-range
+    # values must never leak into the configured counts.
+    messy = coordinator({
+        'game_counts': {
+            UNIFORM: 4, HOT: 0, 'ghost_formula': 3,
+            UNIFORM + 'x': '2', 'another_ghost': True,
+        }
+    })
+    assert messy.formula_game_counts == {UNIFORM: 4}
+    assert messy.game_count(HOT) == 1
+    assert messy.game_count('ghost_formula') == 1
+
+    # A user who never opened the count screen has no option at all.
+    empty = coordinator({})
+    assert empty.formula_game_counts == {}
+    assert empty.game_count(UNIFORM) == 1
+    assert empty.game_count('ghost_formula') == 1
+
+    # A corrupted option must not break the accessors.
+    for broken in (None, 'nope', 5, [1, 2], {UNIFORM: None}):
+        damaged = coordinator({'game_counts': broken})
+        assert damaged.formula_game_counts in ({}, {UNIFORM: 1})
+        assert damaged.game_count(UNIFORM) == 1
+
+
