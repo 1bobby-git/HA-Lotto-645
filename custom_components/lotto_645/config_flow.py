@@ -178,18 +178,61 @@ def _game_counts_schema(
     return vol.Schema(schema)
 
 
+def _coerce_game_count(value: Any) -> int | None:
+    """Read one submitted game count, or return None when it is not a whole number.
+
+    Home Assistant delivers a number selector value as an int, a float or a
+    numeric string depending on the frontend version, so a strict int check would
+    reject a perfectly valid entry. A bool is not a number here.
+    """
+    if type(value) is bool:
+        return None
+    if type(value) is int:
+        return value
+    if type(value) is float:
+        return int(value) if value.is_integer() else None
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            return int(text)
+        except ValueError:
+            pass
+        try:
+            number = float(text)
+        except ValueError:
+            return None
+        return int(number) if number.is_integer() else None
+    return None
+
+
+def _submitted_counts(
+    user_input: dict[str, Any], selected: list[str]
+) -> tuple[dict[str, int], bool]:
+    """Return every usable count and whether any field was unusable.
+
+    A field the form did not carry is filled with the single-game default, so a
+    partially filled form still saves.
+    """
+    counts: dict[str, int] = {}
+    valid = True
+    for method_id, field in _game_count_fields(selected).items():
+        if field not in user_input:
+            counts[method_id] = DEFAULT_GAMES_PER_FORMULA
+            continue
+        value = _coerce_game_count(user_input[field])
+        if value is None or not 1 <= value <= MAX_GAMES_PER_FORMULA:
+            valid = False
+            counts[method_id] = DEFAULT_GAMES_PER_FORMULA
+            continue
+        counts[method_id] = value
+    return counts, valid
+
+
 def _normalize_submitted_counts(
     user_input: dict[str, Any], selected: list[str]
 ) -> dict[str, int]:
-    """Accept only whole in-range counts for still-selected formulas."""
-    counts: dict[str, int] = {}
-    for method_id, field in _game_count_fields(selected).items():
-        value = user_input.get(field)
-        counts[method_id] = (
-            value
-            if type(value) is int and 1 <= value <= MAX_GAMES_PER_FORMULA
-            else DEFAULT_GAMES_PER_FORMULA
-        )
+    """Return the counts to persist, falling back to one game per formula."""
+    counts, _valid = _submitted_counts(user_input, selected)
     return counts
 
 
@@ -439,20 +482,17 @@ class Lotto645OptionsFlow(OptionsFlow):
         fields = _game_count_fields(selected)
         counts = normalize_counts(pending.get(CONF_GAME_COUNTS), selected)
         if user_input is not None:
-            if any(
-                type(value) is not int
-                or value < 1
-                or value > MAX_GAMES_PER_FORMULA
-                for value in user_input.values()
-            ):
+            submitted, valid = _submitted_counts(user_input, selected)
+            if not valid:
                 errors["base"] = "invalid_game_count"
                 # Keep the rejected value visible so it can be corrected in place.
                 for method_id, field in fields.items():
-                    value = user_input.get(field)
-                    if type(value) is int:
-                        counts[method_id] = min(MAX_GAMES_PER_FORMULA, max(1, value))
+                    value = _coerce_game_count(user_input.get(field))
+                    if value is not None:
+                        counts[method_id] = min(
+                            MAX_GAMES_PER_FORMULA, max(1, value)
+                        )
             else:
-                submitted = _normalize_submitted_counts(user_input, selected)
                 # Deselected formulas never keep a stale count, and the default
                 # single-game setup stores no extra option at all.
                 if all(

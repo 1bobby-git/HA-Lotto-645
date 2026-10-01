@@ -344,7 +344,8 @@ def test_only_the_formulas_that_need_more_games_join_a_later_batch():
 def _flow_helpers(catalog=None):
     """Load the per-formula count form helpers without Home Assistant."""
     tree = ast.parse((BASE / 'config_flow.py').read_text(encoding='utf-8'))
-    wanted = ('_game_count_fields', '_game_counts_schema', '_normalize_submitted_counts')
+    wanted = ('_game_count_fields', '_game_counts_schema', '_normalize_submitted_counts',
+              '_coerce_game_count', '_submitted_counts')
     methods = [n for n in ast.walk(tree)
                if isinstance(n, ast.FunctionDef) and n.name in wanted]
     assert len(methods) == len(wanted), 'per-formula count helpers are missing'
@@ -435,13 +436,82 @@ def test_a_submitted_count_survives_the_form_round_trip(submitted_value, expecte
     }
 
 
-@pytest.mark.parametrize('bad', [0, -1, MAX + 1, '3', 2.5, None])
-def test_an_out_of_range_or_non_integer_count_never_survives(bad):
+@pytest.mark.parametrize('raw,expected', [
+    (0, 1), (-1, 1), (MAX + 1, 1), (2.5, 1), ('nonsense', 1), (None, 1),
+])
+def test_an_unusable_value_falls_back_to_a_single_game(raw, expected):
     helpers = _flow_helpers()
     selected = [UNIFORM]
-    fields = helpers['_game_count_fields'](selected)
-    posted = {fields[UNIFORM]: bad}
-    assert helpers['_normalize_submitted_counts'](posted, selected) == {UNIFORM: 1}
+    field = helpers['_game_count_fields'](selected)[UNIFORM]
+    assert helpers['_normalize_submitted_counts']({field: raw}, selected) == {
+        UNIFORM: expected,
+    }
+
+
+@pytest.mark.parametrize('raw,expected', [
+    (5, 5), (5.0, 5), ('5', 5), (' 5 ', 5), ('5.0', 5), ('+5', 5), (MAX, MAX),
+])
+def test_a_whole_number_is_accepted_whatever_type_the_frontend_sends(raw, expected):
+    """Regression guard: 2.4.8 rejected a valid 5 as out of range.
+
+    Home Assistant delivers a number selector value as an int, a float or a
+    numeric string depending on the frontend version. A strict `type(v) is int`
+    check made the form refuse every real submission.
+    """
+    helpers = _flow_helpers()
+    coerce = helpers['_coerce_game_count']
+    assert coerce(raw) == expected
+    field = helpers['_game_count_fields']([UNIFORM])[UNIFORM]
+    counts, valid = helpers['_submitted_counts']({field: raw}, [UNIFORM])
+    assert valid is True, f'{raw!r} was rejected'
+    assert counts == {UNIFORM: expected}
+
+
+@pytest.mark.parametrize('raw', [0, -1, MAX + 1, 2.5, '2.5', 'abc', '', '  ', None, True, [], {}])
+def test_a_value_outside_one_to_ten_is_reported(raw):
+    """Whole-number parsing and range checking are separate concerns."""
+    helpers = _flow_helpers()
+    field = helpers['_game_count_fields']([UNIFORM])[UNIFORM]
+    counts, valid = helpers['_submitted_counts']({field: raw}, [UNIFORM])
+    assert valid is False, f'{raw!r} was accepted'
+    # The saved value still falls back to a single game rather than a wrong count.
+    assert counts == {UNIFORM: 1}
+
+
+@pytest.mark.parametrize('raw', [2.5, '2.5', 'abc', '', '  ', None, True, False, [], {}])
+def test_a_value_that_is_not_a_whole_number_never_parses(raw):
+    helpers = _flow_helpers()
+    assert helpers['_coerce_game_count'](raw) is None
+
+
+
+def test_one_bad_field_does_not_discard_the_others():
+    helpers = _flow_helpers()
+    fields = helpers['_game_count_fields']([UNIFORM, HOT])
+    counts, valid = helpers['_submitted_counts'](
+        {fields[UNIFORM]: 4, fields[HOT]: 'nonsense'}, [UNIFORM, HOT])
+    assert valid is False
+    assert counts == {UNIFORM: 4, HOT: 1}
+
+
+def test_an_absent_field_defaults_to_a_single_game_without_failing():
+    helpers = _flow_helpers()
+    fields = helpers['_game_count_fields']([UNIFORM, HOT])
+    counts, valid = helpers['_submitted_counts']({fields[UNIFORM]: 3}, [UNIFORM, HOT])
+    assert valid is True
+    assert counts == {UNIFORM: 3, HOT: 1}
+
+
+def test_every_field_staying_at_one_game_stores_no_option():
+    """The default single-game setup must not write a redundant option."""
+    helpers = _flow_helpers()
+    fields = helpers['_game_count_fields']([UNIFORM, HOT])
+    for raw in (1, 1.0, '1'):
+        counts, valid = helpers['_submitted_counts'](
+            {fields[UNIFORM]: raw, fields[HOT]: 1.0}, [UNIFORM, HOT])
+        assert valid is True
+        assert all(value <= 1 for value in counts.values())
+
 
 
 def test_a_missing_field_falls_back_to_a_single_game():
