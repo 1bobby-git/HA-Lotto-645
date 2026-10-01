@@ -250,6 +250,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                     "formula_id": recommendation.method_id,
                     "formula_label": recommendation.label,
                     "source": recommendation.source,
+                    "formula_game": recommendation.formula_game,
                     "generated_at": str(generated),
                     "based_on_round": self.data.analysis.based_on_round,
                     "target_round": round_no,

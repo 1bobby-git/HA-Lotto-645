@@ -101,6 +101,13 @@ def _formula_link(value: object, round_no: int) -> dict[str, Any]:
         'target_round': round_no,
         'generation_sequence': generation_sequence,
     }
+    # The generating game of a multi-game formula. Absent for links recorded
+    # before 2.4.11, which stay readable instead of being rewritten.
+    game_no = value.get('formula_game')
+    if game_no is not None:
+        if type(game_no) is not int or not 1 <= game_no <= 1000:
+            raise ValueError('invalid_formula_link')
+        result['formula_game'] = game_no
     for key in ('formula_version', 'core_version', 'generation_id'):
         raw = value.get(key)
         if raw is not None:
@@ -122,7 +129,7 @@ def normalize_formula_links(value: object, round_no: int) -> list[dict[str, Any]
         item = _formula_link(raw, round_no)
         identity = (
             item['formula_id'], item.get('generation_id'), item['generated_at'],
-            item['generation_sequence'],
+            item['generation_sequence'], item.get('formula_game'),
         )
         if identity in seen:
             continue
@@ -138,7 +145,7 @@ def _merge_formula_links(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for item in group:
             identity = (
                 item['formula_id'], item.get('generation_id'), item['generated_at'],
-                item['generation_sequence'],
+                item['generation_sequence'], item.get('formula_game'),
             )
             if identity in seen:
                 continue
@@ -263,11 +270,16 @@ class _LegacyPurchaseBook:
                 link.get('formula_label') or link.get('formula_id')
                 for link in links if link.get('formula_label') or link.get('formula_id')
             ))
+            applied_games = list(dict.fromkeys(
+                link['formula_game'] for link in links
+                if type(link.get('formula_game')) is int
+            ))
             games.append({'method_id': f"purchased_{row['slot']}", 'slot': row['slot'],
                           'sensor_name': f"직접 구매 {row['slot']}", 'source': 'purchased',
                           'recommended_numbers': list(row['numbers']), 'numbers': list(row['numbers']),
                           'formula_links': links, 'formula_match_count': len(links),
                           'applied_formula_ids': applied_ids,
+                          'applied_formula_games': applied_games,
                           'applied_formula_labels': applied_labels, **outcome})
         winners = [game for game in games if game['prize_rank'] is not None]
         return {**base, 'status': 'evaluated' if draw else 'waiting', 'saved_at': record['saved_at'],
@@ -404,20 +416,41 @@ class PurchaseBook:
         return result
 
     def with_review_formula_links(self, review_rounds: object) -> 'PurchaseBook':
-        """Backfill only exact, evidenced pre-draw formula matches from ReviewBook."""
+        """Backfill only exact, evidenced pre-draw formula matches from ReviewBook.
+
+        Rounds stored since 2.4.11 keep every generated game in ``games``, so a
+        ticket registered after the draw still gets the formula it came from,
+        including the second and later games of a formula. Older rounds only
+        evidence their one ledger game.
+        """
         if not isinstance(review_rounds, dict):
             return self.from_storage(self.to_storage())
         result = self.from_storage(self.to_storage())
         for ticket in result.tickets.values():
             round_no = ticket["round"]
             review = review_rounds.get(str(round_no))
-            predictions = review.get("predictions") if isinstance(review, dict) else None
-            if not isinstance(predictions, dict):
+            if not isinstance(review, dict):
+                continue
+            predictions = review.get("predictions")
+            archive = review.get("games")
+            rows = []
+            if isinstance(predictions, dict):
+                rows.extend(predictions.items())
+            if isinstance(archive, dict):
+                # Archive keys are "<method_id>#<game_no>"; the row repeats both.
+                rows.extend(archive.items())
+            if not rows:
                 continue
             for game in ticket["games"]:
                 discovered = []
-                for formula_id, prediction in predictions.items():
-                    if not isinstance(formula_id, str) or not isinstance(prediction, dict):
+                for key, prediction in rows:
+                    if not isinstance(prediction, dict):
+                        continue
+                    formula_id = str(
+                        prediction.get("method_id") or prediction.get("formula_id")
+                        or (key.split("#", 1)[0] if isinstance(key, str) else "") or ""
+                    )
+                    if not formula_id:
                         continue
                     try:
                         if parse_ticket(prediction.get("numbers")) != tuple(game["numbers"]):
@@ -431,6 +464,9 @@ class PurchaseBook:
                             "target_round": round_no,
                             "generation_sequence": 0,
                         }
+                        game_no = prediction.get("formula_game")
+                        if type(game_no) is int:
+                            raw["formula_game"] = game_no
                         for key in ("formula_version", "core_version", "generation_id"):
                             if prediction.get(key) is not None:
                                 raw[key] = prediction[key]

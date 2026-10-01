@@ -169,8 +169,8 @@ def test_matching_purchase_games_is_exact_and_round_scoped():
     assert purchases.matching_purchase_games(book, 40, (11, 13, 18, 22, 31, 33)) == []
 
 
-def formula_link(generation_id="gen-40", *, formula_id="uniform_floyd"):
-    return {
+def formula_link(generation_id="gen-40", *, formula_id="uniform_floyd", formula_game=None):
+    link = {
         "formula_id": formula_id,
         "formula_label": "균등 공식 · Floyd",
         "source": "core_service",
@@ -182,6 +182,47 @@ def formula_link(generation_id="gen-40", *, formula_id="uniform_floyd"):
         "core_version": "1.22.1",
         "generation_id": generation_id,
     }
+    if formula_game is not None:
+        link["formula_game"] = formula_game
+    return link
+
+
+def test_the_linked_game_number_survives_reload_and_sits_next_to_the_labels():
+    book = purchases.PurchaseBook().updated(
+        40,
+        {"game_a": GOOD},
+        now=NOW,
+        formula_links_by_slot={"A": [formula_link(formula_game=3)]},
+    )
+    restored = purchases.PurchaseBook.from_storage(json.loads(json.dumps(book.to_storage())))
+    report = restored.report([DRAW], 40, restored.selected_ticket_id)
+    assert report["games"][0]["formula_links"][0]["formula_game"] == 3
+    assert report["games"][0]["applied_formula_labels"] == ["균등 공식 · Floyd"]
+    assert report["games"][0]["applied_formula_games"] == [3]
+
+
+def test_a_link_without_a_game_number_stays_readable():
+    book = purchases.PurchaseBook().updated(
+        40, {"game_a": GOOD}, now=NOW, formula_links_by_slot={"A": [formula_link()]},
+    )
+    report = book.report([DRAW], 40, book.selected_ticket_id)
+    assert report["games"][0]["formula_links"][0].get("formula_game") is None
+    assert report["games"][0]["applied_formula_games"] == []
+
+
+def test_two_games_of_one_formula_keep_separate_links():
+    # Same generation batch: only the game number tells the two lines apart.
+    merged = purchases._merge_formula_links([
+        formula_link(formula_game=1),
+        formula_link(formula_game=3),
+    ])
+    assert [row["formula_game"] for row in merged] == [1, 3]
+
+
+@pytest.mark.parametrize("broken", [0, 1001, "3", 1.5, True])
+def test_an_unusable_game_number_is_rejected(broken):
+    with pytest.raises(ValueError):
+        purchases._formula_link({**formula_link(formula_game=1), "formula_game": broken}, 40)
 
 
 def test_formula_lineage_survives_reload_and_unchanged_ticket_edit():
@@ -277,7 +318,42 @@ def test_coordinator_captures_exact_current_formula_only():
     assert links["B"][0]["formula_id"] == "uniform_floyd"
     assert links["B"][0]["generation_id"] == "generation-old"
     assert links["B"][0]["generation_sequence"] == 9
+    assert links["B"][0]["formula_game"] == 1
     assert ns["_purchase_formula_links"](owner, 41, {"game_b": GOOD}) == {}
+
+
+def test_a_ticket_registered_after_the_draw_links_the_archived_third_game():
+    book = purchases.PurchaseBook().updated(40, {"game_a": "8 9 10 11 12 13"}, now=NOW)
+    review_rounds = {
+        "40": {
+            "predictions": {
+                "uniform_floyd": {
+                    "numbers": [1, 2, 3, 4, 5, 6],
+                    "label": "균등 공식 · Floyd",
+                    "generated_at": "2026-09-12T06:20:00+00:00",
+                    "based_on_round": 39,
+                    "source": "core_service",
+                    "generation_id": "historical-generation",
+                },
+            },
+            "games": {
+                "uniform_floyd#3": {
+                    "numbers": [8, 9, 10, 11, 12, 13],
+                    "label": "균등 공식 · Floyd",
+                    "generated_at": "2026-09-12T06:22:00+00:00",
+                    "based_on_round": 39,
+                    "source": "core_service",
+                    "formula_game": 3,
+                    "generation_id": "archived-generation",
+                },
+            },
+            "result": None,
+        }
+    }
+    migrated = book.with_review_formula_links(review_rounds)
+    links = migrated.ticket_record(40, migrated.selected_ticket_id)["games"][0]["formula_links"]
+    assert [(row["formula_id"], row["formula_game"]) for row in links] == [("uniform_floyd", 3)]
+    assert links[0]["generation_id"] == "archived-generation"
 
 
 def test_existing_purchase_backfills_only_evidenced_review_formula():
