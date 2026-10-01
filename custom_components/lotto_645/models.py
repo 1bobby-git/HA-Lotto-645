@@ -89,8 +89,8 @@ class Recommendation:
     score: float | None
     details: dict[str, Any]
     source: str = "local"
-    # One to N inside a single formula. The first game stays the entity state;
-    # the extra games are attributes of the same formula entity.
+    # One to N inside a single formula. Every game is its own sensor entity;
+    # formula_game is the 1-based slot that entity reports.
     formula_game: int = 1
 
     def as_attributes(self) -> dict[str, Any]:
