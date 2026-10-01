@@ -21,8 +21,9 @@ from .const import (
 from .coordinator import Lotto645Coordinator
 from .entity import Lotto645Entity
 from .methods import METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE, METHODS_BY_ID, method_catalog
+from .game_entities import game_entity_name, game_unique_id, game_unique_ids
 from .purchased_tickets import matching_purchase_games
-from .review import review_name, NOTICE as REVIEW_NOTICE
+from .review import NOTICE as REVIEW_NOTICE
 from .result_details import decorate_result, winning_attributes
 
 PARALLEL_UPDATES = 0
@@ -66,15 +67,6 @@ def _game_attributes(coordinator: Lotto645Coordinator, games: list) -> list[dict
             }
         )
     return rows
-
-
-def _all_purchase_matches(coordinator: Lotto645Coordinator, games: list) -> list[dict]:
-    """Return exact same-round matches for every generated game of one formula."""
-    return [
-        {**match, "formula_game": recommendation.formula_game}
-        for recommendation in games
-        for match in _purchase_matches(coordinator, recommendation)
-    ]
 
 
 def _active_optional_sensor_unique_ids(coordinator: Lotto645Coordinator) -> set[str]:
@@ -139,8 +131,9 @@ async def async_setup_entry(
     if METHOD_MYUNGRI_HETU in coordinator.configured_method_ids:
         entities.append(LottoSajuProfileSensor(coordinator))
     entities.extend(
-        LottoGameSensor(coordinator, method_id)
+        LottoGameSensor(coordinator, method_id, game_no)
         for method_id in coordinator.selected_method_ids
+        for game_no in range(1, coordinator.game_count(method_id) + 1)
     )
     if coordinator.ai_enabled:
         entities.append(LottoAiRecommendationSensor(coordinator))
@@ -322,11 +315,11 @@ class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
 
 
 class LottoGameSensor(Lotto645Entity, SensorEntity):
-    """Recommendation produced by one selected method.
+    """One generated game of one selected method.
 
-    The state stays the formula's primary six numbers so existing dashboards and
-    automations keep working. Every additional configured game is an attribute
-    of this same entity rather than a separate sensor.
+    Game 1 keeps the pre-2.4.10 unique_id and state so existing dashboards and
+    automations keep working. Every further configured game is its own entity
+    with its own state; the formula-wide list stays in the `games` attribute.
     """
 
     # Keep current explanations accessible, but do not duplicate a large natal
@@ -339,46 +332,45 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
     })
     _attr_icon = "mdi:numeric"
 
-    def __init__(self, coordinator: Lotto645Coordinator, method_id: str) -> None:
+    def __init__(self, coordinator: Lotto645Coordinator, method_id: str, game_no: int = 1) -> None:
         super().__init__(coordinator)
         self.method_id = method_id
+        self.game_no = game_no
         method = METHODS_BY_ID[method_id]
-        self._attr_name = method.label
-        self._attr_unique_id = f"{coordinator.entry.entry_id}_method_{method_id}"
+        self._attr_name = game_entity_name(game_no, method.label)
+        self._attr_unique_id = game_unique_id(coordinator.entry.entry_id, method_id, game_no)
+
+    @property
+    def _own_recommendation(self):
+        """The single game this entity reports; None until that game exists."""
+        if self.coordinator.data is None:
+            return None
+        for recommendation in self.coordinator.data.analysis.recommendations_by_method(
+            self.method_id
+        ):
+            if recommendation.formula_game == self.game_no:
+                return recommendation
+        return None
 
     @property
     def name(self) -> str:
-        review = self.coordinator.review_for_method(self.method_id) if hasattr(self.coordinator, "review_for_method") else {}
-        base = review_name(METHODS_BY_ID[self.method_id].label, review)
-        games = _formula_games(self.coordinator, self.method_id)
-        return (
-            f"✓구매일치 | {base}"
-            if _all_purchase_matches(self.coordinator, games)
-            else base
-        )
+        label = METHODS_BY_ID[self.method_id].label
+        matches = _purchase_matches(self.coordinator, self._own_recommendation)
+        return game_entity_name(self.game_no, label, purchased=bool(matches))
 
     @property
     def icon(self) -> str:
-        games = _formula_games(self.coordinator, self.method_id)
-        return (
-            "mdi:ticket-confirmation"
-            if _all_purchase_matches(self.coordinator, games)
-            else "mdi:numeric"
-        )
+        if _purchase_matches(self.coordinator, self._own_recommendation):
+            return "mdi:ticket-confirmation"
+        return "mdi:numeric"
 
     @property
     def available(self) -> bool:
-        return (
-            super().available
-            and self.coordinator.data.analysis.recommendation_by_method(self.method_id)
-            is not None
-        )
+        return super().available and self._own_recommendation is not None
 
     @property
     def native_value(self) -> str | None:
-        recommendation = self.coordinator.data.analysis.recommendation_by_method(
-            self.method_id
-        )
+        recommendation = self._own_recommendation
         if recommendation is None:
             return None
         return ", ".join(str(number) for number in recommendation.numbers)
@@ -386,7 +378,7 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data
-        recommendation = data.analysis.recommendation_by_method(self.method_id)
+        recommendation = self._own_recommendation
         if recommendation is None:
             if self.method_id in (METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE):
                 meta = data.analysis.summary.get(self.method_id, {})
@@ -401,23 +393,27 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
             return {}
         method = METHODS_BY_ID[self.method_id]
         games = _formula_games(self.coordinator, self.method_id)
-        matches = _all_purchase_matches(self.coordinator, games)
+        matches = _purchase_matches(self.coordinator, recommendation)
         requested = self.coordinator.game_count(self.method_id)
         return {
             **recommendation.as_attributes(),
+            "game_no": self.game_no,
             "game_count": len(games),
             "requested_game_count": requested,
             "games": _game_attributes(self.coordinator, games),
             "game_count_notice": (
-                "numbers는 이 공식의 첫 번째 게임입니다. games 속성에 요청한 장수만큼 "
-                "6개 번호가 각각 들어 있습니다. 어느 공식도 당첨 확률을 바꾸지 않습니다."
+                f"이 엔티티는 {method.label} 공식의 {self.game_no}번째 게임입니다. 공식에 "
+                "설정한 장수만큼 게임이 각각 별도 센서로 노출되며 numbers는 그 게임의 "
+                "6개 번호입니다. games 속성에는 같은 공식의 전체 게임이 남습니다. "
+                "어느 공식도 당첨 확률을 바꾸지 않습니다."
             ),
             "purchase_match": bool(matches),
             "purchase_match_count": len(matches),
             "purchase_matches": matches,
             "purchase_match_notice": (
-                "같은 회차에 저장한 구매번호와 6개 번호가 모두 같은 경우입니다. "
-                "생성된 게임 중 하나라도 일치하면 표시됩니다. 실제 구매 사실을 인증하는 값은 아닙니다."
+                "이 게임의 6개 번호가 같은 회차에 저장한 구매번호와 모두 같은 경우입니다. "
+                "다른 게임의 일치 여부는 해당 게임 센서에서 확인하세요. 실제 구매 사실을 "
+                "인증하는 값은 아닙니다."
             ),
             "local_review": self.coordinator.review_for_method(self.method_id) if hasattr(self.coordinator, "review_for_method") else {},
             "review_notice": REVIEW_NOTICE,
@@ -446,11 +442,10 @@ class LottoAiRecommendationSensor(Lotto645Entity, SensorEntity):
 
     @property
     def name(self) -> str:
-        review = self.coordinator.review_for_method(AI_METHOD_ID) if hasattr(self.coordinator, "review_for_method") else {}
-        base = review_name("Home Assistant AI 추천", review)
         data = self.coordinator.data
         recommendation = data.ai_recommendation if data else None
-        return f"✓구매일치 | {base}" if _purchase_matches(self.coordinator, recommendation) else base
+        matched = bool(_purchase_matches(self.coordinator, recommendation))
+        return f"✓구매일치 | {self._attr_name}" if matched else self._attr_name
 
     @property
     def icon(self) -> str:

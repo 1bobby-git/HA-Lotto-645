@@ -39,3 +39,13 @@ def test_names_carry_the_game_number_without_review_stars():
     assert '☆' not in plain and '★' not in plain
     bought = entities.game_entity_name(5, '빈도 프리셋 · 핫넘버', purchased=True)
     assert bought == '5번 | ✓구매일치 | 빈도 프리셋 · 핫넘버'
+
+
+def test_sensor_module_builds_one_entity_per_configured_game_and_names_it_without_stars():
+    source = (BASE / 'sensor.py').read_text(encoding='utf-8')
+    assert 'for game_no in range(1, coordinator.game_count(method_id) + 1)' in source
+    assert 'LottoGameSensor(coordinator, method_id, game_no)' in source
+    assert 'game_unique_id(coordinator.entry.entry_id, method_id, game_no)' in source
+    assert 'game_entity_name(self.game_no, label, purchased=bool(matches))' in source
+    assert 'review_name(' not in source
+    assert 'from .review import review_name' not in source
