@@ -125,21 +125,47 @@ def test_subscription_is_entry_scoped_and_contains_no_numbers_or_profiles():
 
 
 def test_pruner_keeps_guide_and_active_formula_but_removes_deselected():
+    from custom_components.lotto_645 import game_entities
     source=ast.parse((ROOT/'custom_components/lotto_645/sensor.py').read_text(encoding="utf-8"))
     keep={'_active_optional_sensor_unique_ids','_prune_stale_optional_sensor_entities'}
     nodes=[n for n in source.body if isinstance(n,ast.FunctionDef) and n.name in keep]
     entries=[SimpleNamespace(domain='sensor',platform='lotto_645',unique_id='entry_'+name,entity_id=name)
-             for name in ['method_guide','method_uniform_fisher_yates','method_personal_lucky','recommendations']]
+             for name in ['method_guide','method_uniform_fisher_yates','method_uniform_fisher_yates_g2',
+                          'method_uniform_fisher_yates_g3','method_personal_lucky','recommendations']]
     entries.append(SimpleNamespace(domain='sensor',platform='other',unique_id='entry_method_other',entity_id='other'))
     registry=SimpleNamespace(async_remove=Mock())
     er=SimpleNamespace(async_get=lambda h:registry,async_entries_for_config_entry=lambda r,e:entries)
     env={'Lotto645Coordinator':object,'HomeAssistant':object,'ConfigEntry':object,'er':er,'DOMAIN':'lotto_645',
-         'METHOD_MYUNGRI_HETU':'myungri_hetu_day_pillar'}
+         'METHOD_MYUNGRI_HETU':'myungri_hetu_day_pillar','game_unique_ids':game_entities.game_unique_ids}
     exec(compile(ast.fix_missing_locations(ast.Module(body=nodes,type_ignores=[])),'sensor','exec'),env)
     entry=SimpleNamespace(entry_id='entry')
-    owner=SimpleNamespace(entry=entry,selected_method_ids=['uniform_fisher_yates'],configured_method_ids=['uniform_fisher_yates'],ai_enabled=False)
+    owner=SimpleNamespace(entry=entry,selected_method_ids=['uniform_fisher_yates'],
+                          configured_method_ids=['uniform_fisher_yates'],ai_enabled=False,
+                          game_count=lambda method_id:3)
     env['_prune_stale_optional_sensor_entities'](object(),entry,owner)
     registry.async_remove.assert_called_once_with('method_personal_lucky')
+
+
+def test_pruner_removes_extra_game_sensors_when_the_count_drops():
+    from custom_components.lotto_645 import game_entities
+    source=ast.parse((ROOT/'custom_components/lotto_645/sensor.py').read_text(encoding="utf-8"))
+    keep={'_active_optional_sensor_unique_ids','_prune_stale_optional_sensor_entities'}
+    nodes=[n for n in source.body if isinstance(n,ast.FunctionDef) and n.name in keep]
+    entries=[SimpleNamespace(domain='sensor',platform='lotto_645',unique_id='entry_'+name,entity_id=name)
+             for name in ['method_uniform_fisher_yates','method_uniform_fisher_yates_g2',
+                          'method_uniform_fisher_yates_g3']]
+    registry=SimpleNamespace(async_remove=Mock())
+    er=SimpleNamespace(async_get=lambda h:registry,async_entries_for_config_entry=lambda r,e:entries)
+    env={'Lotto645Coordinator':object,'HomeAssistant':object,'ConfigEntry':object,'er':er,'DOMAIN':'lotto_645',
+         'METHOD_MYUNGRI_HETU':'myungri_hetu_day_pillar','game_unique_ids':game_entities.game_unique_ids}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=nodes,type_ignores=[])),'sensor','exec'),env)
+    entry=SimpleNamespace(entry_id='entry')
+    owner=SimpleNamespace(entry=entry,selected_method_ids=['uniform_fisher_yates'],
+                          configured_method_ids=['uniform_fisher_yates'],ai_enabled=False,
+                          game_count=lambda method_id:1)
+    env['_prune_stale_optional_sensor_entities'](object(),entry,owner)
+    removed={call.args[0] for call in registry.async_remove.call_args_list}
+    assert removed == {'method_uniform_fisher_yates_g2','method_uniform_fisher_yates_g3'}
 
 
 def test_view_marks_exact_same_round_purchase_matches():

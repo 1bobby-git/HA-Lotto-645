@@ -72,10 +72,9 @@ def _game_attributes(coordinator: Lotto645Coordinator, games: list) -> list[dict
 def _active_optional_sensor_unique_ids(coordinator: Lotto645Coordinator) -> set[str]:
     """Return optional sensor registry identities that should exist now."""
     entry_id = coordinator.entry.entry_id
-    active = {
-        f"{entry_id}_method_{method_id}"
-        for method_id in coordinator.selected_method_ids
-    }
+    active = set()
+    for method_id in coordinator.selected_method_ids:
+        active |= game_unique_ids(entry_id, method_id, coordinator.game_count(method_id))
     if METHOD_MYUNGRI_HETU in coordinator.configured_method_ids:
         active.add(f"{entry_id}_saju_profile")
     if coordinator.ai_enabled:
@@ -168,10 +167,10 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
         return {
             "purpose": "선택한 공식별 추천번호·근거·생성시각을 모은 요약입니다. 센서 값은 추천 대상 회차이며 점수나 당첨 개수가 아닙니다.",
             "how_to_view": (
-                "games 속성은 공식별 6개 추천번호와 핵심 근거입니다. 한 공식이 여러 장을 생성하면"
-                " 같은 공식의 games가 여러 번 나타나며, 각 공식 센서의 games 속성에서 한 공식의"
-                " 번호를 모아 볼 수 있습니다. 실제 결과는 n회 추첨번호·당첨 여부, 직접 입력한"
-                " 구매번호는 내 구매번호 센서에서 확인하세요."
+                "각 공식은 요청한 게임 수만큼 별도 센서(1번 | 공식명, 2번 | 공식명, ...)로 "
+                "노출되며 각 센서의 state가 그 게임의 6개 번호입니다. games 속성에는 같은 "
+                "공식의 전체 게임이 함께 담깁니다. 실제 결과는 n회 추첨번호·당첨 여부, 직접 "
+                "입력한 구매번호는 내 구매번호 센서에서 확인하세요."
             ),
             "target_round": analysis.target_round,
             "based_on_round": analysis.based_on_round,
@@ -250,9 +249,10 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
                 "속성이 접혀 보이면 개발자 도구 > 상태에서 '추첨 공식 안내' 엔티티를 선택하면 전체 목록을 볼 수 있습니다."
             ),
             "usage": (
-                "통합 구성에서 여러 공식을 동시에 선택할 수 있으며, 각 공식은 6개 번호 1게임을 생성합니다."
-                " 구성 > 추첨 공식의 '공식별 생성 게임 수'에서 공식마다 여러 장을 요청하면,"
-                " 추가 번호는 같은 공식 센서의 games 속성에 담깁니다."
+                "통합 구성에서 여러 공식을 동시에 선택할 수 있으며, 각 공식은 게임 수만큼 "
+                "별도 센서로 노출됩니다. 구성 > 추첨 공식의 '공식별 생성 게임 수'에서 공식마다 "
+                "1~10장을 요청하면 요청한 장수만큼 센서가 만들어지고, 한 공식의 전체 게임은 "
+                "각 센서의 games 속성에서도 확인할 수 있습니다."
             ),
             "refresh_behavior": "즉시 새로고침은 선택한 비AI 공식으로 Core API에 번호 생성을 요청합니다.",
             "public_formula_notice": PUBLIC_FORMULA_NOTICE,
