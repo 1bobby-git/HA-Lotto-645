@@ -159,7 +159,7 @@ class Runtime:
     async def _finish_or_schedule(self, manager, result):
         return result
 
-    def _previous_analysis(self, state):
+    def _previous_analysis(self, state, ids=None):
         return 'previous'
 
     def analysis_from_saved(self, saved, ids, nonce, status):

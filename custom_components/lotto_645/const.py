@@ -4,7 +4,7 @@ from datetime import timedelta
 
 DOMAIN = "lotto_645"
 NAME = "Lotto 6/45 Analysis"
-VERSION = "2.4.6"
+VERSION = "2.4.7"
 
 PLATFORMS = ["sensor", "button", "binary_sensor"]
 UPDATE_INTERVAL = timedelta(hours=6)
@@ -15,6 +15,11 @@ SERVICE_REFRESH = "refresh"
 SERVICE_GENERATE_AI = "generate_ai_recommendation"
 
 CONF_SELECTED_METHODS = "selected_methods"
+# Per-formula six-number game counts. One sensor per formula keeps reporting the
+# first game as its state; the remaining games are attributes of that entity.
+CONF_GAME_COUNTS = "game_counts"
+DEFAULT_GAMES_PER_FORMULA = 1
+MAX_GAMES_PER_FORMULA = 10
 CONF_ENABLE_AI = "enable_ai_recommendation"
 CONF_AI_TASK_ENTITY_ID = "ai_task_entity_id"
 CONF_AI_AUTO_GENERATE = "ai_auto_generate"

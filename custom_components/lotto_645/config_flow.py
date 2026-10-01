@@ -23,6 +23,7 @@ from .const import (
     CONF_AI_TASK_ENTITY_ID,
     CONF_ALLOW_OFFICIAL_FALLBACK,
     CONF_ENABLE_AI,
+    CONF_GAME_COUNTS,
     CONF_SAJU_BIRTH_DATE,
     CONF_SAJU_BIRTH_PLACE,
     CONF_SAJU_BIRTH_TIME,
@@ -37,10 +38,12 @@ from .const import (
     DEFAULT_AI_AUTO_GENERATE,
     DEFAULT_ALLOW_OFFICIAL_FALLBACK,
     DEFAULT_ENABLE_AI,
+    DEFAULT_GAMES_PER_FORMULA,
     DEFAULT_SAJU_CALENDAR,
     DEFAULT_SAJU_TIMEZONE,
     DEFAULT_SAJU_TRUE_SOLAR_TIME,
     DOMAIN,
+    MAX_GAMES_PER_FORMULA,
     NAME,
 )
 from .korean_birthplaces import (
@@ -48,6 +51,7 @@ from .korean_birthplaces import (
     birthplace_selector_options,
     is_supported_birthplace,
 )
+from .game_batches import normalize_counts, requested_count
 from .methods import (
     DEFAULT_METHOD_IDS,
     METHOD_MYUNGRI_HETU,
@@ -136,6 +140,57 @@ def _recommendation_schema(options: dict[str, Any]) -> vol.Schema:
             ): selector.BooleanSelector(),
         }
     )
+
+
+def _game_count_fields(selected: list[str]) -> dict[str, str]:
+    """Map each selected formula to the form field that carries its game count.
+
+    Home Assistant renders an untranslated schema key verbatim, so the formula's
+    own catalog label is used as the field name. That keeps the on-screen label
+    in sync with the service catalog without a translation entry per formula.
+    Two formulas sharing a label fall back to the stable ID form.
+    """
+    fields: dict[str, str] = {}
+    taken: set[str] = set()
+    for method_id in selected:
+        method = METHODS_BY_ID.get(method_id)
+        label = (method.label or "").strip() if method else ""
+        key = label if label and label not in taken else f"games_{method_id}"
+        taken.add(key)
+        fields[method_id] = key
+    return fields
+
+
+def _game_counts_schema(
+    selected: list[str], counts: dict[str, int]
+) -> vol.Schema:
+    """Build one bounded integer field per selected formula."""
+    schema = {}
+    for method_id, field in _game_count_fields(selected).items():
+        schema[
+            vol.Required(field, default=requested_count(counts, method_id))
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1, max=MAX_GAMES_PER_FORMULA, step=1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+    return vol.Schema(schema)
+
+
+def _normalize_submitted_counts(
+    user_input: dict[str, Any], selected: list[str]
+) -> dict[str, int]:
+    """Accept only whole in-range counts for still-selected formulas."""
+    counts: dict[str, int] = {}
+    for method_id, field in _game_count_fields(selected).items():
+        value = user_input.get(field)
+        counts[method_id] = (
+            value
+            if type(value) is int and 1 <= value <= MAX_GAMES_PER_FORMULA
+            else DEFAULT_GAMES_PER_FORMULA
+        )
+    return counts
 
 
 def _saju_schema(options: dict[str, Any]) -> vol.Schema:
@@ -250,6 +305,7 @@ class Lotto645OptionsFlow(OptionsFlow):
         self._options = dict(config_entry.options)
         self._entry = config_entry
         self._purchase_round: int | None = None
+        self._pending_options: dict[str, Any] | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -358,7 +414,8 @@ class Lotto645OptionsFlow(OptionsFlow):
                                 errors["base"] = "invalid_saju_profile"
 
                     if not errors:
-                        return self.async_create_entry(title="", data=pending)
+                        self._pending_options = pending
+                        return await self.async_step_game_counts()
             except (TypeError, ValueError) as err:
                 _LOGGER.exception("추첨 공식 옵션 처리 중 오류: %s", err)
                 errors["base"] = "options_error"
@@ -369,7 +426,49 @@ class Lotto645OptionsFlow(OptionsFlow):
             errors=errors,
         )
 
-
+    async def async_step_game_counts(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose how many six-number games each selected formula produces."""
+        if self._pending_options is None:
+            # Reached without a validated formula selection, e.g. a restored flow.
+            return await self.async_step_recommendations()
+        pending = self._pending_options
+        selected = list(pending.get(CONF_SELECTED_METHODS) or [])
+        errors: dict[str, str] = {}
+        fields = _game_count_fields(selected)
+        counts = normalize_counts(pending.get(CONF_GAME_COUNTS), selected)
+        if user_input is not None:
+            if any(
+                type(value) is not int
+                or value < 1
+                or value > MAX_GAMES_PER_FORMULA
+                for value in user_input.values()
+            ):
+                errors["base"] = "invalid_game_count"
+                # Keep the rejected value visible so it can be corrected in place.
+                for method_id, field in fields.items():
+                    value = user_input.get(field)
+                    if type(value) is int:
+                        counts[method_id] = min(MAX_GAMES_PER_FORMULA, max(1, value))
+            else:
+                submitted = _normalize_submitted_counts(user_input, selected)
+                # Deselected formulas never keep a stale count, and the default
+                # single-game setup stores no extra option at all.
+                if all(
+                    value <= DEFAULT_GAMES_PER_FORMULA
+                    for value in submitted.values()
+                ):
+                    pending.pop(CONF_GAME_COUNTS, None)
+                else:
+                    pending[CONF_GAME_COUNTS] = submitted
+                self._pending_options = None
+                return self.async_create_entry(title="", data=pending)
+        return self.async_show_form(
+            step_id="game_counts",
+            data_schema=_game_counts_schema(selected, counts),
+            errors=errors,
+        )
 
     async def async_step_saju(
         self, user_input: dict[str, Any] | None = None

@@ -188,7 +188,9 @@ class Generation:
                                     ticket, text(item.get("public_reason")),
                                     identifier(reason_code) if reason_code is not None else None))
         output_ids = tuple(g.formula_id for g in games)
-        if len(set(output_ids)) != len(output_ids) or set(output_ids) - set(requested_ids):
+        # A formula may answer with more than one game; an unrequested formula
+        # is still a protocol violation.
+        if set(output_ids) - set(requested_ids):
             raise ContractError("unexpected_output")
         if state == "completed" and set(output_ids) != set(requested_ids):
             raise ContractError("missing_final_output")

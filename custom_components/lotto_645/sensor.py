@@ -40,6 +40,43 @@ def _purchase_matches(coordinator: Lotto645Coordinator, recommendation) -> list[
     )
 
 
+def _formula_games(coordinator: Lotto645Coordinator, method_id: str) -> list:
+    """Return every game one selected formula produced, primary game first."""
+    if coordinator.data is None:
+        return []
+    return list(coordinator.data.analysis.recommendations_by_method(method_id))
+
+
+def _game_attributes(coordinator: Lotto645Coordinator, games: list) -> list[dict]:
+    """Describe each generated game of one formula as a templateable attribute."""
+    rows = []
+    for recommendation in games:
+        matches = _purchase_matches(coordinator, recommendation)
+        rows.append(
+            {
+                "formula_game": recommendation.formula_game,
+                "game": recommendation.index,
+                "numbers": list(recommendation.numbers),
+                "core_reason": recommendation.reason,
+                "source": recommendation.source,
+                "generated_at": recommendation.details.get("generated_at"),
+                "purchase_match": bool(matches),
+                "purchase_match_count": len(matches),
+                "purchase_matches": matches,
+            }
+        )
+    return rows
+
+
+def _all_purchase_matches(coordinator: Lotto645Coordinator, games: list) -> list[dict]:
+    """Return exact same-round matches for every generated game of one formula."""
+    return [
+        {**match, "formula_game": recommendation.formula_game}
+        for recommendation in games
+        for match in _purchase_matches(coordinator, recommendation)
+    ]
+
+
 def _active_optional_sensor_unique_ids(coordinator: Lotto645Coordinator) -> set[str]:
     """Return optional sensor registry identities that should exist now."""
     entry_id = coordinator.entry.entry_id
@@ -137,7 +174,12 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
             games.append(data.ai_recommendation.as_attributes())
         return {
             "purpose": "선택한 공식별 추천번호·근거·생성시각을 모은 요약입니다. 센서 값은 추천 대상 회차이며 점수나 당첨 개수가 아닙니다.",
-            "how_to_view": "games 속성은 공식별 6개 추천번호와 핵심 근거입니다. 실제 결과는 n회 추첨번호·당첨 여부, 직접 입력한 구매번호는 내 구매번호 센서에서 확인하세요.",
+            "how_to_view": (
+                "games 속성은 공식별 6개 추천번호와 핵심 근거입니다. 한 공식이 여러 장을 생성하면"
+                " 같은 공식의 games가 여러 번 나타나며, 각 공식 센서의 games 속성에서 한 공식의"
+                " 번호를 모아 볼 수 있습니다. 실제 결과는 n회 추첨번호·당첨 여부, 직접 입력한"
+                " 구매번호는 내 구매번호 센서에서 확인하세요."
+            ),
             "target_round": analysis.target_round,
             "based_on_round": analysis.based_on_round,
             "history_draws": data.history_count,
@@ -154,6 +196,10 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
             "source_url": SOURCE_RESULT_URL,
             "selected_method_ids": list(self.coordinator.selected_method_ids),
             "selected_method_count": len(self.coordinator.selected_method_ids),
+            "games_per_formula": analysis.summary.get("games_per_formula", {}),
+            "game_count": len(games),
+            "game_shortfall": analysis.summary.get("game_shortfall", {}),
+            "game_shortfall_notice": analysis.summary.get("game_shortfall_notice"),
             "games": games,
             "analysis_summary": analysis.summary,
             "saju_profile_status": self.coordinator.saju_profile_status,
@@ -210,7 +256,11 @@ class LottoMethodGuideSensor(Lotto645Entity, SensorEntity):
                 "method_description 속성에서 해당 공식의 설명을 확인하세요. Home Assistant에서 "
                 "속성이 접혀 보이면 개발자 도구 > 상태에서 '추첨 공식 안내' 엔티티를 선택하면 전체 목록을 볼 수 있습니다."
             ),
-            "usage": "통합 구성에서 여러 공식을 동시에 선택할 수 있으며, 각 공식은 6개 번호 1게임과 핵심 근거를 생성합니다.",
+            "usage": (
+                "통합 구성에서 여러 공식을 동시에 선택할 수 있으며, 각 공식은 6개 번호 1게임을 생성합니다."
+                " 구성 > 추첨 공식의 '공식별 생성 게임 수'에서 공식마다 여러 장을 요청하면,"
+                " 추가 번호는 같은 공식 센서의 games 속성에 담깁니다."
+            ),
             "refresh_behavior": "즉시 새로고침은 선택한 비AI 공식으로 Core API에 번호 생성을 요청합니다.",
             "public_formula_notice": PUBLIC_FORMULA_NOTICE,
             "disclaimer": DISCLAIMER,
@@ -272,7 +322,12 @@ class LottoSajuProfileSensor(Lotto645Entity, SensorEntity):
 
 
 class LottoGameSensor(Lotto645Entity, SensorEntity):
-    """Recommendation produced by one selected method."""
+    """Recommendation produced by one selected method.
+
+    The state stays the formula's primary six numbers so existing dashboards and
+    automations keep working. Every additional configured game is an attribute
+    of this same entity rather than a separate sensor.
+    """
 
     # Keep current explanations accessible, but do not duplicate a large natal
     # profile and luck timeline in Recorder on every recommendation refresh.
@@ -280,7 +335,7 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
         "pillar_details", "current_daewoon", "target_interactions", "structural_analysis",
         "favorable_analysis", "luck_layers", "number_score_trace", "rule_sources",
         "calculation_warnings", "calendar_rules", "shensha", "target_draw_four_pillars",
-        "purchase_matches",
+        "purchase_matches", "games",
     })
     _attr_icon = "mdi:numeric"
 
@@ -295,21 +350,19 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
     def name(self) -> str:
         review = self.coordinator.review_for_method(self.method_id) if hasattr(self.coordinator, "review_for_method") else {}
         base = review_name(METHODS_BY_ID[self.method_id].label, review)
-        data = self.coordinator.data
-        recommendation = (
-            data.analysis.recommendation_by_method(self.method_id) if data else None
+        games = _formula_games(self.coordinator, self.method_id)
+        return (
+            f"✓구매일치 | {base}"
+            if _all_purchase_matches(self.coordinator, games)
+            else base
         )
-        return f"✓구매일치 | {base}" if _purchase_matches(self.coordinator, recommendation) else base
 
     @property
     def icon(self) -> str:
-        data = self.coordinator.data
-        recommendation = (
-            data.analysis.recommendation_by_method(self.method_id) if data else None
-        )
+        games = _formula_games(self.coordinator, self.method_id)
         return (
             "mdi:ticket-confirmation"
-            if _purchase_matches(self.coordinator, recommendation)
+            if _all_purchase_matches(self.coordinator, games)
             else "mdi:numeric"
         )
 
@@ -347,15 +400,24 @@ class LottoGameSensor(Lotto645Entity, SensorEntity):
                 }
             return {}
         method = METHODS_BY_ID[self.method_id]
-        matches = _purchase_matches(self.coordinator, recommendation)
+        games = _formula_games(self.coordinator, self.method_id)
+        matches = _all_purchase_matches(self.coordinator, games)
+        requested = self.coordinator.game_count(self.method_id)
         return {
             **recommendation.as_attributes(),
+            "game_count": len(games),
+            "requested_game_count": requested,
+            "games": _game_attributes(self.coordinator, games),
+            "game_count_notice": (
+                "numbers는 이 공식의 첫 번째 게임입니다. games 속성에 요청한 장수만큼 "
+                "6개 번호가 각각 들어 있습니다. 어느 공식도 당첨 확률을 바꾸지 않습니다."
+            ),
             "purchase_match": bool(matches),
             "purchase_match_count": len(matches),
             "purchase_matches": matches,
             "purchase_match_notice": (
                 "같은 회차에 저장한 구매번호와 6개 번호가 모두 같은 경우입니다. "
-                "실제 구매 사실을 인증하는 값은 아닙니다."
+                "생성된 게임 중 하나라도 일치하면 표시됩니다. 실제 구매 사실을 인증하는 값은 아닙니다."
             ),
             "local_review": self.coordinator.review_for_method(self.method_id) if hasattr(self.coordinator, "review_for_method") else {},
             "review_notice": REVIEW_NOTICE,

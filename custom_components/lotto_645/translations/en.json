@@ -45,6 +45,11 @@
           "advanced_methods": "Alternative implementations/presets of existing families, not better winning strategies. Existing selections are preserved."
         }
       },
+      "game_counts": {
+        "title": "Games per draw formula",
+        "description": "Choose how many six-number games each selected formula produces. Only one sensor is kept per formula; the additional games become attributes of that same entity. No formula changes the first-prize probability.",
+        "data": {}
+      },
       "saju": {
         "title": "Personal Four Pillars profile",
         "description": "Save personal birth information before using the Four Pillars recommendation. Enter the birth date as YYYY-MM-DD and birth time as HH:MM. Raw birth values remain in Home Assistant and are not sent to the lottery mirror or HA AI prompts.",
@@ -108,6 +113,7 @@
       "purchase_storage_unavailable": "Could not save. Existing tickets are preserved.",
       "purchase_game_limit": "Enter at most five games (A–E) per draw.",
       "invalid_generation_rules": "Conflicting or invalid rules. Check the explanation above.",
+      "invalid_game_count": "Games per formula must be between 1 and 10.",
       "service_connection_failed": "서버 주소·토큰·인증서 또는 입력 조건을 확인하세요. 기존 기록은 유지됩니다.",
       "member_waiting": "Approval is pending. Approve the connection in Lotto Lab, then submit again.",
       "member_link_failed": "Unable to link the Lotto Lab account. Try again."

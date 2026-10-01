@@ -260,10 +260,13 @@ def test_removed_values_are_never_sent_to_generation():
 
 def test_connection_client_can_update_token_without_replacing_journals():
     tree = ast.parse((R / "service_runtime.py").read_text(encoding="utf-8"))
-    method = next(
-        n for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef) and n.name == "_configure_connection"
-    )
+    methods = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef)
+        and n.name in ("_configure_connection", "_remote_manager")
+    ]
+    method = next(n for n in methods if n.name == "_configure_connection")
 
     class Client:
         def __init__(self, session, url, token, **kwargs):
@@ -285,7 +288,7 @@ def test_connection_client_can_update_token_without_replacing_journals():
         ),
     }
     exec(
-        compile(ast.Module(body=[method], type_ignores=[]), "<runtime>", "exec"),
+        compile(ast.Module(body=methods, type_ignores=[]), "<runtime>", "exec"),
         namespace,
     )
     owner = SimpleNamespace(
@@ -295,11 +298,17 @@ def test_connection_client_can_update_token_without_replacing_journals():
         entry=SimpleNamespace(entry_id="entry"),
         connection_manager=SimpleNamespace(journal_scope="fixed-journal"),
     )
+    owner._remote_manager = lambda index: namespace["_remote_manager"](owner, index)
     apply = namespace["_configure_connection"]
     apply(owner, LEGACY)
     before = owner.client
     pending = owner.generator
     ai = owner.ai_generator
+    # Every game batch keeps its own durable store, batch 0 on the legacy key.
+    assert owner.generators[0].store.endswith(".fixed-journal")
+    extra = owner._remote_manager(1)
+    assert extra.store.endswith(".fixed-journal.g2")
+    assert extra is owner._remote_manager(1)
     apply(owner, {**LEGACY, TOKEN: "rotated-access-token-1234567890"})
     assert owner.client is before
     assert owner.generator is pending
@@ -336,9 +345,10 @@ def test_panel_upgrade_accepts_recent_release_tags():
         "lotto-ticket-panel-v2-4-3",
         "lotto-ticket-panel-v2-4-4",
         "lotto-ticket-panel-v2-4-5",
+        "lotto-ticket-panel-v2-4-6",
     ):
         assert repr(tag) in source
-    assert "PANEL_TAG = 'lotto-ticket-panel-v2-4-6'" in source
+    assert "PANEL_TAG = 'lotto-ticket-panel-v2-4-7'" in source
 
 
 def test_member_refresh_preserves_identity_and_uses_one_rotation(monkeypatch):

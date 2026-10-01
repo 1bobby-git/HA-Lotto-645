@@ -45,6 +45,10 @@
           "advanced_methods": "Alternative implementations/presets of existing families, not better winning strategies. Existing selections are preserved."
         }
       },
+      "game_counts": {
+        "title": "Games per draw formula",
+        "description": "Choose how many six-number games each selected formula produces. Only one sensor is kept per formula; the additional games become attributes of that same entity. No formula changes the first-prize probability."
+      },
       "saju": {
         "title": "Personal Four Pillars profile",
         "description": "Save personal birth information before using the Four Pillars recommendation. Birth place is selected from the 17 first-level South Korean regions and Asia/Seoul is applied automatically. Raw birth data remains local to Home Assistant.",
@@ -106,7 +110,8 @@
       "purchase_storage_unavailable": "Could not save. Existing tickets are preserved.",
       "purchase_game_limit": "Enter at most five games (A–E) per draw.",
       "select_korean_birthplace": "Choose one of the 17 South Korean regions.",
-      "invalid_generation_rules": "조건이 서로 충돌하거나 입력 범위가 올바르지 않습니다. 위 안내를 확인하세요.",
+      "invalid_generation_rules": "Conditions conflict or a value is out of range. Check the guidance above.",
+      "invalid_game_count": "Games per formula must be between 1 and 10.",
       "service_connection_failed": "서버 주소·토큰·인증서 또는 입력 조건을 확인하세요. 기존 기록은 유지됩니다.",
       "member_waiting": "Approval is pending. Approve the connection in Lotto Lab, then submit again.",
       "member_link_failed": "Unable to link the Lotto Lab account. Try again."

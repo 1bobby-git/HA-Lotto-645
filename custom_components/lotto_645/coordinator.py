@@ -34,6 +34,7 @@ from .const import (
     CONF_AI_TASK_ENTITY_ID,
     CONF_ALLOW_OFFICIAL_FALLBACK,
     CONF_ENABLE_AI,
+    CONF_GAME_COUNTS,
     CONF_SELECTED_METHODS,
     DEFAULT_AI_AUTO_GENERATE,
     DEFAULT_ALLOW_OFFICIAL_FALLBACK,
@@ -145,6 +146,17 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
     def saju_profile(self) -> dict[str, Any]:
         """Return the local personal Saju profile extracted from config options."""
         return extract_saju_profile(dict(self.entry.options))
+
+    @property
+    def formula_game_counts(self) -> dict[str, int]:
+        """Return the configured six-number game count for each selected formula."""
+        return normalize_counts(
+            self.entry.options.get(CONF_GAME_COUNTS), self.configured_method_ids
+        )
+
+    def game_count(self, method_id: str) -> int:
+        """Return how many games one selected formula should produce."""
+        return requested_count(self.formula_game_counts, method_id)
 
     @property
     def saju_profile_ready(self) -> bool:
@@ -442,6 +454,7 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             # prediction snapshot.
             result = {
                 "index": item.index,
+                "formula_game": item.formula_game,
                 "method_id": item.method_id,
                 "label": item.label,
                 "method": item.method,
@@ -457,9 +470,17 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 result["generated_at"] = item.details.get("consensus_updated_at")
             return result
 
-        recommendations = [minimal_item(item) for item in analysis.recommendations]
+        # A formula configured for several games still earns exactly one review
+        # vote per draw, so the ledger keeps comparing methods, not game counts.
+        # The extra games stay visible as attributes of the formula entity.
+        primary: dict[str, dict[str, Any]] = {}
+        for item in analysis.recommendations:
+            primary.setdefault(item.method_id, minimal_item(item))
+        recommendations = list(primary.values())
         if ai_recommendation is not None:
             recommendations.append(minimal_item(ai_recommendation))
+        for index, item in enumerate(recommendations, start=1):
+            item["index"] = index
         return {
             "target_round": analysis.target_round,
             "based_on_round": analysis.based_on_round,

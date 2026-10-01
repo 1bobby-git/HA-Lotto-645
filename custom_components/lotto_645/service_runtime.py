@@ -9,12 +9,13 @@ import json
 import time
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
-from .const import DOMAIN, CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CERT, CONF_PERSONAL_CONSENT
+from .const import DOMAIN, CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CERT, CONF_PERSONAL_CONSENT, MAX_GAMES_PER_FORMULA
 from .lab_client import LottoLabClient, LabServiceError
 from .remote_generation import RemoteGeneration, retry_due
 from .managed_connection import ManagedConnection, CONNECTION_KEYS, without_user_connection
 from .member_link import poll as poll_member_link, state_from_tokens
 from .service_contract import Catalog, numbers
+from .game_batches import merge_batches, next_batch, shortfalls
 from .methods import install_catalog, METHOD_MYUNGRI_HETU, METHODS_BY_ID
 from .models import AnalysisResult, Recommendation
 
@@ -30,12 +31,13 @@ class ServiceRuntime(FinalizationRuntime):
         self.catalog_updated_at = 0.0
         self.status = 'not_connected'
         self.info = {}
-        self.retry_task = None
+        self.retry_tasks = set()
         self.lock = asyncio.Lock()
         self.connection = {}
         self.connection_manager = ManagedConnection(Store(self.hass, 1, f'{DOMAIN}.connection.{self.entry.entry_id}'))
         self.catalog_store = Store(self.hass,1,f'{DOMAIN}.catalog.{self.entry.entry_id}')
         self.generator = None
+        self.generators = {}
         self.ai_generator = None
         self.finalizer = None
         self.final_follow = None
@@ -43,6 +45,24 @@ class ServiceRuntime(FinalizationRuntime):
         self.health = {}
         self.member_link = None
         self.member_task = None
+
+    def _remote_manager(self, index):
+        """Return the durable remote job slot of one generation batch.
+
+        Batch 0 keeps the original store key so an existing single-game result
+        or pending job is reused instead of regenerated. Later batches get their
+        own key, which keeps every accepted result durable across restarts.
+        """
+        manager=self.generators.get(index)
+        if manager is not None:
+            return manager
+        scope=self.connection_manager.journal_scope
+        key=f'{DOMAIN}.remote.{self.entry.entry_id}.{scope}'
+        if index:
+            key=f'{key}.g{index+1}'
+        manager=RemoteGeneration(self.client,Store(self.hass,1,key))
+        self.generators[index]=manager
+        return manager
 
     def _configure_connection(self, values):
         scope = self.connection_manager.journal_scope
@@ -62,8 +82,8 @@ class ServiceRuntime(FinalizationRuntime):
         self.client = LottoLabClient(async_get_clientsession(self.hass),
             values[CONF_SERVICE_URL], values[CONF_SERVICE_TOKEN],
             certificate_sha256=values.get(CONF_SERVICE_CERT))
-        scope=self.connection_manager.journal_scope
-        self.generator=RemoteGeneration(self.client,Store(self.hass,1,f'{DOMAIN}.remote.{self.entry.entry_id}.{scope}'))
+        self.generators={}
+        self.generator=self._remote_manager(0)
         self.ai_generator=RemoteGeneration(self.client,Store(self.hass,1,f'{DOMAIN}.remote_ai.{self.entry.entry_id}.{scope}'))
 
     async def prepare(self):
@@ -110,22 +130,23 @@ class ServiceRuntime(FinalizationRuntime):
             if self.status == 'reauth_required':
                 self.connection_manager.invalidate()
 
-    def legacy_analysis(self):
+    def legacy_analysis(self, ids=None):
         target = self.owner.history[-1].round+1
+        wanted=tuple(self.owner.selected_method_ids if ids is None else ids)
         snapshot = self.owner._prediction_snapshot or {}
         rows=[]
         if snapshot.get('target_round') == target:
             for raw in snapshot.get('recommendations',[]):
-                if raw.get('method_id') in self.owner.selected_method_ids:
+                if raw.get('method_id') in wanted:
                     try:
                         item=Recommendation.from_storage(raw)
                         rows.append(Recommendation(item.index,item.method_id,item.label,item.method,
                             item.numbers,'기존 기기에 저장된 번호입니다. 새 Core에서 생성한 기록이 아닙니다.',
-                            None,item.details,source='legacy_local'))
+                            None,item.details,source='legacy_local',formula_game=item.formula_game))
                     except (ValueError,KeyError,TypeError):
                         continue
         return AnalysisResult(target,target-1,tuple(rows),{
-            'selected_method_ids':list(self.owner.selected_method_ids),
+            'selected_method_ids':list(wanted),
             'generation_sequence':self.owner._local_generation_nonce,
             'service_status':self.status,'record_origin':'legacy_local'})
 
@@ -163,8 +184,11 @@ class ServiceRuntime(FinalizationRuntime):
                 return result
             await asyncio.sleep(.4)
             result=await manager.poll()
-        if self.retry_task is None or self.retry_task.done():
-            self.retry_task=self.hass.async_create_task(self._follow(manager), 'lotto-service-follow')
+        # One follower at a time is enough: it refreshes the coordinator, which
+        # re-runs every batch that is still outstanding.
+        self.retry_tasks={task for task in self.retry_tasks if not task.done()}
+        if not self.retry_tasks:
+            self.retry_tasks.add(self.hass.async_create_task(self._follow(manager), 'lotto-service-follow'))
         return result
 
     async def _follow(self, manager):
@@ -181,29 +205,89 @@ class ServiceRuntime(FinalizationRuntime):
 
     async def analysis(self):
         async with self.lock:
-            result=await self._analysis()
+            result=await self._batched_analysis()
             if 'post_generation_ticket_set_v1' in self.info.get('capabilities',[]):
                 try:await self.finalization_state()
                 except (LabServiceError,OSError,ValueError):pass
             return result
 
-    async def _analysis(self):
+    def _merge_batches(self, counts, collected, summaries):
+        """Combine every accepted batch result into one ordered analysis."""
+        rows=merge_batches(self.owner.selected_method_ids,counts,collected)
+        summary=dict(summaries[-1].summary)
+        summary['selected_method_ids']=list(self.owner.selected_method_ids)
+        summary['games_per_formula']={key:counts[key] for key in summary['selected_method_ids'] if key in counts}
+        summary['batch_count']=len(summaries)
+        summary['game_shortfall']=shortfalls(summary['selected_method_ids'],counts,rows)
+        if summary['game_shortfall']:
+            summary['game_shortfall_notice']=(
+                '설정한 장수보다 적은 번호가 생성되었습니다. 사용량 제한이나 중간 응답을 확인하세요.'
+                '다음 갱신에서 부족한 장수만 다시 요청합니다.'
+            )
+        else:
+            summary.pop('game_shortfall_notice',None)
+        return AnalysisResult(summaries[-1].target_round,summaries[-1].based_on_round,rows,summary)
+
+    async def _batched_analysis(self):
+        """Ask the service for every outstanding game of each selected formula.
+
+        Each batch owns a durable job slot, so a formula configured for N games
+        is satisfied by N single-game batches. A service that already answers one
+        request with several games per formula satisfies the remaining batches at
+        once, and no further request is sent.
+        """
+        ids=self.owner.selected_method_ids
+        counts=self.owner.formula_game_counts
+        if not self.client or not ids or all(value<=1 for value in counts.values()):
+            # One game per formula stays exactly one request with one durable key.
+            return await self._analysis()
+        collected={}
+        summaries=[]
+        for _ in range(MAX_GAMES_PER_FORMULA):
+            batch_ids=next_batch(ids,counts,collected)
+            if not batch_ids:
+                break
+            result=await self._analysis(manager=self._remote_manager(len(summaries)),ids=batch_ids)
+            summaries.append(result)
+            if not summaries[:-1] and not result.recommendations:
+                # The loop is only entered with an outstanding formula, so the
+                # first batch always records a result to build the summary from.
+                return result
+            if result.target_round!=self.owner.history[-1].round+1:
+                break  # this batch could not confirm the upcoming round
+            fresh=0
+            for item in result.recommendations:
+                if item.method_id not in batch_ids:
+                    continue
+                known={row.numbers for row in collected.get(item.method_id,())}
+                if item.numbers in known:
+                    continue
+                collected.setdefault(item.method_id,[]).append(item)
+                fresh+=1
+            if not fresh:
+                # A service that cannot add another distinct game right now will
+                # not add one in the next batch either. Later refreshes retry.
+                break
+        return self._merge_batches(counts,collected,summaries)
+
+    async def _analysis(self, manager=None, ids=None):
+        manager = self.generator if manager is None else manager
+        if ids is None:
+            ids = self.owner.selected_method_ids
         if self.connection_manager.needs_refresh:
             await self.prepare()
         if not self.client:
             await self.prepare()
         if not self.client:
-            return self.legacy_analysis()
+            return self.legacy_analysis(ids)
         if self.catalog is None or time.monotonic()-self.catalog_updated_at>3600 or self.status in ('connection_unavailable','reauth_required'):
             await self.prepare()
-        ids=self.owner.selected_method_ids
         target=self.owner.history[-1].round+1
         options={}
         # Deprecated manual generation rules and JSON overrides are not applied.
         profile=self.owner.saju_profile if METHOD_MYUNGRI_HETU in ids else None
         material=self.material_context(options,profile)
         context_tag=hashlib.sha256(json.dumps([target,ids,material,self.owner._local_generation_nonce]).encode()).hexdigest()
-        manager=self.generator
         state=await manager.state()
         if state.get('pending'):
             try:
@@ -213,7 +297,7 @@ class ServiceRuntime(FinalizationRuntime):
                 pending=state['pending']
                 if exc.code!='not_found':
                     self.status='pending_recovery_required'
-                    return self._previous_analysis(state)
+                    return self._previous_analysis(state,ids)
                 if not pending.get('generation_id') and pending.get('context_tag')==context_tag:
                     result=await manager.start(target_round=target,formula_ids=ids,options=options,
                         personal_profile=profile,personal_consent=bool(self.entry.options.get(CONF_PERSONAL_CONSENT)),
@@ -228,7 +312,7 @@ class ServiceRuntime(FinalizationRuntime):
             state=await manager.state()
             if state.get('pending'):
                 self.status='generating'
-                return self._previous_analysis(state)
+                return self._previous_analysis(state,ids)
         previous=state.get('last_result')
         previous_context=state.get('last_context',{})
         if previous and previous_context.get('context_tag')==context_tag:
@@ -237,14 +321,14 @@ class ServiceRuntime(FinalizationRuntime):
             return self.analysis_from_saved(previous,ids,self.owner._local_generation_nonce,self.status)
         if not ids:
             self.status='profile_or_selection_required'
-            return self._previous_analysis(state)
+            return self._previous_analysis(state,ids)
         failure=state.get('last_failure') or {}
         if failure.get('context_tag')==context_tag and not retry_due(failure):
             self.status=failure.get('status','failed')
-            return self._previous_analysis(state)
+            return self._previous_analysis(state,ids)
         if any(METHODS_BY_ID[x].status=='withdrawn' for x in ids):
             self.status='formula_withdrawn'
-            return self._previous_analysis(state)
+            return self._previous_analysis(state,ids)
         source=previous['generation_id'] if previous and previous['target_round']==target else None
         mode='generate'
         # Reconcile only when the formula set changes but the underlying inputs do not.
@@ -269,7 +353,7 @@ class ServiceRuntime(FinalizationRuntime):
             self.status=exc.code if isinstance(exc,LabServiceError) else 'service_storage_error'
             if self.status=='reauth_required':
                 self.connection_manager.invalidate()
-        return self._previous_analysis(state)
+        return self._previous_analysis(state,ids)
 
     def _record_health(self, ok, info=None, error=None):
         """Keep attributes stable between checks: only transitions change `since`."""
@@ -345,21 +429,25 @@ class ServiceRuntime(FinalizationRuntime):
 
     async def generation_retry_due(self):
         """True when a stored server-side generation failure is ready for an automatic retry."""
-        if self.generator is None:
+        if self.generators is None:
             return False
-        try:
-            state=await self.generator.state()
-        except (LabServiceError,OSError,ValueError):
-            return False
-        return retry_due(state.get('last_failure'))
+        for manager in list(self.generators.values()):
+            try:
+                state=await manager.state()
+            except (LabServiceError,OSError,ValueError):
+                return False
+            if retry_due(state.get('last_failure')):
+                return True
+        return False
 
-    def _previous_analysis(self,state):
+    def _previous_analysis(self,state,ids=None):
         old=state.get('last_result')
         target=self.owner.history[-1].round+1
+        wanted=tuple(self.owner.selected_method_ids if ids is None else ids)
         if old and old['target_round']==target:
-            return self.analysis_from_saved(old,self.owner.selected_method_ids,
+            return self.analysis_from_saved(old,wanted,
                 self.owner._local_generation_nonce,self.status)
-        return self.legacy_analysis()
+        return self.legacy_analysis(wanted)
 
     async def ai_ticket(self,target):
         if self.connection_manager.needs_refresh:
@@ -387,6 +475,9 @@ class ServiceRuntime(FinalizationRuntime):
         if self.final_follow and not self.final_follow.done():
             self.final_follow.cancel()
             await asyncio.gather(self.final_follow,return_exceptions=True)
-        if self.retry_task and not self.retry_task.done():
-            self.retry_task.cancel()
-            await asyncio.gather(self.retry_task,return_exceptions=True)
+        followups=[task for task in self.retry_tasks if not task.done()]
+        for task in followups:
+            task.cancel()
+        if followups:
+            await asyncio.gather(*followups,return_exceptions=True)
+        self.retry_tasks.clear()
