@@ -54,7 +54,8 @@ def test_home_wallet_renders_five_games_and_multiple_tickets_as_swiper():
 
 def test_native_formula_entities_expose_purchase_match_marker():
     sensor = (R / 'sensor.py').read_text(encoding='utf-8')
-    assert sensor.count('✓구매일치 |') == 2
+    entities = (R / 'game_entities.py').read_text(encoding='utf-8')
+    assert sensor.count('✓구매일치 |') + entities.count('✓구매일치 |') == 2
     assert sensor.count('mdi:ticket-confirmation') >= 2
     assert '"purchase_match": bool(matches)' in sensor
     assert '"purchase_matches": matches' in sensor

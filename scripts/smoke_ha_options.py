@@ -328,11 +328,11 @@ async def main():
         restored=review_module.ReviewBook.from_storage(await obj._review_store.async_load())
         assert restored.summary('old')['reviewed_rounds']==1
         assert obj.review_for_method('old')['winning_rounds']==1
-        # Method label reads the actual local review, not the engine's fit score.
+        # Entity names carry the game number only; review status lives on the Lotto page.
         game_sensor=sensor_module.LottoGameSensor(obj,'weighted_frequency')
-        assert game_sensor.name.startswith('☆평가대기')
+        assert game_sensor.name.startswith('1번 | ')
         obj._review_summaries['weighted_frequency']={'mean_score':80.,'stars':4.,'reviewed_rounds':1}
-        assert game_sensor.name.startswith('★4.0 · 80.0점')
+        assert game_sensor.name.startswith('1번 | ') and '★' not in game_sensor.name
         assert game_sensor.entity_category is None
         assert summary_sensor.entity_category==EntityCategory.DIAGNOSTIC
         assert sensor_module.LottoMethodGuideSensor(obj).entity_category==EntityCategory.DIAGNOSTIC
