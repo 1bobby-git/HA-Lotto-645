@@ -116,6 +116,39 @@ class ReviewBook:
                 }
             row['result_revision']=max(0,int(raw.get('result_revision',0)))
             row['result_changes']=deepcopy(raw.get('result_changes',[])) if isinstance(raw.get('result_changes',[]),list) else []
+            games = raw.get('games')
+            if isinstance(games, dict):
+                # Additive provenance archive: a damaged row must never make the
+                # whole ledger unreadable, so unusable entries are dropped.
+                row['games'] = {}
+                for game_key, prediction in games.items():
+                    if not isinstance(game_key, str) or not isinstance(prediction, dict):
+                        continue
+                    method_id = str(prediction.get("method_id") or game_key.split("#", 1)[0])[:100]
+                    if not method_id or prediction.get("source") == "purchased":
+                        continue
+                    game_no = prediction.get("formula_game", 1)
+                    if type(game_no) is not int or not 1 <= game_no <= 1000:
+                        game_no = 1
+                    try:
+                        when = _timestamp(prediction.get("generated_at"))
+                        based = prediction.get("based_on_round")
+                        if (type(based) is not int or not 0 < based < int(key)
+                                or when >= _cutoff(int(key))):
+                            continue
+                        row['games'][game_key] = {
+                            "numbers": list(parse_ticket(prediction.get("numbers"))),
+                            "label": str(prediction.get("label", method_id))[:180],
+                            "generated_at": when.isoformat(), "based_on_round": based,
+                            "source": str(prediction.get("source", "analysis"))[:40],
+                            "formula_game": game_no, "method_id": method_id,
+                            **{k: str(prediction[k])[:128] for k in ('formula_version','core_version','generation_id')
+                               if prediction.get(k) is not None},
+                        }
+                    except (TypeError, ValueError, KeyError):
+                        continue
+                if not row['games']:
+                    del row['games']
             book.rounds[key] = row
             result = raw.get("result")
             if result is not None:
@@ -137,8 +170,13 @@ class ReviewBook:
     def to_storage(self) -> dict:
         return {"version": 1, "rounds": deepcopy(self.rounds)}
 
-    def record_snapshot(self, snapshot: Any, *, now: datetime | None = None) -> bool:
-        """Import real persisted snapshots; freeze each method at the cutoff."""
+    def record_snapshot(self, snapshot: Any, *, now: datetime | None = None, archive_all: bool = False) -> bool:
+        """Import real persisted snapshots; freeze each method at the cutoff.
+
+        With ``archive_all`` every generated game of a multi-game formula is kept
+        in the round's ``games`` archive for purchase provenance, while
+        ``predictions`` still holds one vote per formula (its first game).
+        """
         if not isinstance(snapshot, dict):
             return False
         r, based = snapshot.get("target_round"), snapshot.get("based_on_round")
@@ -150,7 +188,8 @@ class ReviewBook:
             cutoff = _cutoff(r)
         except ValueError:
             return False
-        accepted = {}
+        accepted: dict[str, dict] = {}
+        archive: dict[str, dict] = {}
         for raw in snapshot["recommendations"]:
             if not isinstance(raw, dict) or raw.get("source") == "purchased":
                 continue
@@ -165,21 +204,41 @@ class ReviewBook:
                     continue
             except (TypeError, ValueError, KeyError):
                 continue
-            accepted[method_id] = {"numbers": list(numbers), "label": str(raw.get("label", method_id))[:180],
-                                   "generated_at": when.isoformat(), "based_on_round": based,
-                                   "source": str(raw.get("source", "analysis"))[:40],
-                                   **{k:str(raw.get('details',{}).get(k))[:128] for k in ('formula_version','core_version','generation_id') if raw.get('details',{}).get(k) is not None}}
-        if not accepted:
+            game_no = raw.get("formula_game", 1)
+            if type(game_no) is not int or not 1 <= game_no <= 1000:
+                game_no = 1
+            prediction = {"numbers": list(numbers), "label": str(raw.get("label", method_id))[:180],
+                          "generated_at": when.isoformat(), "based_on_round": based,
+                          "source": str(raw.get("source", "analysis"))[:40],
+                          **{k:str(raw.get('details',{}).get(k))[:128] for k in ('formula_version','core_version','generation_id') if raw.get('details',{}).get(k) is not None}}
+            current = accepted.get(method_id)
+            if current is None or game_no < current[0]:
+                accepted[method_id] = (game_no, prediction)
+            if archive_all:
+                archive[f"{method_id}#{game_no}"] = {**prediction, "formula_game": game_no, "method_id": method_id}
+        if not accepted and not archive:
             return False
         row = self.rounds.setdefault(str(r), {"predictions": {}, "result": None})
         changed = False
-        for method_id, prediction in accepted.items():
+        for method_id, (_game_no, prediction) in accepted.items():
             old = row["predictions"].get(method_id)
             if old is not None and (now >= cutoff or _timestamp(prediction["generated_at"]) <= _timestamp(old["generated_at"])):
                 continue
             if prediction != old:
                 row["predictions"][method_id] = prediction
                 changed = True
+        if archive_all:
+            games = row.setdefault("games", {})
+            for key, prediction in archive.items():
+                old = games.get(key)
+                if old is not None and (now >= cutoff or _timestamp(prediction["generated_at"]) <= _timestamp(old["generated_at"])):
+                    continue
+                if prediction != old:
+                    games[key] = prediction
+                    changed = True
+        if archive_all and not row["predictions"] and row["result"] is None and not row["games"]:
+            # An empty shell must not survive as a review round.
+            del self.rounds[str(r)]
         return changed
 
     def set_result(self, draw: LottoDraw, *, confirmed: bool, status: str) -> bool:

@@ -59,3 +59,13 @@ def test_native_formula_entities_expose_purchase_match_marker():
     assert sensor.count('mdi:ticket-confirmation') >= 2
     assert '"purchase_match": bool(matches)' in sensor
     assert '"purchase_matches": matches' in sensor
+
+
+def test_the_formula_badge_names_the_game_it_came_from():
+    view = (R / 'www/lotto-panel-view.js').read_text(encoding='utf-8')
+    core = (R / 'www/lotto-panel-core.js').read_text(encoding='utf-8')
+    assert 'export function formulaLinkLabels' in view
+    assert '${link.formula_game}번 ${name}' in view
+    assert 'formulaLinkLabels(linked)' in view
+    assert 'formulaLinkLabels(game.formula_links)' in core
+    assert 'formulaLinkLabels' in core.split('\n')[2]

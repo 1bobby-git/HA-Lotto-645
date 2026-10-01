@@ -1,6 +1,6 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows } from './lotto-panel-view.js?v=2.4.10';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.10';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
 export const PANEL_TAG = 'lotto-ticket-panel-v2-4-10';
@@ -526,7 +526,7 @@ class LottoTicketPanel extends HTMLElement {
           const line=document.createElement('div');line.className='ticket-review-line';
           const slot=document.createElement('strong');slot.textContent=game.slot||'';
           const outcome=document.createElement('span');outcome.textContent=game.prize||'미당첨';
-          const links=[...new Set((game.formula_links||[]).map(link=>link.formula_label||link.formula_id).filter(Boolean))];
+          const links=formulaLinkLabels(game.formula_links);
           const info=document.createElement('small');info.textContent=`본번호 ${Number(game.main_match_count)||0}개 일치${game.bonus_match?' · 보너스 일치':''}${links.length?` · 구매 당시 생성 공식: ${links.join(', ')}`:''}`;
           line.append(slot,outcome,info);body.append(line);
         }

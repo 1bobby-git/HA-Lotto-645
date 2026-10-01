@@ -449,6 +449,8 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         analysis: AnalysisResult,
         ai_recommendation: Recommendation | None,
         ai_generated_at: datetime | None,
+        *,
+        all_games: bool = False,
     ) -> dict[str, Any]:
         def minimal_item(item: Recommendation) -> dict[str, Any]:
             # The result checker only needs identity + six numbers.  Do not copy
@@ -476,9 +478,14 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         # vote per draw, so the ledger keeps comparing methods, not game counts.
         # The extra games stay visible as attributes of the formula entity.
         primary: dict[str, dict[str, Any]] = {}
-        for item in analysis.recommendations:
-            primary.setdefault(item.method_id, minimal_item(item))
-        recommendations = list(primary.values())
+        recommendations: list[dict[str, Any]] = []
+        if all_games:
+            # Provenance archive only: every generated game of every formula.
+            recommendations = [minimal_item(item) for item in analysis.recommendations]
+        else:
+            for item in analysis.recommendations:
+                primary.setdefault(item.method_id, minimal_item(item))
+            recommendations = list(primary.values())
         if ai_recommendation is not None:
             recommendations.append(minimal_item(ai_recommendation))
         for index, item in enumerate(recommendations, start=1):
@@ -516,6 +523,15 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             if self.review_book.record_snapshot(snapshot):
                 self._review_dirty = True
                 # New snapshots may not have a result yet, but must be durable.
+                self._needs_storage_save = True
+            # Archive every generated game so a ticket bought after the draw can
+            # still be matched to the exact formula game it came from. The review
+            # ledger above keeps voting with one entry per formula.
+            archive = self._build_prediction_snapshot(
+                analysis, ai_recommendation, ai_generated_at, all_games=True
+            )
+            if self.review_book.record_snapshot(archive, archive_all=True):
+                self._review_dirty = True
                 self._needs_storage_save = True
         if snapshot != self._prediction_snapshot:
             self._prediction_snapshot = snapshot

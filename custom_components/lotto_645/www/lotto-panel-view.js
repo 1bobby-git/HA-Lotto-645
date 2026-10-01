@@ -454,6 +454,17 @@ export function numberBalls(root, numbers, bonus=null, outcome=null) {
   if(hasBonus){const group=document.createElement('span');group.className='bonus-group';group.setAttribute('aria-hidden','true');const plus=document.createElement('span');plus.className='plus';plus.textContent='+';const wrap=document.createElement('span');wrap.className='bonus-label';const text=document.createElement('span');text.className='bonus-caption';text.textContent='보너스';wrap.append(ball(bonus),text);group.append(plus,wrap);root.append(group);}
 }
 
+export function formulaLinkLabels(links){
+  // `3번 핫넘버`: the game number disambiguates the games of one formula.
+  const seen=new Set();const labels=[];
+  for(const link of (Array.isArray(links)?links:[])){
+    const name=link?.formula_label||link?.formula_id;if(!name)continue;
+    const text=Number.isInteger(link?.formula_game)?`${link.formula_game}번 ${name}`:name;
+    if(seen.has(text))continue;seen.add(text);labels.push(text);
+  }
+  return labels;
+}
+
 export function ticketRows(root, games, limit=Infinity, matches=[], fillSlots=false) {
   root.replaceChildren();root.setAttribute('role','list');
   const source=Array.isArray(games)?games:[];
@@ -479,7 +490,7 @@ export function ticketRows(root, games, limit=Infinity, matches=[], fillSlots=fa
     const stored=Array.isArray(g.formula_links)?g.formula_links:[];
     const linked=stored.length?stored:current;
     if(linked.length){
-      const labels=[...new Set(linked.map(m=>m.formula_label||m.formula_id).filter(Boolean))];
+      const labels=formulaLinkLabels(linked);
       const badge=document.createElement('span');badge.className='match-badge';
       badge.textContent=labels.length
         ? `적용 공식 · ${labels.join(', ')}`
