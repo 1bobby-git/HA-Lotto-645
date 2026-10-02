@@ -17,7 +17,6 @@ package.__path__ = [str(BASE)]
 sys.modules[PACKAGE] = package
 purchases = __import__(PACKAGE + '.purchased_tickets', fromlist=['purchased_tickets'])
 finalization = __import__(PACKAGE + '.finalization_purchase', fromlist=['finalization_purchase'])
-entities = __import__(PACKAGE + '.game_entities', fromlist=['game_entities'])
 # The coordinator uses the finalization book (imported as PurchaseBook).
 PurchaseBook = finalization.FinalizationPurchaseBook
 
@@ -171,50 +170,12 @@ def test_a_failed_write_leaves_the_stored_purchase_untouched():
     assert owner.purchase_book.to_storage() == before
 
 
-def _button_methods(*names):
-    tree = ast.parse((BASE / 'button.py').read_text(encoding='utf-8'))
-    nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
-    assert len(nodes) == len(names), f'missing button helpers: {names}'
-    ns = {
-        'Lotto645Coordinator': object, 'ConfigEntry': object, 'HomeAssistant': object,
-        'er': __import__('types').SimpleNamespace(async_get=lambda h: None),
-        'DOMAIN': 'lotto_645',
-        'active_button_unique_ids': entities.active_button_unique_ids,
-        'PLATFORMS': ['button'],
-    }
-    exec(compile(ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[])), 'button', 'exec'), ns)
-    return ns
-
-
-def test_stale_registration_buttons_of_deselected_formulas_are_removed():
-    from unittest.mock import Mock
-    entries = [
-        SimpleNamespace(domain='button', platform='lotto_645', unique_id=f'entry_{name}', entity_id=name)
-        for name in ('method_guide', 'method_hot_numbers_register', 'method_hot_numbers_register_all',
-                     'method_hot_numbers_g2_register', 'method_personal_lucky', 'refresh')
-    ]
-    entries.append(SimpleNamespace(domain='button', platform='other', unique_id='entry_method_other',
-                                   entity_id='other'))
-    registry = SimpleNamespace(async_remove=Mock())
-    er = SimpleNamespace(async_get=lambda h: registry,
-                         async_entries_for_config_entry=lambda r, e: entries)
-    ns = _button_methods('_active_button_unique_ids', '_prune_stale_purchase_buttons')
-    ns['er'] = er
-    entry = SimpleNamespace(entry_id='entry')
-    owner = SimpleNamespace(entry=entry, selected_method_ids=['hot_numbers'],
-                            game_count=lambda method_id: 1)
-    ns['_prune_stale_purchase_buttons'](object(), entry, owner)
-    registry.async_remove.assert_called_once_with('method_hot_numbers_g2_register')
-
-
-def test_button_identities_follow_the_configured_game_count():
-    active = entities.active_button_unique_ids(
-        'entry', ['hot_numbers', 'weighted_frequency'], {'hot_numbers': 2, 'weighted_frequency': 1}
-    )
-    assert active == {
-        'entry_method_hot_numbers_register',
-        'entry_method_hot_numbers_g2_register',
-        'entry_method_hot_numbers_register_all',
-        'entry_method_weighted_frequency_register',
-        'entry_method_weighted_frequency_register_all',
-    }
+def test_the_registration_command_is_admin_only_and_round_scoped():
+    backend = (BASE / 'ticket_panel.py').read_text(encoding='utf-8')
+    start = backend.index("'type': 'lotto_645/register_generated'")
+    block = backend[start:start + 1400]
+    assert 'websocket_api.require_admin' in block
+    assert 'async_register_generated_purchase' in block
+    # One command call must hand a refreshed view back so the UI updates once.
+    assert "_view(coordinator, result['round'])" in block
+    assert "'registration': result" in block

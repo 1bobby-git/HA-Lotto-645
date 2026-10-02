@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.12';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.13';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-4-12';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-4-13';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -254,6 +254,14 @@ class LottoTicketPanel extends HTMLElement {
     this.node('edit-wallet').onclick=async()=>{if(this._walletSlideId&&this._walletSlideId!==this._ticketId)await this.operation(()=>this.load(this._walletRound,this._walletSlideId));this.openEditor('edit');};
     this.node('delete-wallet').onclick=async()=>{if(this._walletSlideId&&this._walletSlideId!==this._ticketId)await this.operation(()=>this.load(this._walletRound,this._walletSlideId));await this.operation(()=>this.deleteWallet());};
     this.node('close-editor').onclick=()=>this.closeEditor();
+    // The generated-number table re-renders on every live update, so one
+    // delegated listener registers whichever row's button was pressed.
+    this.node('current-recommendations').addEventListener('click',e=>{
+      const button=e.target.closest?.('[data-register-generated]');
+      if(!button||button.disabled)return;
+      e.preventDefault();
+      this.operation(()=>this.registerGenerated(button.dataset.methodId,Number(button.dataset.gameNo)||1));
+    });
     this.node('editor').addEventListener('cancel',e=>{e.preventDefault();this.closeEditor();});
     this.node('editor').addEventListener('keydown',e=>this.onEditorKey(e));
     this.node('editor').addEventListener('click',e=>{
@@ -697,6 +705,23 @@ class LottoTicketPanel extends HTMLElement {
     const data=await this.request('purchases_save',{round,values,revision:this._newTicket?'':this._revision,clear:false,new_ticket:this._newTicket,...((this._newTicket?this._newTicketId:this._ticketId)?{ticket_id:this._newTicket?this._newTicketId:this._ticketId}:{})});
     this._editing=false;this._newTicket=false;this.updateResults(data);this.applyWallet(data);this.restoreForm(data);this.finishClose(false);
     this.showScreen('wallet',true);this.message(`${round}회 ${filled}게임을 저장했어요. 추첨 결과가 확인되면 자동으로 대조합니다.`);
+  }
+  async registerGenerated(methodId, gameNo) {
+    if(!methodId)throw new Error('생성 번호의 공식을 확인할 수 없습니다. 목록을 새로 고쳐 주세요.');
+    const data=await this.request('register_generated',{method_id:methodId,game_no:gameNo});
+    this.updateResults(data);this.applyWallet(data);this.renderMiniWallet(data);
+    const registration=data.registration||{};
+    const rows=registration.registered||[];
+    if(rows.length){
+      const slots=rows.map(row=>`${row.slot}번`).join(', ');
+      const extra=registration.created_tickets?` 새 복권 ${registration.created_tickets}장도 만들었습니다.`:'';
+      const skipped=registration.skipped?.length?` 이미 등록된 ${registration.skipped.length}개 게임은 건너뛰었습니다.`:'';
+      this.message(`${data.round}회 ${slots} 줄에 등록했어요.${extra}${skipped}`);
+    }else if(registration.skipped?.length){
+      this.message('이미 등록된 번호라 건너뛰었어요.');
+    }else{
+      this.message('등록할 번호가 없습니다.');
+    }
   }
   async deleteWallet() {
     const data=this._walletData;if(!data?.revision)return;

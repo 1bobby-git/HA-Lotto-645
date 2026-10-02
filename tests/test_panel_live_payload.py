@@ -168,6 +168,22 @@ def test_pruner_removes_extra_game_sensors_when_the_count_drops():
     assert removed == {'method_uniform_fisher_yates_g2','method_uniform_fisher_yates_g3'}
 
 
+def test_the_panel_exposes_a_register_command_and_a_row_button():
+    backend = (ROOT / 'custom_components/lotto_645/ticket_panel.py').read_text(encoding='utf-8')
+    view = (ROOT / 'custom_components/lotto_645/www/lotto-panel-view.js').read_text(encoding='utf-8')
+    core = (ROOT / 'custom_components/lotto_645/www/lotto-panel-core.js').read_text(encoding='utf-8')
+    # Backend: an authenticated websocket command registers one generated game.
+    assert "'type': 'lotto_645/register_generated'" in backend
+    assert 'vol.Required(\'method_id\')' in backend
+    assert "vol.Optional('game_no'" in backend
+    assert 'async_register_generated_purchase' in backend
+    # Frontend: the 현재 생성된 번호 table offers the action per row.
+    assert 'registerGenerated=\'1\'' in view
+    assert '복권 등록' in view
+    assert 'purchase_match' in view
+    assert "'register_generated'" in core
+
+
 def test_view_marks_exact_same_round_purchase_matches():
     rec = models.Recommendation(
         1,

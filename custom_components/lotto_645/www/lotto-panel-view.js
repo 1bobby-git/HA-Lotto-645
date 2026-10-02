@@ -136,6 +136,9 @@ main{padding-top:40px!important} .screen{outline:0}.page-heading{display:flex;al
 .prize{color:var(--muted);background:var(--soft)}
 .prize[data-purchase-match="true"],.match-badge{background:var(--blue-soft);color:var(--blue);font-weight:700}
 .prize[data-winning="true"]{background:var(--green-soft);color:var(--green);font-weight:700}
+.register-generated{font-size:11px;padding:5px 10px;border-radius:8px;white-space:nowrap}
+.register-generated[disabled]{opacity:.5}
+.register-done{font-size:11px;border-radius:6px;padding:4px 8px;white-space:nowrap;background:var(--green-soft);color:var(--green);font-weight:700}
 .paper-bottom{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--surface);padding:13px 24px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
 .paper-bottom button{flex:none;white-space:nowrap;font-size:12px;min-height:34px;padding:4px 0 4px 10px;background:transparent;color:var(--blue)}
 .empty{padding:38px 18px;text-align:center;color:var(--muted);font-size:12px}.empty svg{width:32px;height:32px;margin-bottom:10px;color:var(--muted)}.empty strong{display:block;color:var(--ink);font-size:15px;margin:3px 0 8px}.empty p{line-height:1.9}
@@ -512,6 +515,8 @@ export function currentRecommendations(data) {
     Array.isArray(row.numbers)&&row.numbers.length===6&&new Set(row.numbers).size===6&&
     row.numbers.every(n=>Number.isInteger(n)&&n>=1&&n<=45)).map(row=>({
       method_id:row.method_id,
+      formula_game:Number(row.formula_game)||1,
+      purchase_match:row.purchase_match===true,
       sensor_name:row.label||row.method||row.method_id,
       recommended_numbers:[...row.numbers],
       generated_at:row.generated_at||data.recommendation_generated_at||null,
@@ -548,7 +553,7 @@ const formatGeneratedAt = value => {
 
 export function renderCurrentRecommendationRows(root, rows, empty) {
   root.replaceChildren();
-  const headers=['공식','번호','생성 시각','상태'];
+  const headers=['공식','번호','생성 시각','상태','복권 등록'];
   if(!rows.length){renderRows(root,[],headers,empty);return;}
   for(const row of rows){
     const tr=document.createElement('tr');tr.setAttribute('role','row');
@@ -556,7 +561,20 @@ export function renderCurrentRecommendationRows(root, rows, empty) {
     const numberCell=document.createElement('td');numberCell.dataset.label=headers[1];const balls=document.createElement('span');balls.className='ticket-balls';numberBalls(balls,row.recommended_numbers||[]);numberCell.append(balls);
     const generated=document.createElement('td');generated.dataset.label=headers[2];generated.textContent=formatGeneratedAt(row.generated_at);
     const status=document.createElement('td');status.dataset.label=headers[3];const badge=document.createElement('span');badge.className='prize';badge.textContent=row.prize||'생성 완료 · 평가 대기';status.append(badge);
-    tr.append(method,numberCell,generated,status);root.append(tr);
+    const action=document.createElement('td');action.dataset.label=headers[4];
+    if(row.purchase_match){
+      // Already a purchased line: never offer to write the same numbers again.
+      const done=document.createElement('span');done.className='register-done';done.textContent='등록됨';action.append(done);
+    }else{
+      const button=document.createElement('button');
+      button.type='button';button.className='soft-blue register-generated';
+      button.dataset.registerGenerated='1';
+      button.dataset.methodId=row.method_id||'';
+      button.dataset.gameNo=String(Number(row.formula_game)||1);
+      button.textContent='복권 등록';
+      action.append(button);
+    }
+    tr.append(method,numberCell,generated,status,action);root.append(tr);
   }
 }
 

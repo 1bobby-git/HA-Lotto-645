@@ -29,7 +29,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-4-12'
+PANEL_TAG = 'lotto-ticket-panel-v2-4-13'
 COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel',
     'lotto-ticket-panel-v2-0-0', 'lotto-ticket-panel-v2-0-1',
@@ -40,7 +40,7 @@ COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel-v2-2-3', 'lotto-ticket-panel-v2-2-4',
     'lotto-ticket-panel-v2-3-0', 'lotto-ticket-panel-v2-3-1',
     'lotto-ticket-panel-v2-3-2', 'lotto-ticket-panel-v2-3-3', 'lotto-ticket-panel-v2-3-4',
-    'lotto-ticket-panel-v2-4-0', 'lotto-ticket-panel-v2-4-1', 'lotto-ticket-panel-v2-4-2', 'lotto-ticket-panel-v2-4-3', 'lotto-ticket-panel-v2-4-4', 'lotto-ticket-panel-v2-4-5', 'lotto-ticket-panel-v2-4-6', 'lotto-ticket-panel-v2-4-7', 'lotto-ticket-panel-v2-4-8', 'lotto-ticket-panel-v2-4-9', 'lotto-ticket-panel-v2-4-10', 'lotto-ticket-panel-v2-4-11', PANEL_TAG,
+    'lotto-ticket-panel-v2-4-0', 'lotto-ticket-panel-v2-4-1', 'lotto-ticket-panel-v2-4-2', 'lotto-ticket-panel-v2-4-3', 'lotto-ticket-panel-v2-4-4', 'lotto-ticket-panel-v2-4-5', 'lotto-ticket-panel-v2-4-6', 'lotto-ticket-panel-v2-4-7', 'lotto-ticket-panel-v2-4-8', 'lotto-ticket-panel-v2-4-9', 'lotto-ticket-panel-v2-4-10', 'lotto-ticket-panel-v2-4-11', 'lotto-ticket-panel-v2-4-12', PANEL_TAG,
 }
 WWW = Path(__file__).parent / 'www'
 FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
@@ -313,6 +313,25 @@ async def purchases_save(hass, connection, msg):
         connection.send_error(msg['id'], code, text)
     else:
         connection.send_result(msg['id'], result)
+
+
+@websocket_api.websocket_command({'type': 'lotto_645/register_generated', vol.Required('entry_id'): str,
+                                  vol.Required('method_id'): vol.All(str, vol.Length(min=1, max=100)),
+                                  vol.Optional('game_no', default=None): vol.Any(None, vol.All(int, vol.Range(min=1, max=1000)))})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def register_generated(hass, connection, msg):
+    """Register generated numbers of the current round as purchased lines."""
+    try:
+        coordinator = _coordinator(hass, msg)
+        result = await coordinator.async_register_generated_purchase(msg['method_id'], msg.get('game_no'))
+        view = _view(coordinator, result['round'])
+    except HomeAssistantError as err:
+        connection.send_error(msg['id'], 'register_generated_failed', str(err))
+    except (OSError, PurchaseInputError):
+        connection.send_error(msg['id'], 'register_generated_failed', '복권에 저장하지 못했습니다. 기존 구매번호는 유지됩니다.')
+    else:
+        connection.send_result(msg['id'], {**view, 'registration': result})
 
 
 @websocket_api.websocket_command({'type': 'lotto_645/result_check', vol.Required('entry_id'): str})
