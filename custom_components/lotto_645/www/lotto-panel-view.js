@@ -555,26 +555,6 @@ const formatGeneratedAt = value => {
     : '—';
 };
 
-// Rebuild text rows from word boxes. Tesseract's own line grouping drops or
-// merges rows on ticket screenshots, which loses a game without any error, so
-// rows are rebuilt from vertical position instead.
-export function rowsFromWords(words){
-  const list=(Array.isArray(words)?words:[]).filter(w=>w&&typeof w.text==='string'&&w.text.trim())
-    .map(w=>({text:w.text.trim(),bottom:Number(w.bottom)||0,left:Number(w.left)||0}))
-    .sort((a,b)=>a.bottom-b.bottom||a.left-b.left);
-  if(!list.length)return [];
-  const heights=list.map(w=>w.text.length).sort((a,b)=>a-b);
-  const median=heights[Math.floor(heights.length/2)]||1;
-  const rows=[];
-  for(const word of list){
-    const row=rows[rows.length-1];
-    const sameRow=row&&Math.abs(row.bottom-word.bottom)<Math.max(8,median*0.7);
-    if(sameRow){row.tokens.push(word.text);row.bottom=(row.bottom+word.bottom)/2;}
-    else rows.push({bottom:word.bottom,tokens:[word.text]});
-  }
-  return rows.map(row=>row.tokens).filter(tokens=>tokens.length);
-}
-
 export function renderCurrentRecommendationRows(root, rows, empty) {
   root.replaceChildren();
   const headers=['공식','번호','생성 시각','상태','복권 등록'];
