@@ -55,7 +55,7 @@ from .fast_result_state import FastResultState, evaluate_saved
 from .review import ReviewBook
 from .review_state import ReviewState
 from .published_results import draw_cutoff
-from .purchased_tickets import combined_result, parse_games
+from .purchased_tickets import SLOTS, combined_result, parse_games
 from .finalization_purchase import FinalizationPurchaseBook as PurchaseBook
 
 _LOGGER = logging.getLogger(__name__)
@@ -277,6 +277,25 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             self.purchase_book = linked
         return True
 
+    async def _async_write_purchase(
+        self, round_no: int, values: dict[str, Any], *, clear: bool = False,
+        ticket_id: str | None = None, new_ticket: bool = False
+    ) -> None:
+        """Persist one purchase ticket. The caller owns `_purchase_lock`.
+
+        `_purchase_formula_links` runs here, so every stored line keeps the
+        formula that generated its numbers — no caller has to do it.
+        """
+        formula_links = {} if clear else self._purchase_formula_links(round_no, values)
+        updated = self.purchase_book.updated(
+            round_no, values, clear=clear, ticket_id=ticket_id, new_ticket=new_ticket,
+            formula_links_by_slot=formula_links,
+            finalization_links_by_slot=self.service.finalizer.purchase_matches(round_no,values) if not clear and getattr(self.service,'finalizer',None) else {},
+        )
+        await self._purchase_store.async_save(updated.to_storage())
+        # Do not replace the in-memory copy before a successful durable write.
+        self.purchase_book = updated
+
     async def async_save_purchase_record(
         self, round_no: int, values: dict[str, Any], *, clear: bool = False,
         expected_revision: str | None = None, ticket_id: str | None = None, new_ticket: bool = False
@@ -289,16 +308,95 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 current = "" if new_ticket else self.purchase_book.ticket_record(round_no,ticket_id).get("saved_at", "")
                 if current != expected_revision:
                     raise HomeAssistantError("purchase_revision_conflict")
-            formula_links = {} if clear else self._purchase_formula_links(round_no, values)
-            updated = self.purchase_book.updated(
-                round_no, values, clear=clear, ticket_id=ticket_id, new_ticket=new_ticket,
-                formula_links_by_slot=formula_links,
-                finalization_links_by_slot=self.service.finalizer.purchase_matches(round_no,values) if not clear and getattr(self.service,'finalizer',None) else {},
+            await self._async_write_purchase(
+                round_no, values, clear=clear, ticket_id=ticket_id, new_ticket=new_ticket
             )
-            await self._purchase_store.async_save(updated.to_storage())
-            # Do not replace the in-memory copy before a successful durable write.
-            self.purchase_book = updated
         self.async_update_listeners()
+
+    async def async_register_generated_purchase(
+        self, method_id: str, game_no: int | None = None
+    ) -> dict[str, Any]:
+        """Register generated numbers as purchased lines of the same round.
+
+        One game when ``game_no`` is given, every generated game of the formula
+        otherwise. Fills the next free A-E slot of the current ticket and keeps
+        going on a new ticket once it is full, so a whole formula can be
+        registered by a single press. Numbers already registered are skipped.
+        """
+        if self.purchase_storage_error:
+            raise HomeAssistantError("구매번호 저장소를 읽지 못해 등록할 수 없습니다. 원본은 보존합니다.")
+        if self.data is None:
+            raise HomeAssistantError("생성된 번호가 없어 복권으로 등록할 수 없습니다.")
+        generated = [
+            item for item in self.data.analysis.recommendations_by_method(method_id)
+            if game_no is None or item.formula_game == game_no
+        ]
+        if not generated:
+            raise HomeAssistantError("이 번호는 아직 생성되지 않았습니다. 번호가 생성된 뒤 다시 누르세요.")
+        round_no = self.data.analysis.target_round
+        async with self._purchase_lock:
+            record = self.purchase_book.ticket_record(round_no)
+            if record.get("round") != round_no:
+                record = {}
+            slots: dict[str, list[int]] = {
+                row["slot"]: list(row["numbers"]) for row in record.get("games", [])
+            }
+            ticket_id: str | None = record.get("ticket_id")
+            known = {tuple(numbers) for numbers in slots.values()}
+            # (slot -> numbers) batches, each saved as one ticket.
+            batches: list[dict[str, list[int]]] = []
+            batch_slots: list[str] = []
+            registered: list[dict[str, Any]] = []
+            skipped: list[int] = []
+            created = 0
+            writes: list[tuple[dict[str, list[int]], str | None, bool]] = []
+
+            def flush() -> None:
+                nonlocal ticket_id, created
+                if not batch_slots:
+                    return
+                is_new = ticket_id is None
+                if is_new:
+                    created += 1
+                # Extending an existing ticket resends every slot it holds: the
+                # stored record is replaced wholesale by the submitted form.
+                source_slots = batch_slots if is_new else list(slots)
+                values = {
+                    f"game_{slot.lower()}": ', '.join(map(str, slots[slot]))
+                    for slot in source_slots
+                }
+                writes.append((values, ticket_id, is_new))
+                ticket_id = None
+                batch_slots.clear()
+
+            for item in generated:
+                numbers = list(item.numbers)
+                if tuple(numbers) in known:
+                    skipped.append(item.formula_game)
+                    continue
+                free = next((slot for slot in SLOTS if slot not in slots), None)
+                if free is None:
+                    # This ticket is full: continue on a new one, keeping the
+                    # numbers already registered in this press deduplicated.
+                    ticket_id = None
+                    slots = {}
+                    free = SLOTS[0]
+                slots[free] = numbers
+                known.add(tuple(numbers))
+                batch_slots.append(free)
+                registered.append({
+                    "slot": free, "formula_game": item.formula_game,
+                    "numbers": numbers, "round": round_no,
+                })
+                if len(batch_slots) == len(SLOTS):
+                    flush()
+            flush()
+            for values, existing_ticket, is_new in writes:
+                await self._async_write_purchase(
+                    round_no, values, ticket_id=existing_ticket, new_ticket=is_new
+                )
+        self.async_update_listeners()
+        return {"round": round_no, "registered": registered, "skipped": skipped, "created_tickets": created}
 
     async def _async_setup(self) -> None:
         """Load HA cache first, then the release-bundled last-known-good seed."""
