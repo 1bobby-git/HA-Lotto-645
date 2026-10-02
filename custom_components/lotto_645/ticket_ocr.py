@@ -39,7 +39,12 @@ def _valid(values: list[int]) -> bool:
 
 
 def games_from_lines(lines: object) -> list[list[int]]:
-    """Return every valid six-number game, in reading order, deduplicated."""
+    """Return every valid six-number game, in reading order, deduplicated.
+
+    The page sends two passes: the engine's own line text followed by rows it
+    rebuilt from word boxes. A game seen by both is kept once — token order
+    inside a row differs between passes — and the first pass keeps its slot.
+    """
     if not isinstance(lines, list) or len(lines) > _MAX_LINES:
         return []
     found: list[list[int]] = []
@@ -48,7 +53,7 @@ def games_from_lines(lines: object) -> list[list[int]]:
         numbers = _tokens(line)
         if not _valid(numbers):
             continue
-        key = tuple(numbers)
+        key = tuple(sorted(numbers))
         if key in seen:
             continue
         seen.add(key)

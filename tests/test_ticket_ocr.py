@@ -79,6 +79,33 @@ def test_at_most_five_games_are_read_from_a_slip_with_more_rows():
     assert len(ocr.games_from_lines(lines)) == 5
 
 
+def test_the_two_ocr_passes_are_merged_and_a_missed_row_is_appended():
+    """The engine's line pass drops the last row; the word pass recovers it."""
+    line_pass = [
+        ['10', '13', '15', '31', '34', '43'],
+        ['2', '10', '13', '31', '32', '43'],
+        ['10', '13', '15', '32', '34', '43'],
+        ['10', '13', '15', '31', '43', '44'],
+    ]
+    # Word pass: same four games in a different token order, plus the fifth.
+    word_pass = [
+        ['43', '34', '31', '15', '13', '10'],
+        ['2', '11', '13', '31', '32', '34'],
+    ]
+    games = ocr.games_from_lines([*line_pass, *word_pass])
+    assert len(games) == 5
+    assert games[-1] == [2, 11, 13, 31, 32, 34]
+    assert ocr.import_from_lines([*line_pass, *word_pass])['values']['game_e'] == '2, 11, 13, 31, 32, 34'
+
+
+def test_the_line_pass_keeps_its_slot_when_both_passes_read_the_same_game():
+    games = ocr.games_from_lines([
+        ['10', '13', '15', '31', '34', '43'],
+        ['43', '34', '31', '15', '13', '10'],
+    ])
+    assert games == [[10, 13, 15, 31, 34, 43]]
+
+
 def test_junk_shapes_are_refused_without_a_crash():
     for payload in (None, 'text', {}, [None], [[None]], [[[1]]], list(range(5000))):
         with pytest.raises(ValueError):
@@ -91,11 +118,12 @@ def test_row_rebuilding_keeps_a_row_the_engine_misgrouped():
     assert 'export function rowsFromWords' in view
     assert 'Math.abs(row.bottom-word.bottom)' in view
     core = (BASE / 'www/lotto-panel-core.js').read_text(encoding='utf-8')
-    # Line text stays the primary path: a character whitelist collapses the word
+    # Line text stays the primary path: a character whitelist collapsed the word
     # spacing and made every row unreadable, so it must not be reintroduced.
     assert 'this._ocrWorker.recognize(canvas);' in core
-    assert 'rowsFromWords(words)' in core
     assert 'tessedit_char_whitelist' not in core
+    # Both passes travel together; a fallback-only path drops the last row again.
+    assert 'return [...lines, ...rowsFromWords(words)];' in core
 
 
 def test_a_partial_read_is_reported_with_what_it_actually_found():

@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels, rowsFromWords } from './lotto-panel-view.js?v=2.4.18';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels, rowsFromWords } from './lotto-panel-view.js?v=2.4.19';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-4-18';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-4-19';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -782,8 +782,9 @@ class LottoTicketPanel extends HTMLElement {
     // spacing this relies on, so they are deliberately not set here.
     const result=await this._ocrWorker.recognize(canvas);
     const lines=(result?.data?.lines||[]).map(line=>(line?.text||'').split(/\s+/)).map(tokens=>tokens.filter(Boolean)).filter(row=>row.length);
-    if(lines.length)return lines;
-    // Fall back to rebuilding rows from word boxes when lines come back empty.
+    // Rows rebuilt from word boxes recover a trailing row the engine's own line
+    // grouping drops. Both sets are sent: the server keeps the first reading of
+    // a game and appends anything only this pass saw.
     const words=[];
     for(const block of (result?.data?.blocks||[]))
       for(const paragraph of (block?.paragraphs||[]))
@@ -792,7 +793,7 @@ class LottoTicketPanel extends HTMLElement {
             const text=String(word?.text||'').trim();
             if(text)words.push({text,bottom:Number(word?.bbox?.y0)||0,left:Number(word?.bbox?.x0)||0});
           }
-    return rowsFromWords(words);
+    return [...lines, ...rowsFromWords(words)];
   }
   async readPhoto() {
     const file=this.node('file').files[0];this.node('file').value='';if(!file)return;
