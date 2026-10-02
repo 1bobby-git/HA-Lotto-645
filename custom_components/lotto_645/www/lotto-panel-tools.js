@@ -1,8 +1,8 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '2.4.13';
+const VERSION = '2.4.14';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
-import {lastReviewPresentation,currentRecommendations} from './lotto-panel-view.js?v=2.4.13';
+import {lastReviewPresentation,currentRecommendations} from './lotto-panel-view.js?v=2.4.14';
 const AI_ID = 'home_assistant_ai';
 const validId = id => typeof id === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(id);
 const element = (tag, text, className) => {
@@ -30,10 +30,11 @@ const PANEL_STYLE = `
 .method-info-trigger:hover:not(:disabled){background:var(--blue-soft);filter:none}
 .method-help-hint{margin:0 0 12px;color:var(--muted);font-size:13px}
 @container wallet (min-width:561px){
- table:has(#current-recommendations) th:first-child{width:24%}
- table:has(#current-recommendations) th:nth-child(2){width:42%}
- table:has(#current-recommendations) th:nth-child(3){width:18%}
- table:has(#current-recommendations) th:last-child{width:16%}
+table:has(#current-recommendations) th:first-child{width:22%}
+  table:has(#current-recommendations) th:nth-child(2){width:34%}
+  table:has(#current-recommendations) th:nth-child(3){width:16%}
+  table:has(#current-recommendations) th:nth-child(4){width:16%}
+  table:has(#current-recommendations) th:last-child{width:12%}
  table:has(#predictions) th:first-child{width:7%}
  table:has(#predictions) th:nth-child(2){width:18%}
  table:has(#predictions) th:nth-child(3){width:34%}
@@ -347,7 +348,7 @@ class LottoPanelTools extends HTMLElement {
     else if (!event.shiftKey && active === last) { event.preventDefault(); first?.focus(); }
   }
 }
-const TOOLS_TAG = 'lotto-panel-tools-v2-4-13';
+const TOOLS_TAG = 'lotto-panel-tools-v2-4-14';
 if (!customElements.get(TOOLS_TAG)) customElements.define(TOOLS_TAG, LottoPanelTools);
 
 export function applyPanelTools(panel) {

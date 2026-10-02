@@ -177,11 +177,35 @@ def test_the_panel_exposes_a_register_command_and_a_row_button():
     assert 'vol.Required(\'method_id\')' in backend
     assert "vol.Optional('game_no'" in backend
     assert 'async_register_generated_purchase' in backend
+    # Every handler must actually be handed to the websocket registry, or the
+    # page renders a button whose command does not exist.
+    registered = backend[backend.index('for handler in ('):]
+    registered = registered[:registered.index('):') + 2]
+    assert 'register_generated' in registered
     # Frontend: the 현재 생성된 번호 table offers the action per row.
     assert 'registerGenerated=\'1\'' in view
     assert '복권 등록' in view
     assert 'purchase_match' in view
     assert "'register_generated'" in core
+
+
+def test_the_generated_table_header_matches_its_row_widths():
+    import re
+    view = (ROOT / 'custom_components/lotto_645/www/lotto-panel-view.js').read_text(encoding='utf-8')
+    start = view.index('<caption class="sr-only">선택 공식의 현재 생성번호')
+    table = view[start:view.index('</table>', start)]
+    headers = re.findall(r'<th scope="col">([^<]+)</th>', table)
+    assert headers == ['공식', '번호', '생성 시각', '상태', '복권 등록']
+    assert '<tbody id="current-recommendations">' in table
+    render = view[view.index('export function renderCurrentRecommendationRows'):]
+    render = render[:render.index('export function renderReviewResultRows')]
+    # Every row cell, and the width rules must cover all five columns.
+    assert 'tr.append(method,numberCell,generated,status,action)' in render
+    start = view.index('@container wallet (min-width:561px)')
+    block = view[start:view.index('table:has(#predictions)', start)]
+    widths = re.findall(r'th:(?:first-child|nth-child\(\d\)|last-child)\{width:(\d+)%\}', block)
+    assert widths == ['22', '34', '16', '16', '12'], widths
+    assert sum(int(value) for value in widths) == 100
 
 
 def test_view_marks_exact_same_round_purchase_matches():

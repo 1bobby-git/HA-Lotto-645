@@ -29,7 +29,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-4-13'
+PANEL_TAG = 'lotto-ticket-panel-v2-4-14'
 COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel',
     'lotto-ticket-panel-v2-0-0', 'lotto-ticket-panel-v2-0-1',
@@ -40,7 +40,7 @@ COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel-v2-2-3', 'lotto-ticket-panel-v2-2-4',
     'lotto-ticket-panel-v2-3-0', 'lotto-ticket-panel-v2-3-1',
     'lotto-ticket-panel-v2-3-2', 'lotto-ticket-panel-v2-3-3', 'lotto-ticket-panel-v2-3-4',
-    'lotto-ticket-panel-v2-4-0', 'lotto-ticket-panel-v2-4-1', 'lotto-ticket-panel-v2-4-2', 'lotto-ticket-panel-v2-4-3', 'lotto-ticket-panel-v2-4-4', 'lotto-ticket-panel-v2-4-5', 'lotto-ticket-panel-v2-4-6', 'lotto-ticket-panel-v2-4-7', 'lotto-ticket-panel-v2-4-8', 'lotto-ticket-panel-v2-4-9', 'lotto-ticket-panel-v2-4-10', 'lotto-ticket-panel-v2-4-11', 'lotto-ticket-panel-v2-4-12', PANEL_TAG,
+    'lotto-ticket-panel-v2-4-0', 'lotto-ticket-panel-v2-4-1', 'lotto-ticket-panel-v2-4-2', 'lotto-ticket-panel-v2-4-3', 'lotto-ticket-panel-v2-4-4', 'lotto-ticket-panel-v2-4-5', 'lotto-ticket-panel-v2-4-6', 'lotto-ticket-panel-v2-4-7', 'lotto-ticket-panel-v2-4-8', 'lotto-ticket-panel-v2-4-9', 'lotto-ticket-panel-v2-4-10', 'lotto-ticket-panel-v2-4-11', 'lotto-ticket-panel-v2-4-12', 'lotto-ticket-panel-v2-4-13', PANEL_TAG,
 }
 WWW = Path(__file__).parent / 'www'
 FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
@@ -406,7 +406,7 @@ async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
                 StaticPathConfig('/lotto_645_brand', str(Path(__file__).parent / 'brand'), False)])
             shared['brand_registered'] = True
         if not shared.get('commands_registered', shared.get('registered', False)):
-            for handler in (purchases_get, purchases_export, qr_preview, purchases_save, result_check, subscribe_updates, finalization_action):
+            for handler in (purchases_get, purchases_export, qr_preview, purchases_save, register_generated, result_check, subscribe_updates, finalization_action):
                 websocket_api.async_register_command(hass, handler)
             shared['commands_registered'] = True
         shared['source_logo_verified'] = await hass.async_add_executor_job(_source_logo_available)
