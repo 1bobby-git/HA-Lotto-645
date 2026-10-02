@@ -353,9 +353,10 @@ def test_panel_upgrade_accepts_recent_release_tags():
         "lotto-ticket-panel-v2-4-11",
         "lotto-ticket-panel-v2-4-12",
         "lotto-ticket-panel-v2-4-13",
+        "lotto-ticket-panel-v2-4-14",
     ):
         assert repr(tag) in source
-    assert "PANEL_TAG = 'lotto-ticket-panel-v2-4-14'" in source
+    assert "PANEL_TAG = 'lotto-ticket-panel-v2-4-15'" in source
 
 
 def test_member_refresh_preserves_identity_and_uses_one_rotation(monkeypatch):

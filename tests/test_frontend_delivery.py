@@ -52,6 +52,42 @@ def test_home_wallet_renders_five_games_and_multiple_tickets_as_swiper():
     assert "games.length>3" not in core
 
 
+def test_the_offline_ocr_assets_are_shipped_and_pinned():
+    import hashlib
+    import json
+    ocr = R / 'www' / 'ocr'
+    for name in ('tesseract.min.js', 'worker.min.js', 'tesseract-core-lstm.wasm.js',
+                 'tesseract-core-lstm.wasm', 'eng.traineddata.gz'):
+        asset = ocr / name
+        assert asset.exists() and asset.stat().st_size > 1000, f'missing OCR asset: {name}'
+    pin = json.loads((R / 'www' / 'ocr-decoder-pin.json').read_text(encoding='utf-8'))
+    assert set(pin['files']) == {'eng.traineddata.gz', 'tesseract-core-lstm.wasm',
+                                 'tesseract-core-lstm.wasm.js', 'tesseract.min.js', 'worker.min.js'}
+    for name, meta in pin['files'].items():
+        data = (ocr / name).read_bytes()
+        assert len(data) == meta['bytes'], f'{name} size drifted from its pin'
+        assert hashlib.sha256(data).hexdigest() == meta['sha256'], f'{name} is not the pinned build'
+
+
+def test_photo_import_falls_back_to_ocr_and_sends_lines_to_the_server():
+    view = (R / 'www/lotto-panel-view.js').read_text(encoding='utf-8')
+    core = (R / 'www/lotto-panel-core.js').read_text(encoding='utf-8')
+    backend = (R / 'ticket_panel.py').read_text(encoding='utf-8')
+    # QR stays the first path; OCR only runs when no QR was decoded.
+    assert "if(value){await this.preview(value);return;}" in core
+    assert 'this.ocrLines(im)' in core
+    assert "request('purchases_import_ocr'" in core
+    # The engine is bundled and loaded on demand, never from a CDN.
+    assert 'tesseract.min.js' in core and 'cdn' not in core.split('loadOcrEngine')[1][:600]
+    assert 'worker.min.js' in core and 'tesseract-core-lstm.wasm.js' in core
+    # Server-side validation, then the same save path the editor uses.
+    assert "'type': 'lotto_645/purchases_import_ocr'" in backend
+    assert 'import_from_lines' in backend
+    assert 'async_save_purchase_record' in backend
+    assert 'purchases_import_ocr' in backend[backend.index('for handler in ('):][:400]
+    assert 'QR이 없는 온라인 구매 화면도 읽어요' in view
+
+
 def test_native_formula_entities_expose_purchase_match_marker():
     sensor = (R / 'sensor.py').read_text(encoding='utf-8')
     entities = (R / 'game_entities.py').read_text(encoding='utf-8')

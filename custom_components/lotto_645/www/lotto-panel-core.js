@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.14';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.15';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-4-14';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-4-15';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -739,12 +739,70 @@ class LottoTicketPanel extends HTMLElement {
     const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
     return globalThis.jsQR(pixels.data,pixels.width,pixels.height,{inversionAttempts:'attemptBoth'})?.data;
   }
+  // Online purchases have no QR code, so the bundled offline OCR reads the
+  // printed numbers instead. The engine is fetched on first use only.
+  ocrAssetBase() {
+    const version=String(this._panel?.config?.version||'').trim();
+    return `/lotto_645_frontend/${version||'latest'}/ocr`;
+  }
+  loadOcrEngine() {
+    if(globalThis.Tesseract)return Promise.resolve(globalThis.Tesseract);
+    if(this._ocrEngine)return this._ocrEngine;
+    const base=this.ocrAssetBase();
+    this._ocrEngine=new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src=`${base}/tesseract.min.js`;
+      script.onload=()=>resolve(globalThis.Tesseract);
+      script.onerror=()=>reject(new Error('번호 인식기를 불러오지 못했습니다. A~E로 직접 입력해 주세요.'));
+      document.head.append(script);
+    });
+    return this._ocrEngine;
+  }
+  async ocrLines(image) {
+    const Tesseract=await this.loadOcrEngine();
+    const base=this.ocrAssetBase();
+    if(!this._ocrWorker){
+      // The LSTM-only core is bundled, so point at the exact file and keep the
+      // traineddata beside it: no external request, no CDN dependency.
+      this._ocrWorker=await Tesseract.createWorker('eng',1,{
+        workerPath:`${base}/worker.min.js`,
+        corePath:`${base}/tesseract-core-lstm.wasm.js`,
+        langPath:base,
+        logger:()=>{},
+      });
+    }
+    const canvas=document.createElement('canvas');
+    const longest=Math.max(image.width||image.videoWidth,image.height||image.videoHeight)||1;
+    const scale=Math.max(1,Math.min(2.5,1800/longest));
+    canvas.width=Math.max(1,Math.round((image.width||image.videoWidth)*scale));
+    canvas.height=Math.max(1,Math.round((image.height||image.videoHeight)*scale));
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.imageSmoothingQuality='high';ctx.drawImage(image,0,0,canvas.width,canvas.height);
+    const result=await this._ocrWorker.recognize(canvas);
+    return (result?.data?.lines||[]).map(line=>(line?.text||'').split(/\s+/)).map(tokens=>tokens.filter(Boolean)).filter(row=>row.length);
+  }
   async readPhoto() {
     const file=this.node('file').files[0];this.node('file').value='';if(!file)return;
-    if(file.size>10*1024*1024 || !['image/png','image/jpeg','image/webp'].includes(file.type))throw new Error('10MB 이하의 PNG/JPEG/WebP QR 사진을 선택하세요.');
+    if(file.size>10*1024*1024 || !['image/png','image/jpeg','image/webp'].includes(file.type))throw new Error('10MB 이하의 PNG/JPEG/WebP 사진을 선택하세요.');
     const url=URL.createObjectURL(file);
-    try {const im=new Image();im.src=url;await im.decode();if(im.width*im.height>40000000)throw new Error('사진이 너무 큽니다. QR 부분만 잘라 선택하세요.');const value=this.decode(im,im.width,im.height);if(!value)throw new Error('QR을 찾지 못했습니다. 밝고 선명한 QR 사진 또는 QR 주소를 입력하세요.');await this.preview(value);}
+    try {const im=new Image();im.src=url;await im.decode();if(im.width*im.height>40000000)throw new Error('사진이 너무 큽니다. 복권 부분만 잘라 선택하세요.');
+      const value=this.decode(im,im.width,im.height);
+      if(value){await this.preview(value);return;}
+      // No QR code (online purchases): read the printed A-E numbers offline.
+      this.message('사진에서 번호를 읽는 중이에요. 잠시만 기다려 주세요.');
+      const lines=await this.ocrLines(im);
+      if(!lines.length)throw new Error('사진에서 복권 번호를 찾지 못했습니다. 선명한 사진으로 다시 찍거나 A~E로 직접 입력하세요.');
+      await this.importOcrLines(lines);
+    }
     finally{URL.revokeObjectURL(url);}
+  }
+  async importOcrLines(lines) {
+    const round=this.selectedRound();
+    const data=await this.request('purchases_import_ocr',{round,lines,revision:this._newTicket?'':this._revision,new_ticket:this._newTicket,...((this._newTicket?this._newTicketId:this._ticketId)?{ticket_id:this._newTicket?this._newTicketId:this._ticketId}:{})});
+    const imported=data.imported||{};
+    this._editing=false;this._newTicket=false;this.updateResults(data);this.applyWallet(data);this.restoreForm(data);this.finishClose(false);
+    this.showScreen('wallet',true);
+    this.message(`${round}회 ${imported.game_count||0}게임(사진 읽기)으로 저장했어요. 번호가 맞는지 지갑에서 한 번 확인해 주세요.`);
   }
   async startCamera() {
     this.stopCamera();const generation=this._cameraGeneration;

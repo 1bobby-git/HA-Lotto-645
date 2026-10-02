@@ -29,7 +29,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-4-14'
+PANEL_TAG = 'lotto-ticket-panel-v2-4-15'
 COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel',
     'lotto-ticket-panel-v2-0-0', 'lotto-ticket-panel-v2-0-1',
@@ -40,7 +40,7 @@ COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel-v2-2-3', 'lotto-ticket-panel-v2-2-4',
     'lotto-ticket-panel-v2-3-0', 'lotto-ticket-panel-v2-3-1',
     'lotto-ticket-panel-v2-3-2', 'lotto-ticket-panel-v2-3-3', 'lotto-ticket-panel-v2-3-4',
-    'lotto-ticket-panel-v2-4-0', 'lotto-ticket-panel-v2-4-1', 'lotto-ticket-panel-v2-4-2', 'lotto-ticket-panel-v2-4-3', 'lotto-ticket-panel-v2-4-4', 'lotto-ticket-panel-v2-4-5', 'lotto-ticket-panel-v2-4-6', 'lotto-ticket-panel-v2-4-7', 'lotto-ticket-panel-v2-4-8', 'lotto-ticket-panel-v2-4-9', 'lotto-ticket-panel-v2-4-10', 'lotto-ticket-panel-v2-4-11', 'lotto-ticket-panel-v2-4-12', 'lotto-ticket-panel-v2-4-13', PANEL_TAG,
+    'lotto-ticket-panel-v2-4-0', 'lotto-ticket-panel-v2-4-1', 'lotto-ticket-panel-v2-4-2', 'lotto-ticket-panel-v2-4-3', 'lotto-ticket-panel-v2-4-4', 'lotto-ticket-panel-v2-4-5', 'lotto-ticket-panel-v2-4-6', 'lotto-ticket-panel-v2-4-7', 'lotto-ticket-panel-v2-4-8', 'lotto-ticket-panel-v2-4-9', 'lotto-ticket-panel-v2-4-10', 'lotto-ticket-panel-v2-4-11', 'lotto-ticket-panel-v2-4-12', 'lotto-ticket-panel-v2-4-13', 'lotto-ticket-panel-v2-4-14', PANEL_TAG,
 }
 WWW = Path(__file__).parent / 'www'
 FRONTEND_PATH = f'/lotto_645_frontend/{VERSION}'
@@ -315,6 +315,35 @@ async def purchases_save(hass, connection, msg):
         connection.send_result(msg['id'], result)
 
 
+@websocket_api.websocket_command({'type': 'lotto_645/purchases_import_ocr', vol.Required('entry_id'): str,
+                                  vol.Required('round'): vol.All(int, vol.Range(min=1, max=999999)),
+                                  vol.Required('lines'): vol.All(list, vol.Length(max=60)),
+                                  vol.Required('revision'): vol.All(str, vol.Length(max=100)),
+                                  vol.Optional('new_ticket', default=False): bool})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def purchases_import_ocr(hass, connection, msg):
+    """Import games read from a ticket photo that carries no QR code."""
+    from .ticket_ocr import import_from_lines
+    try:
+        coordinator = _coordinator(hass, msg)
+        parsed = import_from_lines(msg['lines'])
+        await coordinator.async_save_purchase_record(
+            parse_round(msg['round']), parsed['values'], expected_revision=msg['revision'],
+            new_ticket=msg['new_ticket'],
+        )
+        result = _view(coordinator, msg['round'])
+    except ValueError:
+        connection.send_error(msg['id'], 'no_ticket_games',
+                              '사진에서 번호 6개짜리 줄을 찾지 못했습니다. 복권을 선명하게 다시 찍거나 A~E로 직접 입력하세요.')
+    except PurchaseInputError as err:
+        connection.send_error(msg['id'], err.code, f'{err.field}: 1~45의 중복 없는 번호 6개를 입력하세요')
+    except (HomeAssistantError, OSError):
+        connection.send_error(msg['id'], 'save_failed', '저장하지 못했습니다. 기존 번호는 유지됩니다.')
+    else:
+        connection.send_result(msg['id'], {**result, 'imported': parsed})
+
+
 @websocket_api.websocket_command({'type': 'lotto_645/register_generated', vol.Required('entry_id'): str,
                                   vol.Required('method_id'): vol.All(str, vol.Length(min=1, max=100)),
                                   vol.Optional('game_no', default=None): vol.Any(None, vol.All(int, vol.Range(min=1, max=1000)))})
@@ -406,7 +435,7 @@ async def async_register_ticket_panel(hass: HomeAssistant, entry) -> None:
                 StaticPathConfig('/lotto_645_brand', str(Path(__file__).parent / 'brand'), False)])
             shared['brand_registered'] = True
         if not shared.get('commands_registered', shared.get('registered', False)):
-            for handler in (purchases_get, purchases_export, qr_preview, purchases_save, register_generated, result_check, subscribe_updates, finalization_action):
+            for handler in (purchases_get, purchases_export, qr_preview, purchases_save, purchases_import_ocr, register_generated, result_check, subscribe_updates, finalization_action):
                 websocket_api.async_register_command(hass, handler)
             shared['commands_registered'] = True
         shared['source_logo_verified'] = await hass.async_add_executor_job(_source_logo_available)
