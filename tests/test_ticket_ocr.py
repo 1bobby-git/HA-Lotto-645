@@ -83,3 +83,24 @@ def test_junk_shapes_are_refused_without_a_crash():
     for payload in (None, 'text', {}, [None], [[None]], [[[1]]], list(range(5000))):
         with pytest.raises(ValueError):
             ocr.import_from_lines(payload)
+
+
+def test_row_rebuilding_keeps_a_row_the_engine_misgrouped():
+    """A dropped row is a silently unregistered game, so rows are rebuilt by y."""
+    view = (BASE / 'www/lotto-panel-view.js').read_text(encoding='utf-8')
+    assert 'export function rowsFromWords' in view
+    assert 'Math.abs(row.bottom-word.bottom)' in view
+    # The engine must be asked for blocks: v5 omits words/lines otherwise.
+    core = (BASE / 'www/lotto-panel-core.js').read_text(encoding='utf-8')
+    assert "recognize(canvas,{},{blocks:true})" in core
+    assert 'rowsFromWords(words)' in core
+    # Digits only, so 1/O or l/1 confusions cannot void a whole game.
+    assert "tessedit_char_whitelist:'0123456789'" in core
+
+
+def test_a_partial_read_is_reported_with_what_it_actually_found():
+    core = (BASE / 'www/lotto-panel-core.js').read_text(encoding='utf-8')
+    assert '읽은 번호:' in core
+    # Never imply a partial read is a whole ticket.
+    assert 'games<5?' in core
+    assert '일부만 읽혔을 수 있으니' in core

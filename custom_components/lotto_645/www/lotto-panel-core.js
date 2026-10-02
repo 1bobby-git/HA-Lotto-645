@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.16';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels, rowsFromWords } from './lotto-panel-view.js?v=2.4.17';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-4-16';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-4-17';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -771,15 +771,28 @@ class LottoTicketPanel extends HTMLElement {
         logger:()=>{},
       });
     }
-    const canvas=document.createElement('canvas');
+    // Ticket numbers are digits only. Without this whitelist Tesseract may emit
+    // 'l' for 1 or 'O' for 0, which silently invalidates a whole game.
+    await this._ocrWorker.setParameters({tessedit_char_whitelist:'0123456789',preserve_interword_spaces:'1'});
     const longest=Math.max(image.width||image.videoWidth,image.height||image.videoHeight)||1;
     const scale=Math.max(1,Math.min(2.5,1800/longest));
+    const canvas=document.createElement('canvas');
     canvas.width=Math.max(1,Math.round((image.width||image.videoWidth)*scale));
     canvas.height=Math.max(1,Math.round((image.height||image.videoHeight)*scale));
     const ctx=canvas.getContext('2d',{willReadFrequently:true});
     ctx.imageSmoothingQuality='high';ctx.drawImage(image,0,0,canvas.width,canvas.height);
-    const result=await this._ocrWorker.recognize(canvas);
-    return (result?.data?.lines||[]).map(line=>(line?.text||'').split(/\s+/)).map(tokens=>tokens.filter(Boolean)).filter(row=>row.length);
+    // Blocks are requested explicitly: v5 only builds words/lines when asked,
+    // and a row that is never assembled is a game that is never registered.
+    const result=await this._ocrWorker.recognize(canvas,{},{blocks:true});
+    const words=[];
+    for(const block of (result?.data?.blocks||[]))
+      for(const paragraph of (block?.paragraphs||[]))
+        for(const line of (paragraph?.lines||[]))
+          for(const word of (line?.words||[])){
+            const text=String(word?.text||'').trim();
+            if(text)words.push({text,bottom:Number(word?.bbox?.y0)||0,left:Number(word?.bbox?.x0)||0});
+          }
+    return rowsFromWords(words);
   }
   async readPhoto() {
     const file=this.node('file').files[0];this.node('file').value='';if(!file)return;
@@ -800,9 +813,14 @@ class LottoTicketPanel extends HTMLElement {
     const round=this.selectedRound();
     const data=await this.request('purchases_import_ocr',{round,lines,revision:this._newTicket?'':this._revision,new_ticket:this._newTicket,...((this._newTicket?this._newTicketId:this._ticketId)?{ticket_id:this._newTicket?this._newTicketId:this._ticketId}:{})});
     const imported=data.imported||{};
+    const games=imported.game_count||0;
+    const read=Object.values(imported.values||{});
     this._editing=false;this._newTicket=false;this.updateResults(data);this.applyWallet(data);this.restoreForm(data);this.finishClose(false);
     this.showScreen('wallet',true);
-    this.message(`${round}회 ${imported.game_count||0}게임(사진 읽기)으로 저장했어요. 번호가 맞는지 지갑에서 한 번 확인해 주세요.`);
+    // Show what was actually read: a photo read is never claimed to be complete.
+    const detail=read.length?` 읽은 번호: ${read.join(' / ')}.`:'';
+    const partial=games<5?' 5줄이 아니라 일부만 읽혔을 수 있으니 지갑에서 확인·수정해 주세요.':' 지갑에서 한 번 확인해 주세요.';
+    this.message(`${round}회 ${games}게임(사진 읽기)으로 저장했어요.${detail}${partial}`);
   }
   async startCamera() {
     this.stopCamera();const generation=this._cameraGeneration;
