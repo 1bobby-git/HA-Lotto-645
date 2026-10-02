@@ -100,6 +100,8 @@ def test_photo_import_falls_back_to_ocr_and_sends_lines_to_the_server():
     # The engine is bundled and loaded on demand, never from a CDN.
     assert 'tesseract.min.js' in core and 'cdn' not in core.split('loadOcrEngine')[1][:600]
     assert 'worker.min.js' in core and 'tesseract-core-lstm.wasm.js' in core
+    # Reading must stay on the proven line-text path (a character whitelist
+    # collapsed the word spacing and made every row unreadable).
     # Server-side validation, then the same save path the editor uses.
     assert "'type': 'lotto_645/purchases_import_ocr'" in backend
     assert 'import_from_lines' in backend

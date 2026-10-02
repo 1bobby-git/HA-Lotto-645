@@ -90,12 +90,12 @@ def test_row_rebuilding_keeps_a_row_the_engine_misgrouped():
     view = (BASE / 'www/lotto-panel-view.js').read_text(encoding='utf-8')
     assert 'export function rowsFromWords' in view
     assert 'Math.abs(row.bottom-word.bottom)' in view
-    # The engine must be asked for blocks: v5 omits words/lines otherwise.
     core = (BASE / 'www/lotto-panel-core.js').read_text(encoding='utf-8')
-    assert "recognize(canvas,{},{blocks:true})" in core
+    # Line text stays the primary path: a character whitelist collapses the word
+    # spacing and made every row unreadable, so it must not be reintroduced.
+    assert 'this._ocrWorker.recognize(canvas);' in core
     assert 'rowsFromWords(words)' in core
-    # Digits only, so 1/O or l/1 confusions cannot void a whole game.
-    assert "tessedit_char_whitelist:'0123456789'" in core
+    assert 'tessedit_char_whitelist' not in core
 
 
 def test_a_partial_read_is_reported_with_what_it_actually_found():

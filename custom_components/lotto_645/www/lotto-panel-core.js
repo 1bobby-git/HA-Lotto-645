@@ -1,9 +1,9 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels, rowsFromWords } from './lotto-panel-view.js?v=2.4.17';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels, rowsFromWords } from './lotto-panel-view.js?v=2.4.18';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-4-17';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-4-18';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -771,9 +771,6 @@ class LottoTicketPanel extends HTMLElement {
         logger:()=>{},
       });
     }
-    // Ticket numbers are digits only. Without this whitelist Tesseract may emit
-    // 'l' for 1 or 'O' for 0, which silently invalidates a whole game.
-    await this._ocrWorker.setParameters({tessedit_char_whitelist:'0123456789',preserve_interword_spaces:'1'});
     const longest=Math.max(image.width||image.videoWidth,image.height||image.videoHeight)||1;
     const scale=Math.max(1,Math.min(2.5,1800/longest));
     const canvas=document.createElement('canvas');
@@ -781,9 +778,12 @@ class LottoTicketPanel extends HTMLElement {
     canvas.height=Math.max(1,Math.round((image.height||image.videoHeight)*scale));
     const ctx=canvas.getContext('2d',{willReadFrequently:true});
     ctx.imageSmoothingQuality='high';ctx.drawImage(image,0,0,canvas.width,canvas.height);
-    // Blocks are requested explicitly: v5 only builds words/lines when asked,
-    // and a row that is never assembled is a game that is never registered.
-    const result=await this._ocrWorker.recognize(canvas,{},{blocks:true});
+    // Line text is the proven path: character whitelists collapse the word
+    // spacing this relies on, so they are deliberately not set here.
+    const result=await this._ocrWorker.recognize(canvas);
+    const lines=(result?.data?.lines||[]).map(line=>(line?.text||'').split(/\s+/)).map(tokens=>tokens.filter(Boolean)).filter(row=>row.length);
+    if(lines.length)return lines;
+    // Fall back to rebuilding rows from word boxes when lines come back empty.
     const words=[];
     for(const block of (result?.data?.blocks||[]))
       for(const paragraph of (block?.paragraphs||[]))

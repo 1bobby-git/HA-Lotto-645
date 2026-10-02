@@ -1,5 +1,5 @@
 /* UI entry point: two-tier Home Assistant header plus demand-driven panel synchronization. */
-import { PANEL_TAG } from './lotto-panel-core.js?v=2.4.17';
+import { PANEL_TAG } from './lotto-panel-core.js?v=2.4.18';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const PANEL_SYNC_INTERVAL = 60_000;
@@ -312,5 +312,5 @@ Panel.prototype.render = function (...args) {
 
 
 // Keep subscriptions independent of Saturday result polling.
-import { installLiveSync } from './lotto-panel-live.js?v=2.4.17';
+import { installLiveSync } from './lotto-panel-live.js?v=2.4.18';
 installLiveSync(Panel);
