@@ -1,9 +1,10 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels, rowsFromWords } from './lotto-panel-view.js?v=2.4.19';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.20';
+import { ticketRowsFromOcr, ticketLinesFromRows, ticketExpectedGames, singleGameTokens, retryDisagrees } from './lotto-ticket-ocr.js?v=2.4.20';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-4-19';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-4-20';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -366,6 +367,7 @@ class LottoTicketPanel extends HTMLElement {
     this.node('add-game').hidden=this._visibleGames>=5;
   }
   restoreForm(data) {
+    this._photoExpectedGames=null;
     this.node('round').value=data.round||data.recommendation_target||'';
     this._loadedRound=Number(this.node('round').value)||null;this._revision=data.revision||'';
     slots.forEach(s=>this.node(`game_${s}`).value=data.values?.[`game_${s}`]||'');
@@ -686,6 +688,7 @@ class LottoTicketPanel extends HTMLElement {
     if(!String(qr||'').trim()){this._focusAfter='qr';throw new Error('복권 QR 주소를 붙여 넣어 주세요.');}
     const result=await this.request('qr_preview',{qr});
     if(this._editing&&!window.confirm('저장하지 않은 입력을 QR 번호로 바꿀까요?'))return;
+    this._photoExpectedGames=null;
     this.node('round').value=result.round;this._loadedRound=Number(result.round);this._revision='';this._newTicket=true;this._newTicketId=globalThis.crypto?.randomUUID?.()||`ticket-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     slots.forEach(s=>this.node(`game_${s}`).value=result.values?.[`game_${s}`]||'');
     this.node('qr').value='';this._editing=true;this._touched.clear();
@@ -699,6 +702,7 @@ class LottoTicketPanel extends HTMLElement {
     this._touched=new Set(slots);const {filled,valid}=this.updateFormStatus();
     if(!filled){this._focusAfter='game_a';throw new Error('최소 한 게임의 번호 6개를 입력해 주세요.');}
     if(valid!==filled){const first=slots.find(s=>parseGame(this.node(`game_${s}`).value).error);this.showGameSlots(Math.max(this._visibleGames,slots.indexOf(first)+1));this._focusAfter=`game_${first}`;throw new Error(`${first.toUpperCase()} 게임의 번호를 확인해 주세요.`);}
+    if(this._photoExpectedGames&&filled!==this._photoExpectedGames&&!window.confirm(`사진 금액은 ${this._photoExpectedGames}게임인데 현재 ${filled}게임만 입력되어 있어요. 원본을 확인했으며 이 번호만 저장할까요?`))return;
     // An explicit save is enough for a new record. Replacements require a second confirmation.
     if(this._revision&&!window.confirm(`${round}회에 저장된 A~E를 지금 확인한 번호로 교체할까요?`))return;
     const values={};slots.forEach(s=>values[`game_${s}`]=this.node(`game_${s}`).value);
@@ -778,22 +782,54 @@ class LottoTicketPanel extends HTMLElement {
     canvas.height=Math.max(1,Math.round((image.height||image.videoHeight)*scale));
     const ctx=canvas.getContext('2d',{willReadFrequently:true});
     ctx.imageSmoothingQuality='high';ctx.drawImage(image,0,0,canvas.width,canvas.height);
-    // Line text is the proven path: character whitelists collapse the word
-    // spacing this relies on, so they are deliberately not set here.
+    await this._ocrWorker.setParameters({tessedit_pageseg_mode:'6'});
     const result=await this._ocrWorker.recognize(canvas);
-    const lines=(result?.data?.lines||[]).map(line=>(line?.text||'').split(/\s+/)).map(tokens=>tokens.filter(Boolean)).filter(row=>row.length);
-    // Rows rebuilt from word boxes recover a trailing row the engine's own line
-    // grouping drops. Both sets are sent: the server keeps the first reading of
-    // a game and appends anything only this pass saw.
-    const words=[];
-    for(const block of (result?.data?.blocks||[]))
-      for(const paragraph of (block?.paragraphs||[]))
-        for(const line of (paragraph?.lines||[]))
-          for(const word of (line?.words||[])){
-            const text=String(word?.text||'').trim();
-            if(text)words.push({text,bottom:Number(word?.bbox?.y0)||0,left:Number(word?.bbox?.x0)||0});
+    const rows=ticketRowsFromOcr(result?.data);
+    if(rows.length>5)throw new Error('복권 게임 줄이 5줄보다 많아 구분하기 어렵습니다. 복권 한 장의 A~E 부분만 보이게 다시 선택하세요.');
+    const complete=rows.filter(row=>row.valid);
+    // A missing first/last number must stay inside the retry crop: use the
+    // neighbouring complete rows' numeric column span as well.
+    for(const row of rows.filter(row=>!row.valid)) {
+      const aligned=complete.filter(other=>Math.abs(other.box.x1-row.box.x1)<canvas.width*.15||Math.abs(other.box.x0-row.box.x0)<canvas.width*.15);
+      if(aligned.length){row.columns=aligned[0].columns;row.box.x0=Math.min(row.box.x0,...aligned.map(r=>r.box.x0));row.box.x1=Math.max(row.box.x1,...aligned.map(r=>r.box.x1));}
+    }
+    // Reread only incomplete physical rows. Isolating the numeric columns
+    // avoids Korean labels and price/serial text, without guessing digits.
+    try {
+      for(const row of rows.filter(row=>!row.valid)) {
+        const pad=Math.max(8,(row.box.y1-row.box.y0)*.4);
+        const x=Math.max(0,Math.floor(row.box.x0-pad));
+        const y=Math.max(0,Math.floor(row.box.y0-pad));
+        const width=Math.min(canvas.width-x,Math.ceil(row.box.x1+pad-x));
+        const height=Math.min(canvas.height-y,Math.ceil(row.box.y1+pad-y));
+        const crop=document.createElement('canvas');crop.width=width*2;crop.height=height*2;
+        const cropContext=crop.getContext('2d');cropContext.fillStyle='white';cropContext.fillRect(0,0,crop.width,crop.height);
+        cropContext.drawImage(canvas,x,y,width,height,0,0,crop.width,crop.height);
+        await this._ocrWorker.setParameters({tessedit_pageseg_mode:'7'});
+        const reread=await this._ocrWorker.recognize(crop);
+        let tokens=singleGameTokens(reread?.data);
+        // Adjacent numbers such as 11 and 17 can merge into one OCR word.
+        // If a neighbouring row gives six reliable columns, read those six
+        // image regions independently. Never split a merged string by guess.
+        if(!tokens&&row.columns.length===6) {
+          const centers=row.columns.map(c=>(c.x0+c.x1)/2),cells=[];
+          for(let index=0;index<6;index++) {
+            const left=Math.max(0,Math.floor(index?(centers[index-1]+centers[index])/2:x));
+            const right=Math.min(canvas.width,Math.ceil(index<5?(centers[index]+centers[index+1])/2:x+width));
+            const cell=document.createElement('canvas');cell.width=(right-left)*3;cell.height=height*3;
+            const cellContext=cell.getContext('2d');cellContext.fillStyle='white';cellContext.fillRect(0,0,cell.width,cell.height);
+            cellContext.drawImage(canvas,left,y,right-left,height,0,0,cell.width,cell.height);
+            const reading=await this._ocrWorker.recognize(cell);
+            cells.push(String(reading?.data?.text||'').trim());
           }
-    return [...lines, ...rowsFromWords(words)];
+          tokens=singleGameTokens({text:cells.join(' ')});
+        }
+        if(tokens){row.conflict=retryDisagrees(row.tokens,tokens);row.tokens=tokens;row.valid=true;}
+      }
+    } finally {
+      await this._ocrWorker.setParameters({tessedit_pageseg_mode:'6'});
+    }
+    return {lines:ticketLinesFromRows(rows),expected_games:ticketExpectedGames(result?.data)};
   }
   async readPhoto() {
     const file=this.node('file').files[0];this.node('file').value='';if(!file)return;
@@ -804,24 +840,29 @@ class LottoTicketPanel extends HTMLElement {
       if(value){await this.preview(value);return;}
       // No QR code (online purchases): read the printed A-E numbers offline.
       this.message('사진에서 번호를 읽는 중이에요. 잠시만 기다려 주세요.');
-      const lines=await this.ocrLines(im);
+      const reading=await this.ocrLines(im);
+      const {lines}=reading;
       if(!lines.length)throw new Error('사진에서 복권 번호를 찾지 못했습니다. 선명한 사진으로 다시 찍거나 A~E로 직접 입력하세요.');
-      await this.importOcrLines(lines);
+      await this.importOcrLines(lines,reading.expected_games);
     }
     finally{URL.revokeObjectURL(url);}
   }
-  async importOcrLines(lines) {
+  async importOcrLines(lines,expectedGames=null) {
     const round=this.selectedRound();
-    const data=await this.request('purchases_import_ocr',{round,lines,revision:this._newTicket?'':this._revision,new_ticket:this._newTicket,...((this._newTicket?this._newTicketId:this._ticketId)?{ticket_id:this._newTicket?this._newTicketId:this._ticketId}:{})});
+    const data=await this.request('purchases_import_ocr',{round,lines,preview:true,expected_games:expectedGames,revision:this._newTicket?'':this._revision,new_ticket:this._newTicket,...((this._newTicket?this._newTicketId:this._ticketId)?{ticket_id:this._newTicket?this._newTicketId:this._ticketId}:{})});
     const imported=data.imported||{};
-    const games=imported.game_count||0;
-    const read=Object.values(imported.values||{});
-    this._editing=false;this._newTicket=false;this.updateResults(data);this.applyWallet(data);this.restoreForm(data);this.finishClose(false);
-    this.showScreen('wallet',true);
-    // Show what was actually read: a photo read is never claimed to be complete.
-    const detail=read.length?` 읽은 번호: ${read.join(' / ')}.`:'';
-    const partial=games<5?' 5줄이 아니라 일부만 읽혔을 수 있으니 지갑에서 확인·수정해 주세요.':' 지갑에서 한 번 확인해 주세요.';
-    this.message(`${round}회 ${games}게임(사진 읽기)으로 저장했어요.${detail}${partial}`);
+    if(this._editing&&!window.confirm('저장하지 않은 입력을 사진에서 읽은 번호로 바꿀까요?'))return;
+    // Keep the current ticket/revision and do not touch stored purchases until
+    // the user checks the photo draft and presses the ordinary atomic Save.
+    slots.forEach(s=>this.node(`game_${s}`).value=imported.values?.[`game_${s}`]||'');
+    this._photoExpectedGames=expectedGames;
+    this._editing=true;this._touched.clear();
+    this.showGameSlots(Math.max(expectedGames||0,slots.map(s=>!!this.node(`game_${s}`).value.trim()).lastIndexOf(true)+1));
+    this.updateFormStatus();this.showEditorStep('edit');
+    const missing=(imported.missing_slots||[]).join(', ');
+    const warning=imported.needs_review?` ${missing?`${missing} 줄 등 `:''}일부 번호를 확인하지 못했어요. 원본과 비교해 빠진 줄을 입력하거나 다시 촬영해 주세요.`:'';
+    this.message(`${round}회 ${imported.game_count||0}게임을 읽었어요. 아직 저장하지 않았어요.${warning} 회차와 A~E 번호를 확인한 뒤 저장을 눌러 주세요.`,Boolean(imported.needs_review));
+    this._focusAfter=missing&&/^[A-E]$/.test(missing)?`game_${missing.toLowerCase()}`:'game_a';
   }
   async startCamera() {
     this.stopCamera();const generation=this._cameraGeneration;

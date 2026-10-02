@@ -29,7 +29,7 @@ from .ticket_qr import parse_ticket_qr
 
 KEY = DOMAIN + '_panel'
 PATH = 'lotto-645'
-PANEL_TAG = 'lotto-ticket-panel-v2-4-19'
+PANEL_TAG = 'lotto-ticket-panel-v2-4-20'
 COMPATIBLE_PANEL_TAGS = {
     'lotto-ticket-panel',
     'lotto-ticket-panel-v2-0-0', 'lotto-ticket-panel-v2-0-1',
@@ -318,6 +318,8 @@ async def purchases_save(hass, connection, msg):
 @websocket_api.websocket_command({'type': 'lotto_645/purchases_import_ocr', vol.Required('entry_id'): str,
                                   vol.Required('round'): vol.All(int, vol.Range(min=1, max=999999)),
                                   vol.Required('lines'): vol.All(list, vol.Length(max=60)),
+                                  vol.Optional('preview', default=False): bool,
+                                  vol.Optional('expected_games'): vol.Any(None, vol.All(int, vol.Range(min=1, max=5))),
                                   vol.Required('revision'): vol.All(str, vol.Length(max=100)),
                                   vol.Optional('clear', default=False): bool,
                                   vol.Optional('ticket_id'): vol.All(str, vol.Length(max=80)),
@@ -329,11 +331,21 @@ async def purchases_import_ocr(hass, connection, msg):
     from .ticket_ocr import import_from_lines
     try:
         coordinator = _coordinator(hass, msg)
-        parsed = import_from_lines(msg['lines'])
-        await coordinator.async_save_purchase_record(
-            parse_round(msg['round']), parsed['values'], expected_revision=msg['revision'],
-            ticket_id=msg.get('ticket_id'), new_ticket=msg['new_ticket'],
-        )
+        parsed = import_from_lines(msg['lines'], msg.get('expected_games'))
+        # OCR is a draft first. Cached older clients cannot silently save an
+        # incomplete reading either; the existing purchase remains untouched.
+        parsed['saved'] = False
+        if not msg.get('preview', False) and parsed['needs_review']:
+            connection.send_error(msg['id'], 'ocr_review_required',
+                                  '일부 번호를 확인하지 못해 저장하지 않았습니다. '
+                                  '페이지를 새로고침한 뒤 사진을 다시 읽거나 A~E를 직접 입력하세요.')
+            return
+        if not msg.get('preview', False):
+            await coordinator.async_save_purchase_record(
+                parse_round(msg['round']), parsed['values'], expected_revision=msg['revision'],
+                ticket_id=msg.get('ticket_id'), new_ticket=msg['new_ticket'],
+            )
+            parsed['saved'] = True
         result = _view(coordinator, msg['round'])
     except ValueError:
         connection.send_error(msg['id'], 'no_ticket_games',
