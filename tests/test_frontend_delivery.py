@@ -52,6 +52,26 @@ def test_home_wallet_renders_five_games_and_multiple_tickets_as_swiper():
     assert "games.length>3" not in core
 
 
+def test_every_field_the_panel_sends_is_declared_by_the_command_schema():
+    """The page mirrors the editor request; a missing field is a hard error."""
+    import re
+    backend = (R / 'ticket_panel.py').read_text(encoding='utf-8')
+    core = (R / 'www/lotto-panel-core.js').read_text(encoding='utf-8')
+
+    def declared(command):
+        start = backend.index(f"'type': 'lotto_645/{command}'")
+        block = backend[start:backend.index('})', start)]
+        return set(re.findall(r"vol\.(?:Required|Optional)\('([a-z_]+)'", block))
+
+    for command, request in (('purchases_save', "request('purchases_save'"),
+                             ('purchases_import_ocr', "request('purchases_import_ocr'")):
+        start = core.index(request)
+        call = core[start:core.index('});', start)]
+        sent = set(re.findall(r'[{,](\w+):', call.split('){', 1)[-1]))
+        missing = {field for field in sent if field != 'entry_id'} - declared(command)
+        assert not missing, f'{command} schema does not accept {sorted(missing)}'
+
+
 def test_the_offline_ocr_assets_are_shipped_and_pinned():
     import hashlib
     import json
