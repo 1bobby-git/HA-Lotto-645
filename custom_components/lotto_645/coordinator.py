@@ -118,6 +118,8 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         """Publish persisted server results; never calculate aggregates in HA."""
         super().async_update_listeners()
         self.hass.bus.async_fire(DOMAIN + '_updated', {'entry_id': self.entry.entry_id})
+        from .result_notifications import schedule_result_notification
+        schedule_result_notification(self)
 
     async def _async_save_consensus(self) -> None:
         """Coalesce source publications, including updates during a disk write."""

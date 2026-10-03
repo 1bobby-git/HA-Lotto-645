@@ -63,7 +63,10 @@ export function installLiveSync(Panel) {
     this._liveReadyHandler = () => { if (valid()) this._queueLiveRefresh(); };
     connection.addEventListener?.('ready', this._liveReadyHandler);
     Promise.resolve().then(() => connection.subscribeMessage(event => {
-      if (valid() && event.entry_id === entry) this._queueLiveRefresh();
+      if (valid() && event.entry_id === entry) {
+        if (event.announcement) void this._notifyLottoAnnouncement?.(event.announcement);
+        this._queueLiveRefresh();
+      }
     }, {type: 'lotto_645/subscribe', entry_id: entry})).then(unsubscribe => {
       if (!valid()) { Promise.resolve().then(unsubscribe).catch(() => {}); return; }
       this._liveUnsubscribe = unsubscribe;

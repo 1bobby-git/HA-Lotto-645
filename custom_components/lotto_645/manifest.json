@@ -12,12 +12,13 @@
     "frontend",
     "http",
     "panel_custom",
-    "websocket_api"
+    "websocket_api",
+    "persistent_notification"
   ],
   "documentation": "https://github.com/1bobby-git/HA-Lotto-645",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/1bobby-git/HA-Lotto-645/issues",
   "requirements": [],
-  "version": "2.4.21"
+  "version": "2.4.22"
 }

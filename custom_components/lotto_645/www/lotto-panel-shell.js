@@ -1,9 +1,10 @@
+import { installResultNotifications } from './lotto-result-notifications.js?v=2.4.22';
 import { applyFinalizationPanel } from './finalization-ha.js';
 /* Production entry: component presentation with HA-owned narrow-state decisions. */
-import './lotto-panel.js?v=2.4.21';
-import { PANEL_TAG } from './lotto-panel-core.js?v=2.4.21';
-import { applyComponentDesign } from './lotto-panel-design.js?v=2.4.21';
-import { applyPanelTools } from './lotto-panel-tools.js?v=2.4.21';
+import './lotto-panel.js?v=2.4.22';
+import { PANEL_TAG } from './lotto-panel-core.js?v=2.4.22';
+import { applyComponentDesign } from './lotto-panel-design.js?v=2.4.22';
+import { applyPanelTools } from './lotto-panel-tools.js?v=2.4.22';
 
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
@@ -102,7 +103,7 @@ const LOTTO_BALL_AND_COUNTDOWN_STYLE = `
   color:#d1d5db!important;
   border-color:#4b5563!important;
 }
-lotto-panel-tools-v2-4-21{display:block!important;height:0!important;min-height:0!important;margin:0!important;overflow:visible!important}
+lotto-panel-tools-v2-4-22{display:block!important;height:0!important;min-height:0!important;margin:0!important;overflow:visible!important}
 @media(forced-colors:active){
   .draw-numbers .ball[data-band],.ticket-balls .ball[data-band]{
     background:Canvas!important;
@@ -181,7 +182,7 @@ Panel.prototype.render = function (...args) {
       hostStyle = document.createElement('style');
       root.append(hostStyle);
     }
-    hostStyle.setAttribute('data-lotto-ha-host-header', '2.4.21');
+    hostStyle.setAttribute('data-lotto-ha-host-header', '2.4.22');
     hostStyle.textContent = HA_HOST_HEADER_STYLE;
   }
   removeLegacyHeroCountdown(this);
@@ -195,10 +196,10 @@ Panel.prototype.render = function (...args) {
       root.append(ballStyle);
     }
     /* Refresh stale style nodes instead of accepting their old text. */
-    ballStyle.setAttribute('data-lotto-official-ball-colors', '2.4.21');
+    ballStyle.setAttribute('data-lotto-official-ball-colors', '2.4.22');
     ballStyle.textContent = LOTTO_BALL_AND_COUNTDOWN_STYLE;
   }
-  const tools = root?.querySelector('lotto-panel-tools-v2-4-21');
+  const tools = root?.querySelector('lotto-panel-tools-v2-4-22');
   if (tools) {
     tools.style.height = '0';
     tools.style.minHeight = '0';
@@ -211,3 +212,5 @@ Panel.prototype.render = function (...args) {
   this._syncHaHostHeader?.();
   return value;
 };
+
+installResultNotifications(Panel);
