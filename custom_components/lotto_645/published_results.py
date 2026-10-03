@@ -84,16 +84,20 @@ def current_draw_round(now: datetime) -> int:
 
 
 def poll_interval(now: datetime) -> int | None:
-    """Fast only around publication; no continuous 24/7 portal crawling."""
-    local = now.astimezone(KST)
-    minute = local.hour * 60 + local.minute
-    if local.weekday() == 5 and 20 * 60 + 35 <= minute <= 21 * 60 + 30:
-        return 60
-    if local.weekday() == 5 and 21 * 60 + 30 < minute <= 23 * 60 + 30:
-        return 300
-    if local.weekday() == 6 and minute <= 10 * 60:
-        return 900
-    return None
+    """Retry an unresolved draw without a Sunday cutoff; caller stops on confirmation.
+
+    Publication time varies with the broadcast. The scheduled start is only a
+    trigger to look, never evidence that a complete result already exists.
+    """
+    target = current_draw_round(now)
+    if target < 1:
+        return None
+    elapsed = (now - draw_cutoff(target)).total_seconds()
+    if elapsed < 2 * 3600:
+        return 30
+    if elapsed < 6 * 3600:
+        return 120
+    return 900
 
 
 def article_allowed(publisher: str, url: str) -> bool:

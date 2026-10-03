@@ -48,7 +48,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_ensure_ticket_panel(hass)
         await coordinator.async_poll_published_results()
 
-    entry.async_on_unload(async_track_utc_time_change(hass, _publication_tick, second=15))
+    entry.async_on_unload(async_track_utc_time_change(hass, _publication_tick, second=[0, 30]))
 
     async def _connection_retry(_now):
         # Health check first so the connectivity entity reflects the live service.

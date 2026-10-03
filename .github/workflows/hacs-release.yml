@@ -71,6 +71,8 @@ jobs:
       - name: Validate integration
         if: steps.existing.outputs.exists != 'true'
         run: |
+          python -m pip install pytest aiohttp voluptuous
+          python -m pytest -q
           python -m compileall -q custom_components/lotto_645
 
       - name: Build HACS zip

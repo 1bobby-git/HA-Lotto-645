@@ -51,10 +51,10 @@ def test_invalid_stale_ambiguous_or_untrusted_reports_rejected(changes):
 def test_no_fabricated_after_broadcast_end():
     assert pub.current_draw_round(datetime(2026,9,12,11,34,tzinfo=UTC))==1240
     assert pub.current_draw_round(datetime(2026,9,12,11,35,tzinfo=UTC))==1241
-    assert pub.poll_interval(datetime(2026,9,12,11,35,tzinfo=UTC))==60
-    assert pub.poll_interval(datetime(2026,9,12,13,0,tzinfo=UTC))==300
+    assert pub.poll_interval(datetime(2026,9,12,11,35,tzinfo=UTC))==30
+    assert pub.poll_interval(datetime(2026,9,12,13,0,tzinfo=UTC))==30
     assert pub.poll_interval(datetime(2026,9,13,0,0,tzinfo=UTC))==900
-    assert pub.poll_interval(datetime(2026,9,14,0,0,tzinfo=UTC)) is None
+    assert pub.poll_interval(datetime(2026,9,14,0,0,tzinfo=UTC))==900
 
 
 def test_one_publisher_provisional_two_publishers_and_conflict():

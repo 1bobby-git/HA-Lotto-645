@@ -762,7 +762,9 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                 **kwargs,
             )
 
-        if self.history[-1].round != old_latest_round:
+        if (self.history[-1].round != old_latest_round
+                or getattr(self, "_pending_result_round_transition", False)):
+            self._pending_result_round_transition = False
             # Evaluate the pre-draw snapshot before next-round recommendations replace it.
             # Applies to scheduled, normal coordinator and manual refresh paths.
             self._evaluate_prediction_snapshot()
@@ -854,6 +856,57 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             self._needs_storage_save = True
             self._suppress_ai_generation_once = True
             await self.async_request_refresh()
+
+    async def async_refresh_published_history(self, target: int) -> None:
+        """Read results outside the state lock; no AI, generation or full refresh.
+
+        A successful but old mirror is not a confirmed target result. Respect the
+        existing official-direct opt-in while allowing it to cover that lag too.
+        """
+        base_history = list(self.history)
+        latest = base_history[-1].round if base_history else 0
+        if self.data is not None and self.data.latest_draw.round >= target:
+            return
+        incoming = (base_history if self.data is not None
+                    and latest > self.data.latest_draw.round else None)
+        source = "shared_mirror"
+        try:
+            if incoming is None:
+                incoming, _metadata = await self.client.async_fetch_shared_mirror()
+        except LottoApiError:
+            pass
+        available = incoming[-1].round if incoming else latest
+        if available < target and self.allow_official_fallback and latest:
+            self.client.begin_update_cycle()
+            try:
+                delta = await self.client.async_fetch_recent_range_official(latest + 1, target)
+                incoming = [*base_history, *delta]
+                source = "official_incremental_fallback"
+            except LottoApiError as err:
+                _LOGGER.debug("발표 확인: 동행복권 직접 조회 대기: %s", err)
+        if not incoming:
+            return
+        async with self._manual_lock:
+            # An ordinary refresh can win this race. Never overwrite newer data.
+            if self.data is None or self.data.latest_draw.round >= incoming[-1].round:
+                return
+            if incoming[-1].round >= self.history[-1].round:
+                self.history = incoming
+            self._pending_result_round_transition = True
+            # Invalidate internal generation caches before persistence (also
+            # survives restart). Keep the currently displayed DTO unchanged.
+            self._cached_ai_recommendation = None
+            self._cached_ai_generated_at = None
+            self._local_generation_nonce = 0
+            self._regeneration_exclusions = ()
+            self._local_generated_at = None
+            self._evaluate_prediction_snapshot()
+            self._sync_reviews()
+            self._needs_storage_save = True
+            await self._save_storage()
+            self.data = replace(self.data, latest_draw=self.history[-1],
+                                history_count=len(self.history), source_status=source)
+            self.async_update_listeners()
 
     async def async_check_draw_result(self) -> None:
         """Force a mirror recheck without regenerating current recommendation numbers."""
