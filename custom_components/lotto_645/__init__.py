@@ -43,10 +43,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     hass.bus.async_fire(DOMAIN + '_updated', {'entry_id': entry.entry_id})
+    from .result_notifications import schedule_result_notification, cancel_result_notifications
+    schedule_result_notification(coordinator)
+    entry.async_on_unload(lambda: cancel_result_notifications(coordinator))
 
     async def _publication_tick(now) -> None:
         async_ensure_ticket_panel(hass)
         await coordinator.async_poll_published_results()
+        schedule_result_notification(coordinator)
 
     entry.async_on_unload(async_track_utc_time_change(hass, _publication_tick, second=[0, 30]))
 

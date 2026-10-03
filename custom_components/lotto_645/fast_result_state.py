@@ -66,8 +66,10 @@ class FastResultState:
     def result_metadata(self) -> dict:
         state = getattr(self, '_fast_result', None) or {}
         official = self.data.latest_draw if self.data else None
+        target = current_draw_round(datetime.now(UTC))
+        waiting = {'pending': bool(target and (official is None or official.round < target)), 'round': target}
         if state.get('round', 0) > (official.round if official else 0):
-            return {k: v for k, v in state.items() if k != 'draw'}
+            return {**{k: v for k, v in state.items() if k != 'draw'}, 'publication_wait': waiting}
         metadata = {'status': 'official_history', 'sources': [],
                     'notice': '공식 이력 미러/캐시 기준', 'official_round': official.round if official else None,
                     'latest_poll': getattr(self, '_fast_diagnostics', {})}
@@ -75,6 +77,7 @@ class FastResultState:
             old = LottoDraw.from_storage(state['draw'])
             metadata.update(status='official_confirmed' if (old.numbers, old.bonus) == (official.numbers, official.bonus) else 'official_corrected',
                             sources=state.get('sources', []), notice='공식 이력과 재대조 완료')
+        metadata['publication_wait'] = waiting
         return metadata
 
     @property

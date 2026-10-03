@@ -1,10 +1,10 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.21';
-import { ticketRowsFromOcr, ticketLinesFromRows, ticketExpectedGames, singleGameTokens, retryDisagrees } from './lotto-ticket-ocr.js?v=2.4.21';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.22';
+import { ticketRowsFromOcr, ticketLinesFromRows, ticketExpectedGames, singleGameTokens, retryDisagrees } from './lotto-ticket-ocr.js?v=2.4.22';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-4-21';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-4-22';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',

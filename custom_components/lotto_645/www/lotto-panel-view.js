@@ -337,6 +337,8 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}textarea{r
   <main class="wrap">
     <section id="screen-home" class="screen" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
       <div class="page-heading"><div><div class="kicker">AT A GLANCE</div><h1>한눈에</h1><p>다가오는 회차, 내 복권, 지난 결과를 필요한 순서대로 확인합니다.</p></div></div>
+      <div class="toolbar"><button id="result-notifications" type="button" aria-pressed="false">브라우저 알림 켜기</button><span>Home Assistant 알림은 자동으로 제공됩니다.</span></div>
+      <p id="publication-waiting" role="status" hidden></p>
       <section class="upcoming-hero" aria-labelledby="upcoming-round">
         <div class="upcoming-main">
           <p class="upcoming-kicker">다가오는 회차</p>
