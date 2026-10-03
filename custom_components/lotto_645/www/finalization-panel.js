@@ -5,11 +5,11 @@ const messages={not_configured:'입력 묶음을 선택하세요.',waiting_sourc
 const colors=['#e08f00','#0063cc','#d8314f','#6d7381','#2c9e44'];
 class FinalizationPanel extends HTMLElement {
   connectedCallback(){
-    if(this.built){if(this.adapter)this.perform('refresh');return;}this.built=true;this.busy=false;this.loaded=false;this.data=null;
+    if(this.built)return;this.built=true;this.busy=false;this.loaded=false;this.data=null;
     const details=make('details','','finalization-panel');details.open=true;
     const heading=make('summary','2단계 · 최종 번호 산출');details.append(heading);this.append(details);
     this.content=make('div','','finalization-content');details.append(this.content);
-    this.content.append(make('p','후보 커버링 재조합 · 선택한 원본 공식이 모두 저장된 뒤 실행합니다.','finalization-note'));
+    this.content.append(make('p','후보 커버링 재조합 · 선택한 원본 공식이 모두 저장된 뒤 실행합니다. 진행 결과는 상태 확인 버튼으로 갱신하세요.','finalization-note'));
     this.message=make('p','입력 상태 확인 중');this.message.setAttribute('role','status');this.content.append(this.message);
     this.source=make('select');this.source.setAttribute('aria-label','선택한 입력 묶음');this.content.append(this.source);
     this.source.onchange=()=>this.perform('select',{source_batch_id:this.source.value});
@@ -32,7 +32,7 @@ class FinalizationPanel extends HTMLElement {
     if(this.busy||!this.adapter)return;clearTimeout(this.timer);this.busy=true;this.availability();
     try{const result=await this.adapter(action,data);if(!this.isConnected)return;this.data=result;this.render();}
     catch(error){if(error.code==='login_required'||error.code==='context_changed'||error.status===401){this.data=null;this.results.replaceChildren();this.source.replaceChildren();this.resultSelect.replaceChildren();this.count.value='';this.resultSignature=null;this.selected=null;this.viewResultId=null;}this.message.textContent=error?.message||'처리하지 못했습니다. 기존 원본과 완료 결과는 유지됩니다.';this.message.setAttribute('role','alert');}
-    finally{this.busy=false;this.availability();if(this.isConnected)this.timer=setTimeout(()=>{if(!document.hidden)this.perform('refresh');else this.timer=setTimeout(()=>this.perform('refresh'),5000);},5000);}
+    finally{this.busy=false;this.availability();}
   }
   submit(additional){
     const ready=this.data?.readiness;if(!ready)return;
@@ -110,6 +110,6 @@ class FinalizationPanel extends HTMLElement {
     for(const row of result.source_games||[]){const line=make('div','','finalization-game');line.append(make('span',row.formula_id),this.balls(row.numbers));original.append(line);}this.results.append(original);
   }
 }
-if(!customElements.get('lotto-finalization-panel'))customElements.define('lotto-finalization-panel',FinalizationPanel);
+if(!customElements.get('lotto-finalization-panel-v2-4-23'))customElements.define('lotto-finalization-panel-v2-4-23',FinalizationPanel);
 
 })();

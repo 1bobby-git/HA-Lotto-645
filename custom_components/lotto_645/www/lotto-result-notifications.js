@@ -68,7 +68,7 @@ export function installResultNotifications(Panel) {
     if (waiting) {
       const pending = data.result_verification?.publication_wait;
       waiting.hidden = !pending?.pending;
-      waiting.textContent = pending?.pending ? `${pending.round}회 ${['provisional','cross_checked'].includes(data.result_verification?.status) ? '공식 결과 대조 중' : '발표 확인 중'} · 방송 편성에 따라 늦어질 수 있으며 결과가 확인될 때까지 자동 조회합니다.` : '';
+      waiting.textContent = pending?.pending ? `${pending.round}회 ${['provisional','cross_checked'].includes(data.result_verification?.status) ? '공식 결과 대조 중' : '발표 확인 중'} · 방송 편성에 따라 늦어질 수 있으며 서버에서 결과를 계속 확인합니다. 화면은 결과 확인 버튼으로 갱신하세요.` : '';
     }
     return value;
   };
