@@ -361,9 +361,12 @@ def test_panel_upgrade_accepts_recent_release_tags():
         "lotto-ticket-panel-v2-4-19",
         "lotto-ticket-panel-v2-4-20",
         "lotto-ticket-panel-v2-4-21",
+        "lotto-ticket-panel-v2-4-22",
     ):
         assert repr(tag) in source
-    assert "PANEL_TAG = 'lotto-ticket-panel-v2-4-22'" in source
+    version = json.loads((R / "manifest.json").read_text(encoding="utf-8"))["version"]
+    tag = "lotto-ticket-panel-v" + version.replace(".", "-")
+    assert f"PANEL_TAG = {tag!r}" in source
 
 
 def test_member_refresh_preserves_identity_and_uses_one_rotation(monkeypatch):
