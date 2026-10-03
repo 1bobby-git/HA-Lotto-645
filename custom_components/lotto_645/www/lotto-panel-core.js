@@ -1,10 +1,10 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.22';
-import { ticketRowsFromOcr, ticketLinesFromRows, ticketExpectedGames, singleGameTokens, retryDisagrees } from './lotto-ticket-ocr.js?v=2.4.22';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.23';
+import { ticketRowsFromOcr, ticketLinesFromRows, ticketExpectedGames, singleGameTokens, retryDisagrees } from './lotto-ticket-ocr.js?v=2.4.23';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
-export const PANEL_TAG = 'lotto-ticket-panel-v2-4-22';
+export const PANEL_TAG = 'lotto-ticket-panel-v2-4-23';
 const FALLBACK_LOGO = '/lotto_645_brand/logo.png?v=55ac9df7';
 const labels = {
   waiting: '발표 대기', provisional: '속보 · 공식 확인 전',
@@ -166,9 +166,6 @@ class LottoTicketPanel extends HTMLElement {
   _start() {
     if(!this._hass||!this._panel||!this.isConnected)return;
     if(!this.shadowRoot.firstChild)this.render();
-    if(!this._poll)this._poll=setInterval(()=>{
-      if(!this._busy&&!document.hidden&&this.node('entry')?.value)this.operation(()=>this.refreshStatus(),true);
-    },30000);
   }
   node(id) { return this.shadowRoot.getElementById(id); }
   message(text,error=false) {
@@ -198,7 +195,7 @@ class LottoTicketPanel extends HTMLElement {
     catch(error) {
       if(error?.code==='stale_response')return;
       this.message(error?.message||'작업을 완료하지 못했어요. 다시 시도해 주세요.',true);
-      if(background){if(error?.code==='unavailable')this._scheduleLiveRetry?.();this.node('connection').dataset.online='false';this.node('connection').textContent='연결 확인 필요';this.node('sync-status').textContent='자동 확인 실패 · 다시 확인해 주세요';}
+      if(background){this.node('connection').dataset.online='false';this.node('connection').textContent='연결 확인 필요';this.node('sync-status').textContent='확인 실패 · 다시 확인해 주세요';}
     } finally {
       this._busy=false;controls.forEach((n,i)=>n.disabled=disabled[i]);
       this.node('editor')?.removeAttribute('aria-busy');this.syncAvailability();
@@ -233,14 +230,14 @@ class LottoTicketPanel extends HTMLElement {
     for(const button of this.shadowRoot.querySelectorAll('[data-register]'))button.onclick=()=>this.openEditor('import');
     this.node('entry').onchange=()=>{
       if(this._editing&&!window.confirm('저장하지 않은 번호를 버리고 로또 통합을 변경할까요?')){this.node('entry').value=this._activeEntry;return;}
-      this._activeEntry=this.node('entry').value;this._requestEpoch=(this._requestEpoch||0)+1;this.stopCamera();this._ensureLiveSubscription?.();
+      this._activeEntry=this.node('entry').value;this._requestEpoch=(this._requestEpoch||0)+1;this.stopCamera();this._ensureLiveSubscription?.();this._resetFinalizationContext?.();
       this._editing=false;this._walletData=null;this._walletRound=null;this._loadedRound=null;this._homeTicketId=null;this._walletSlideId=null;
       this._queueLiveRefresh?.(true);
     };
     this.node('check').onclick=()=>this.operation(async()=>{
       this.message('새 추첨 결과를 확인하고 있어요.');this.updateResults(await this.request('result_check'));
       // result_check may return the server's selected round, not the visible wallet round.
-      await this.refreshStatus();this.message('확인했어요. 새 결과가 없으면 자동 확인을 계속합니다.');
+      await this.refreshStatus();this.message('확인했어요. 화면 자동 갱신은 꺼져 있습니다.');
     });
     this.node('wallet-round').onchange=()=>this.operation(async()=>{
       try{await this.load(Number(this.node('wallet-round').value));}
@@ -677,7 +674,7 @@ class LottoTicketPanel extends HTMLElement {
     for(const source of meta.sources||[]){let url;try{url=new URL(source.url);}catch{continue;}if(!['https:','http:'].includes(url.protocol))continue;const a=document.createElement('a');a.textContent=`${source.publisher||'출처'} 발표 ↗`;a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';sources.append(a);}
     this.node('connection').dataset.online='true';this.node('connection').textContent='HA 연결됨';
     const now=new Intl.DateTimeFormat('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
-    this.node('sync-status').textContent=`최근 확인 ${now} · 30초마다 자동 확인`;
+    this.node('sync-status').textContent=`최근 확인 ${now} · 화면 자동 갱신 꺼짐`;
   }
   rows(id,rows) {
     const headers=id==='reviews'?['추첨 공식 / 별점','평가 회차','이번 점수','정확 / ±1','순위']:['추첨 공식','번호','결과'];

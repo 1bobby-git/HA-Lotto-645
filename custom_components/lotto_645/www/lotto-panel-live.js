@@ -1,22 +1,12 @@
-/* Entry-scoped invalidations, not lottery polling. No ticket or keyword data in events. */
+/* Entry-scoped announcements only; visible data is refreshed by user actions. */
 export function installLiveSync(Panel) {
   if (Panel.prototype._lottoLiveInstalled) return;
   Panel.prototype._lottoLiveInstalled = true;
 
-  Panel.prototype._scheduleLiveRetry = function () {
-    if (!this.isConnected || (this._liveFailures || 0) >= 5 || this._liveRefreshRetry) return;
-    this._liveFailures = (this._liveFailures || 0) + 1;
-    this._liveRefreshRetry = setTimeout(() => {
-      this._liveRefreshRetry = null;
-      this._queueLiveRefresh();
-    }, 2000);
-  };
-  const update = Panel.prototype.updateResults;
-  Panel.prototype.updateResults = function (...args) {
-    clearTimeout(this._liveRefreshRetry);this._liveRefreshRetry = null;this._liveFailures = 0;
-    return update.apply(this, args);
-  };
   Panel.prototype._queueLiveRefresh = function (reload = false) {
+    // Only initial/explicit entry selection can request a load. Background
+    // invalidations must never rebuild the page the user is reading.
+    if (!reload) return;
     this._livePending = true;
     this._liveReload = this._liveReload || reload;
     this._drainLiveRefresh();
@@ -39,15 +29,9 @@ export function installLiveSync(Panel) {
     this._liveUnsubscribe = null;
     this._liveConnection = null;
     this._liveEntry = null;
-    clearTimeout(this._liveRefreshRetry);
-    this._liveRefreshRetry = null;
     clearTimeout(this._liveRetry);
     this._liveRetry = null;
     if (unsubscribe) Promise.resolve().then(unsubscribe).catch(() => {});
-    if (this._liveReadyConnection && this._liveReadyHandler) {
-      this._liveReadyConnection.removeEventListener?.('ready', this._liveReadyHandler);
-    }
-    this._liveReadyConnection = null;
   };
   Panel.prototype._ensureLiveSubscription = function () {
     const connection = this._hass?.connection;
@@ -59,19 +43,13 @@ export function installLiveSync(Panel) {
     this._liveEntry = entry;
     const token = this._liveToken;
     const valid = () => this.isConnected && token === this._liveToken && entry === this.node('entry')?.value;
-    this._liveReadyConnection = connection;
-    this._liveReadyHandler = () => { if (valid()) this._queueLiveRefresh(); };
-    connection.addEventListener?.('ready', this._liveReadyHandler);
     Promise.resolve().then(() => connection.subscribeMessage(event => {
       if (valid() && event.entry_id === entry) {
         if (event.announcement) void this._notifyLottoAnnouncement?.(event.announcement);
-        this._queueLiveRefresh();
       }
     }, {type: 'lotto_645/subscribe', entry_id: entry})).then(unsubscribe => {
       if (!valid()) { Promise.resolve().then(unsubscribe).catch(() => {}); return; }
       this._liveUnsubscribe = unsubscribe;
-      // Fetch after subscribing: closes the gap between initial load and listener registration.
-      this._queueLiveRefresh();
     }).catch(() => {
       if (!valid()) return;
       this._stopLiveSubscription();
@@ -101,6 +79,7 @@ export function installLiveSync(Panel) {
       this._activeEntry = select.value;
       this._walletRound = this._walletData = this._loadedRound = null;
       this._roundSignature = null;
+      this._resetFinalizationContext?.();
       this._queueLiveRefresh(true);
     }
     this.syncAvailability();
@@ -115,17 +94,8 @@ export function installLiveSync(Panel) {
     this._drainLiveRefresh();
     return result;
   };
-  const connect = Panel.prototype._onLottoConnected;
-  Panel.prototype._onLottoConnected = function (...args) {
-    const value = connect?.apply(this, args);
-    this._liveVisibility = () => { if (!document.hidden) this._queueLiveRefresh(); };
-    document.addEventListener('visibilitychange', this._liveVisibility);
-    this._queueLiveRefresh();
-    return value;
-  };
   const disconnect = Panel.prototype._onLottoDisconnected;
   Panel.prototype._onLottoDisconnected = function (...args) {
-    document.removeEventListener('visibilitychange', this._liveVisibility);
     this._stopLiveSubscription();
     return disconnect?.apply(this, args);
   };

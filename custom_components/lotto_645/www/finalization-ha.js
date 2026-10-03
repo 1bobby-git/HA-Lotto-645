@@ -1,13 +1,13 @@
-/* Optional HA UI. Reads/polls never submit a manual finalization. */
+/* Optional HA UI. Initial/manual reads never submit a finalization. */
 import './finalization-panel.js';
 export function applyFinalizationPanel(panel){
   const root=panel.shadowRoot;if(!root)return;
   let style=root.querySelector('link[data-finalization-style]');
   if(!style){style=document.createElement('link');style.rel='stylesheet';style.href=new URL('./finalization-panel.css',import.meta.url).href;style.dataset.finalizationStyle='1';root.append(style);}
   const host=root.getElementById('screen-review');if(!host)return;
-  let widget=host.querySelector('lotto-finalization-panel');
+  let widget=host.querySelector('lotto-finalization-panel-v2-4-23');
   if(!widget){
-    widget=document.createElement('lotto-finalization-panel');host.append(widget);
+    widget=document.createElement('lotto-finalization-panel-v2-4-23');host.append(widget);
     let entry=null;
     widget.configure(async(action,data)=>{
       const current=panel.node('entry')?.value;if(current!==entry){entry=current;widget.selected=null;widget.resultSignature=null;}
@@ -19,6 +19,13 @@ export function applyFinalizationPanel(panel){
       return result;
     });
   }
+  panel._resetFinalizationContext = () => {
+    widget.data=null;widget.selected=null;widget.resultSignature=null;widget.viewResultId=null;
+    widget.results.replaceChildren();widget.source.replaceChildren();widget.resultSelect.replaceChildren();
+    widget.count.value='';widget.blocked.replaceChildren();
+    widget.message.textContent='통합이 변경됐습니다. 상태 확인 버튼을 눌러 주세요.';
+    widget.availability();
+  };
   const home=root.getElementById('screen-home');
   if(home&&!home.querySelector('[data-finalization-go]')){const button=document.createElement('button');button.type='button';button.dataset.finalizationGo='1';button.textContent='최종 번호 산출 · 준비 상태 확인';button.onclick=()=>{panel.showScreen('review',true);widget.scrollIntoView({block:'nearest'});widget.perform('refresh');};home.append(button);}
 }
