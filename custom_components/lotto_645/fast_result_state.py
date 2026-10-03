@@ -1,6 +1,7 @@
 """Overlay fast published results without feeding provisional numbers to analysis."""
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime
 import time
@@ -140,39 +141,76 @@ class FastResultState:
         return True
 
     async def async_poll_published_results(self, *, force: bool = False) -> None:
-        """Automatic publication-window polling; result checking never calls AI."""
+        """One bounded sweep at a time, until the target has official confirmation."""
+        lock = getattr(self, '_fast_poll_lock', None)
+        if lock is None:
+            lock = self._fast_poll_lock = asyncio.Lock()
+        if lock.locked():
+            return
+        async with lock:
+            await self._async_poll_published_results(force=force)
+
+    async def _async_poll_published_results(self, *, force: bool = False) -> None:
         from .fast_results import FastResultClient
         from homeassistant.helpers.aiohttp_client import async_get_clientsession
         now = datetime.now(UTC)
-        interval = poll_interval(now)
-        if not force and interval is None:
+        target = current_draw_round(now)
+        if target < 1 or self.data is None or self.data.latest_draw.round >= target:
             return
-        if time.monotonic() - getattr(self, '_last_fast_poll', 0) < (55 if force else (interval or 900) - 1):
+        interval = poll_interval(now)
+        if interval is None:
+            return
+        saved = getattr(self, '_fast_result', None) or {}
+        # Once publishers agree, lower traffic while waiting for official history.
+        if saved.get('round') == target and saved.get('status') == 'cross_checked':
+            interval = max(interval, 120)
+        elapsed = time.monotonic() - getattr(self, '_last_fast_poll', -float('inf'))
+        if elapsed < (29 if force else interval - 1):
             return
         self._last_fast_poll = time.monotonic()
-        target = current_draw_round(now)
-        if target < 1 or self.data is None:
-            return
-        # Mirror/publication checks are independent; a slow mirror timeout must
-        # not delay the first complete publisher result.
-        if self.data.latest_draw.round < target:
-            client = getattr(self, '_fast_client', None)
-            if client is None:
-                client = self._fast_client = FastResultClient(async_get_clientsession(self.hass))
-                saved = getattr(self, '_fast_result', None) or {}
-                if saved.get('round') == target and saved.get('draw'):
-                    client.target = target
-                    for source in saved.get('sources', []):
-                        candidate = PublishedDraw.from_dict({'draw': saved['draw'], **source})
-                        client.evidence[candidate.publisher] = candidate
-            state = await client.check(target, now=now)
-            self._fast_diagnostics = {'pending_round': target, 'checked_at': state.get('checked_at'),
-                                      'providers': state.get('providers', {}), 'status': state.get('status')}
+        client = getattr(self, '_fast_client', None)
+        if client is None:
+            client = self._fast_client = FastResultClient(async_get_clientsession(self.hass))
+            if saved.get('round') == target and saved.get('draw'):
+                client.target = target
+                for source in saved.get('sources', []):
+                    evidence = PublishedDraw.from_dict({'draw': saved['draw'], **source})
+                    client.evidence[evidence.publisher] = evidence
+
+        async def accept(state: dict) -> None:
+            self._fast_diagnostics = {
+                'pending_round': target, 'checked_at': state.get('checked_at'),
+                'providers': state.get('providers', {}), 'status': state.get('status'),
+                'poll_interval_seconds': interval,
+            }
             async with self._manual_lock:
-                if self._accept_fast_state(state):
-                    await self._save_storage()
+                # Official history may have arrived while a publisher was slow.
+                if self.data.latest_draw.round < target:
+                    old = getattr(self, '_fast_result', None) or {}
+                    changed = any(old.get(k) != state.get(k)
+                                  for k in ('round', 'status', 'draw', 'sources'))
+                    if changed:
+                        self._accept_fast_state(state)
+                    if getattr(self, "_needs_storage_save", False):
+                        await self._save_storage()
                 self.async_update_listeners()
-        # Official reconciliation is less frequent than the fast RSS path.
-        if force or time.monotonic() - getattr(self, '_last_fast_mirror', 0) >= 300:
-            self._last_fast_mirror = time.monotonic()
-            await self.async_check_draw_result()
+
+        async def mirror() -> None:
+            # Use a separate route concurrently. Never block a news result behind
+            # a mirror timeout, and never regenerate recommendations or call AI.
+            interval_mirror = max(60, interval)
+            if force or time.monotonic() - getattr(self, '_last_fast_mirror', -float('inf')) >= interval_mirror - 1:
+                self._last_fast_mirror = time.monotonic()
+                await self.async_refresh_published_history(target)
+
+        async def publishers() -> None:
+            state = await client.check(target, now=now, on_result=accept)
+            await accept(state)
+
+        outcomes = await asyncio.gather(publishers(), mirror(), return_exceptions=True)
+        for route, outcome in zip(('publishers', 'official_history'), outcomes):
+            if isinstance(outcome, Exception):
+                diagnostics = getattr(self, '_fast_diagnostics', {})
+                diagnostics.setdefault('route_errors', {})[route] = type(outcome).__name__
+                self._fast_diagnostics = diagnostics
+                self.async_update_listeners()

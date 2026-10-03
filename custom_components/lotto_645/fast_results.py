@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import math
 from datetime import UTC, datetime
+from collections.abc import Awaitable, Callable
 from email.utils import parsedate_to_datetime
 import time
 from urllib.parse import urlsplit
@@ -96,10 +97,11 @@ class FastResultClient:
         self._crawl_delay[host] = float(rule.crawl_delay(UA) or 0)
         return rule.can_fetch(UA, url)
 
-    async def check(self, target_round: int, *, now: datetime | None = None) -> dict:
+    async def check(self, target_round: int, *, now: datetime | None = None,
+                    on_result: Callable[[dict], Awaitable[None]] | None = None) -> dict:
         now = now or datetime.now(UTC)
         async with self._lock:
-            if time.monotonic() - self._last_at < 55 and self.target == target_round:
+            if time.monotonic() - self._last_at < 29 and self.target == target_round:
                 return select_result(list(self.evidence.values()))
             self._last_at = time.monotonic()
             if self.target != target_round:
@@ -115,13 +117,14 @@ class FastResultClient:
                     if raw is None:
                         self.status[publisher] = "재시도 대기"
                         return
-                    candidates = rss_items(raw, publisher, target_round, now)
+                    candidates = sorted(rss_items(raw, publisher, target_round, now),
+                                        key=lambda item: item["published_at"], reverse=True)
                     accepted = []
                     article_requests = 0
                     for item in candidates[:3]:
                         evidence = parse_report(item['title'], item['content'], publisher,
                                                 item['url'], item['published_at'], target_round, now)
-                        if evidence is None and not accepted and article_requests < 1 and await self._allowed(item['url']):
+                        if evidence is None and not accepted and article_requests < 2 and await self._allowed(item['url']):
                             article_requests += 1
                             article = await self._read(item['url'], limit=1_500_000)
                             if article:
@@ -138,7 +141,24 @@ class FastResultClient:
                     self.status[publisher] = "해당 회차 완전한 결과 수신" if accepted else "해당 회차 본번호·보너스 발표 대기"
                 except (TimeoutError, ClientError, ValueError, ET.ParseError, UnicodeError):
                     self.status[publisher] = "응답 오류/형식 변경: 다음 허용 시각 재확인"
-            await asyncio.gather(*(source(publisher, url) for publisher, url in FEEDS))
+            async def bounded_source(publisher: str, url: str) -> None:
+                try:
+                    async with asyncio.timeout(20):
+                        await source(publisher, url)
+                except TimeoutError:
+                    self.status[publisher] = "출처 응답 시간 초과: 다음 주기에 재확인"
+                # Publish a complete result immediately, without waiting for a
+                # slow unrelated feed. A later disagreement still suspends grading.
+                if on_result is not None:
+                    update = select_result(list(self.evidence.values()))
+                    update["checked_at"] = now.isoformat()
+                    update["providers"] = dict(self.status)
+                    await on_result(update)
+            outcomes = await asyncio.gather(*(bounded_source(publisher, url)
+                                               for publisher, url in FEEDS), return_exceptions=True)
+            for outcome in outcomes:
+                if isinstance(outcome, Exception):
+                    raise outcome
             result = select_result(list(self.evidence.values()))
             result["checked_at"] = now.isoformat()
             result["providers"] = dict(self.status)
