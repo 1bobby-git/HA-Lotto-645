@@ -110,6 +110,6 @@ class FinalizationPanel extends HTMLElement {
     for(const row of result.source_games||[]){const line=make('div','','finalization-game');line.append(make('span',row.formula_id),this.balls(row.numbers));original.append(line);}this.results.append(original);
   }
 }
-if(!customElements.get('lotto-finalization-panel-v2-4-23'))customElements.define('lotto-finalization-panel-v2-4-23',FinalizationPanel);
+if(!customElements.get('lotto-finalization-panel-v2-4-24'))customElements.define('lotto-finalization-panel-v2-4-24',FinalizationPanel);
 
 })();

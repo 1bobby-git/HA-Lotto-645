@@ -1,5 +1,5 @@
 /* UI entry point: two-tier Home Assistant header with manual-only page synchronization. */
-import { PANEL_TAG } from './lotto-panel-core.js?v=2.4.23';
+import { PANEL_TAG } from './lotto-panel-core.js?v=2.4.24';
 
 const PANEL_NAME = 'Lotto 6/45 Analysis';
 const OFFICIAL_RESULT_STATES = new Set(['official_history', 'official_confirmed', 'official_corrected']);
@@ -144,5 +144,5 @@ Panel.prototype.render = function (...args) {
 
 
 // Keep announcement delivery independent of manual page refresh.
-import { installLiveSync } from './lotto-panel-live.js?v=2.4.23';
+import { installLiveSync } from './lotto-panel-live.js?v=2.4.24';
 installLiveSync(Panel);

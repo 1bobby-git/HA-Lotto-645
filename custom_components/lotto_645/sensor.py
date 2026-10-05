@@ -21,7 +21,7 @@ from .const import (
 from .coordinator import Lotto645Coordinator
 from .entity import Lotto645Entity
 from .methods import METHOD_MYUNGRI_HETU, METHOD_SELECTED_MEDIAN, METHOD_SELECTED_VOTE, METHODS_BY_ID, method_catalog
-from .game_entities import game_entity_name, game_unique_id, game_unique_ids
+from .game_entities import configured_game_unique_ids, game_entity_name, game_unique_id
 from .purchased_tickets import matching_purchase_games
 from .review import NOTICE as REVIEW_NOTICE
 from .result_details import decorate_result, winning_attributes
@@ -72,9 +72,11 @@ def _game_attributes(coordinator: Lotto645Coordinator, games: list) -> list[dict
 def _active_optional_sensor_unique_ids(coordinator: Lotto645Coordinator) -> set[str]:
     """Return optional sensor registry identities that should exist now."""
     entry_id = coordinator.entry.entry_id
-    active = set()
-    for method_id in coordinator.selected_method_ids:
-        active |= game_unique_ids(entry_id, method_id, coordinator.game_count(method_id))
+    # Registry identity follows saved options, even before the profile/service
+    # is ready. A temporarily unavailable formula must not lose customization.
+    active = configured_game_unique_ids(
+        entry_id, coordinator.entry.options, coordinator.configured_method_ids
+    )
     if METHOD_MYUNGRI_HETU in coordinator.configured_method_ids:
         active.add(f"{entry_id}_saju_profile")
     if coordinator.ai_enabled:
@@ -87,9 +89,9 @@ def _prune_stale_optional_sensor_entities(
 ) -> None:
     """Delete deselected formula/AI/profile sensors from the HA registry.
 
-    Options changes reload the entry. At the next sensor setup, old entities are
-    no longer active but their registry records would otherwise remain and show
-    as unavailable. Only this integration's optional sensor identities are
+    Run before the options reload and before the first network refresh, as well
+    as at sensor setup, so connection failures cannot strand excess entities.
+    Only this integration's optional sensor identities are
     touched; review/history data and stable summary/result entities are kept.
     """
     registry = er.async_get(hass)
@@ -167,7 +169,7 @@ class LottoRecommendationsSensor(Lotto645Entity, SensorEntity):
         return {
             "purpose": "선택한 공식별 추천번호·근거·생성시각을 모은 요약입니다. 센서 값은 추천 대상 회차이며 점수나 당첨 개수가 아닙니다.",
             "how_to_view": (
-                "각 공식은 요청한 게임 수만큼 별도 센서(1번 | 공식명, 2번 | 공식명, ...)로 "
+                "각 공식은 요청한 게임 수만큼 별도 센서(공식명 | 1번, 공식명 | 2번, ...)로 "
                 "노출되며 각 센서의 state가 그 게임의 6개 번호입니다. games 속성에는 같은 "
                 "공식의 전체 게임이 함께 담깁니다. 실제 결과는 n회 추첨번호·당첨 여부, 직접 "
                 "입력한 구매번호는 내 구매번호 센서에서 확인하세요."

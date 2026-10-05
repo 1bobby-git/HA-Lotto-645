@@ -35,10 +35,10 @@ def test_a_count_below_one_still_keeps_the_primary_sensor():
 
 def test_names_carry_the_game_number_without_review_stars():
     plain = entities.game_entity_name(1, '빈도 프리셋 · 핫넘버')
-    assert plain == '1번 | 빈도 프리셋 · 핫넘버'
+    assert plain == '빈도 프리셋 · 핫넘버 | 1번'
     assert '☆' not in plain and '★' not in plain
     bought = entities.game_entity_name(5, '빈도 프리셋 · 핫넘버', purchased=True)
-    assert bought == '5번 | ✓구매일치 | 빈도 프리셋 · 핫넘버'
+    assert bought == '빈도 프리셋 · 핫넘버 | 5번 | ✓구매일치'
 
 
 def test_sensor_module_builds_one_entity_per_configured_game_and_names_it_without_stars():

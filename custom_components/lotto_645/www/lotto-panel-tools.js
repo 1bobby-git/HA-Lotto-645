@@ -1,8 +1,8 @@
 /* Read-only method help and local countdown. Never polls or generates numbers. */
-const VERSION = '2.4.23';
+const VERSION = '2.4.24';
 const WEEK = 7 * 86400000;
 const DOC_CACHE = new Map();
-import {lastReviewPresentation,currentRecommendations} from './lotto-panel-view.js?v=2.4.23';
+import {lastReviewPresentation,currentRecommendations} from './lotto-panel-view.js?v=2.4.24';
 const AI_ID = 'home_assistant_ai';
 const validId = id => typeof id === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(id);
 const element = (tag, text, className) => {
@@ -348,7 +348,7 @@ class LottoPanelTools extends HTMLElement {
     else if (!event.shiftKey && active === last) { event.preventDefault(); first?.focus(); }
   }
 }
-const TOOLS_TAG = 'lotto-panel-tools-v2-4-23';
+const TOOLS_TAG = 'lotto-panel-tools-v2-4-24';
 if (!customElements.get(TOOLS_TAG)) customElements.define(TOOLS_TAG, LottoPanelTools);
 
 export function applyPanelTools(panel) {
