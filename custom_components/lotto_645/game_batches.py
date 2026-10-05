@@ -88,7 +88,7 @@ def merge_batches(
     """
     rows: list[Recommendation] = []
     for method_id in ids:
-        games = distinct_games(collected.get(method_id, ()))
+        games = distinct_games(collected.get(method_id, ()))[:requested_count(counts, method_id)]
         for formula_game, item in enumerate(games, start=1):
             rows.append(
                 replace(item, index=len(rows) + 1, formula_game=formula_game)

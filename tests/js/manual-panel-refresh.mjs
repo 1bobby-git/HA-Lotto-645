@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const read = name => fs.readFileSync('custom_components/lotto_645/www/'+name,'utf8');
+const version = JSON.parse(fs.readFileSync('custom_components/lotto_645/manifest.json','utf8')).version.replaceAll('.','-');
 const tick = async () => {for(let i=0;i<8;i++) await Promise.resolve();};
 const timers=[]; const listeners=[]; const notices=[];
 globalThis.document={hidden:false,addEventListener:(...a)=>listeners.push(a),removeEventListener(){}};
@@ -40,7 +41,7 @@ assert.ok(!read('lotto-panel-core.js').includes('setInterval('));
 // Execute finalization completion to verify it no longer rearms a five-second poll.
 let Finalization;
 globalThis.HTMLElement=class {};
-globalThis.customElements={get:()=>null,define:(name,cls)=>{assert.equal(name,'lotto-finalization-panel-v2-4-23');Finalization=cls;}};
+globalThis.customElements={get:()=>null,define:(name,cls)=>{assert.equal(name,'lotto-finalization-panel-v'+version);Finalization=cls;}};
 vm.runInThisContext(read('finalization-panel.js'));
 const finalPanel=new Finalization();finalPanel.isConnected=true;let finalCalls=0;
 finalPanel.adapter=async()=>{finalCalls++;return {};};finalPanel.availability=()=>{};finalPanel.render=()=>{};

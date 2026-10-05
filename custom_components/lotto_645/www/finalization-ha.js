@@ -5,9 +5,9 @@ export function applyFinalizationPanel(panel){
   let style=root.querySelector('link[data-finalization-style]');
   if(!style){style=document.createElement('link');style.rel='stylesheet';style.href=new URL('./finalization-panel.css',import.meta.url).href;style.dataset.finalizationStyle='1';root.append(style);}
   const host=root.getElementById('screen-review');if(!host)return;
-  let widget=host.querySelector('lotto-finalization-panel-v2-4-23');
+  let widget=host.querySelector('lotto-finalization-panel-v2-4-24');
   if(!widget){
-    widget=document.createElement('lotto-finalization-panel-v2-4-23');host.append(widget);
+    widget=document.createElement('lotto-finalization-panel-v2-4-24');host.append(widget);
     let entry=null;
     widget.configure(async(action,data)=>{
       const current=panel.node('entry')?.value;if(current!==entry){entry=current;widget.selected=null;widget.resultSignature=null;}

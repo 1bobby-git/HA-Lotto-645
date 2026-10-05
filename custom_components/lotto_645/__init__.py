@@ -28,6 +28,8 @@ _RESULT_CHECKS_UTC = (
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload after selected methods or AI options change."""
+    from .sensor import _prune_stale_optional_sensor_entities
+    _prune_stale_optional_sensor_entities(hass, entry, entry.runtime_data)
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -35,8 +37,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Lotto 6/45 Analysis from a config entry."""
     from .migration import async_cleanup_removed_features
     await async_cleanup_removed_features(hass, entry)
-    await async_register_ticket_panel(hass, entry)
     coordinator = Lotto645Coordinator(hass, entry)
+    from .sensor import _prune_stale_optional_sensor_entities
+    _prune_stale_optional_sensor_entities(hass, entry, coordinator)
+    await async_register_ticket_panel(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))

@@ -136,9 +136,9 @@ def test_pruner_keeps_guide_and_active_formula_but_removes_deselected():
     registry=SimpleNamespace(async_remove=Mock())
     er=SimpleNamespace(async_get=lambda h:registry,async_entries_for_config_entry=lambda r,e:entries)
     env={'Lotto645Coordinator':object,'HomeAssistant':object,'ConfigEntry':object,'er':er,'DOMAIN':'lotto_645',
-         'METHOD_MYUNGRI_HETU':'myungri_hetu_day_pillar','game_unique_ids':game_entities.game_unique_ids}
+         'METHOD_MYUNGRI_HETU':'myungri_hetu_day_pillar','configured_game_unique_ids':game_entities.configured_game_unique_ids}
     exec(compile(ast.fix_missing_locations(ast.Module(body=nodes,type_ignores=[])),'sensor','exec'),env)
-    entry=SimpleNamespace(entry_id='entry')
+    entry=SimpleNamespace(entry_id='entry', options={'game_counts': {'uniform_fisher_yates': 3}})
     owner=SimpleNamespace(entry=entry,selected_method_ids=['uniform_fisher_yates'],
                           configured_method_ids=['uniform_fisher_yates'],ai_enabled=False,
                           game_count=lambda method_id:3)
@@ -157,9 +157,9 @@ def test_pruner_removes_extra_game_sensors_when_the_count_drops():
     registry=SimpleNamespace(async_remove=Mock())
     er=SimpleNamespace(async_get=lambda h:registry,async_entries_for_config_entry=lambda r,e:entries)
     env={'Lotto645Coordinator':object,'HomeAssistant':object,'ConfigEntry':object,'er':er,'DOMAIN':'lotto_645',
-         'METHOD_MYUNGRI_HETU':'myungri_hetu_day_pillar','game_unique_ids':game_entities.game_unique_ids}
+         'METHOD_MYUNGRI_HETU':'myungri_hetu_day_pillar','configured_game_unique_ids':game_entities.configured_game_unique_ids}
     exec(compile(ast.fix_missing_locations(ast.Module(body=nodes,type_ignores=[])),'sensor','exec'),env)
-    entry=SimpleNamespace(entry_id='entry')
+    entry=SimpleNamespace(entry_id='entry', options={'game_counts': {'uniform_fisher_yates': 1}})
     owner=SimpleNamespace(entry=entry,selected_method_ids=['uniform_fisher_yates'],
                           configured_method_ids=['uniform_fisher_yates'],ai_enabled=False,
                           game_count=lambda method_id:1)

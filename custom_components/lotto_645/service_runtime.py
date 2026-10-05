@@ -197,11 +197,17 @@ class ServiceRuntime(FinalizationRuntime):
                 await asyncio.sleep(2)
                 result=await manager.poll()
                 if result is None or result.status in ('completed','failed','cancelled'):
+                    # A refresh can start the next missing game. Release this
+                    # follower's slot first so that job gets its own follower
+                    # instead of waiting for the five-minute recovery timer.
+                    self.retry_tasks.discard(asyncio.current_task())
                     await self.owner.async_request_refresh()
                     return
         except (LabServiceError,OSError,ValueError):
             self.status='connection_unavailable'
             self.owner.async_update_listeners()
+        finally:
+            self.retry_tasks.discard(asyncio.current_task())
 
     async def analysis(self):
         async with self.lock:
@@ -238,21 +244,18 @@ class ServiceRuntime(FinalizationRuntime):
         """
         ids=self.owner.selected_method_ids
         counts=self.owner.formula_game_counts
-        if not self.client or not ids or all(value<=1 for value in counts.values()):
-            # One game per formula stays exactly one request with one durable key.
-            return await self._analysis()
         collected={}
         summaries=[]
-        for _ in range(MAX_GAMES_PER_FORMULA):
+        # Resolve the primary slot after connection setup/recovery. Even the
+        # one-game case must merge, since a cached result can contain more games
+        # than the newly reduced count. Never discard the durable saved result.
+        for index in range(MAX_GAMES_PER_FORMULA):
             batch_ids=next_batch(ids,counts,collected)
-            if not batch_ids:
+            if index and (not batch_ids or not self.client):
                 break
-            result=await self._analysis(manager=self._remote_manager(len(summaries)),ids=batch_ids)
+            result=(await self._analysis() if index == 0 else
+                    await self._analysis(manager=self._remote_manager(index),ids=batch_ids))
             summaries.append(result)
-            if not summaries[:-1] and not result.recommendations:
-                # The loop is only entered with an outstanding formula, so the
-                # first batch always records a result to build the summary from.
-                return result
             if result.target_round!=self.owner.history[-1].round+1:
                 break  # this batch could not confirm the upcoming round
             fresh=0
@@ -271,7 +274,6 @@ class ServiceRuntime(FinalizationRuntime):
         return self._merge_batches(counts,collected,summaries)
 
     async def _analysis(self, manager=None, ids=None):
-        manager = self.generator if manager is None else manager
         if ids is None:
             ids = self.owner.selected_method_ids
         if self.connection_manager.needs_refresh:
@@ -282,6 +284,7 @@ class ServiceRuntime(FinalizationRuntime):
             return self.legacy_analysis(ids)
         if self.catalog is None or time.monotonic()-self.catalog_updated_at>3600 or self.status in ('connection_unavailable','reauth_required'):
             await self.prepare()
+        manager = self.generator if manager is None else manager
         target=self.owner.history[-1].round+1
         options={}
         # Deprecated manual generation rules and JSON overrides are not applied.

@@ -274,7 +274,7 @@ def test_configured_counts_request_one_batch_per_outstanding_game():
     third = Manager([[[3, 4, 5, 6, 7, 8]]])
     runtime, analysis = run_batches({UNIFORM: 3}, {0: first, 1: second, 2: third})
     assert [call.calls for call in (first, second, third)] == [1, 1, 1]
-    assert runtime.requested_batches == [0, 1, 2]
+    assert runtime.requested_batches == [1, 2]
     assert [row.numbers for row in analysis.recommendations] == [
         (1, 2, 3, 4, 5, 6), (2, 3, 4, 5, 6, 7), (3, 4, 5, 6, 7, 8)
     ]
@@ -291,20 +291,21 @@ def test_a_server_returning_every_game_at_once_needs_no_extra_batch():
     unused = Manager([[[9, 10, 11, 12, 13, 14]]])
     runtime, analysis = run_batches({UNIFORM: 3}, {0: single, 1: unused})
     assert single.calls == 1
-    assert runtime.requested_batches == [0]
+    assert runtime.requested_batches == []
     assert len(analysis.recommendations) == 3
     assert [row.formula_game for row in analysis.recommendations] == [1, 2, 3]
     assert analysis.summary['game_shortfall'] == {}
 
 
-def test_default_single_game_formula_stays_on_the_untouched_single_request_path():
+def test_default_single_game_formula_uses_one_request_and_normalized_summary():
     only = Manager([[[1, 2, 3, 4, 5, 6]]])
     runtime, analysis = run_batches({}, {0: only})
     assert only.calls == 1
     assert runtime.requested_batches == []
     assert len(analysis.recommendations) == 1
-    # The unchanged single-game result keeps its own summary untouched.
-    assert analysis.summary == {'core_version': '1.26.0', 'generation_id': 'gen-1'}
+    assert analysis.summary['generation_id'] == 'gen-1'
+    assert analysis.summary['batch_count'] == 1
+    assert analysis.summary['game_shortfall'] == {}
 
 
 def test_a_batch_that_cannot_add_a_game_stops_instead_of_looping():
@@ -313,7 +314,7 @@ def test_a_batch_that_cannot_add_a_game_stops_instead_of_looping():
     repeat = Manager([[[1, 2, 3, 4, 5, 6]]])
     runtime, analysis = run_batches({UNIFORM: 4}, {0: first, 1: repeat, 2: repeat})
     assert [call.calls for call in (first, repeat)] == [1, 1]
-    assert runtime.requested_batches == [0, 1]
+    assert runtime.requested_batches == [1]
     assert [row.numbers for row in analysis.recommendations] == [(1, 2, 3, 4, 5, 6)]
     assert analysis.summary['game_shortfall'] == {UNIFORM: 3}
 
@@ -324,7 +325,7 @@ def test_an_outage_keeps_the_accepted_games_and_reports_the_rest():
     runtime, analysis = run_batches({UNIFORM: 3}, {0: first, 1: failing, 2: failing})
     assert [row.numbers for row in analysis.recommendations] == [(1, 2, 3, 4, 5, 6)]
     assert analysis.summary['game_shortfall'] == {UNIFORM: 2}
-    assert runtime.requested_batches == [0, 1]
+    assert runtime.requested_batches == [1]
 
 
 def test_only_the_formulas_that_need_more_games_join_a_later_batch():
