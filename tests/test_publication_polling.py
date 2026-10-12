@@ -118,7 +118,7 @@ def test_confirmed_target_stops_network_checks(monkeypatch):
 
 def history_method():
     path = Path(__file__).resolve().parents[1]/'custom_components/lotto_645/coordinator.py'
-    cls = next(n for n in ast.parse(path.read_text()).body if isinstance(n, ast.ClassDef) and n.name=='Lotto645Coordinator')
+    cls = next(n for n in ast.parse(path.read_text(encoding="utf-8")).body if isinstance(n, ast.ClassDef) and n.name=='Lotto645Coordinator')
     method = next(n for n in cls.body if getattr(n, 'name', '')=='async_refresh_published_history')
     from dataclasses import replace
     api = importlib.import_module('custom_components.lotto_645.api')
@@ -194,7 +194,7 @@ def test_partial_mirror_progress_is_not_lost_to_shared_etag():
 
 def test_pending_transition_clears_old_generation_cache_on_regular_refresh():
     path=Path(__file__).resolve().parents[1]/'custom_components/lotto_645/coordinator.py'
-    tree=ast.parse(path.read_text())
+    tree=ast.parse(path.read_text(encoding="utf-8"))
     method=next(n for n in ast.walk(tree) if isinstance(n,ast.AsyncFunctionDef) and n.name=='_async_update_data')
     block=next(n for n in method.body if isinstance(n,ast.If)
                and '_pending_result_round_transition' in ast.unparse(n.test))

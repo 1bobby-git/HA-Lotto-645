@@ -34,7 +34,7 @@ def serialize_form(result):
 
 
 async def main():
-    init_tree=ast.parse((ROOT/'custom_components/lotto_645/__init__.py').read_text())
+    init_tree=ast.parse((ROOT/'custom_components/lotto_645/__init__.py').read_text(encoding="utf-8"))
     schedule=next(ast.literal_eval(node.value) for node in init_tree.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='_RESULT_CHECKS_UTC' for target in node.targets))
     assert schedule == ((5,11,55),(5,12,20),(5,12,50),(5,13,30),(5,14,0),(6,0,40))
     with tempfile.TemporaryDirectory() as folder:

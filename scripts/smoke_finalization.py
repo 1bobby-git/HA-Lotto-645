@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright,expect
 ROOT=Path(__file__).resolve().parents[1];WWW=ROOT/'custom_components/lotto_645/www'
 platform=Path(os.environ.get('FORMULAB_CHECKOUT','D:/Workspace/formulab.kr'))
-fixture=json.loads((platform/'.local/finalizer-fixture.json').read_text());checks=[]
+fixture=json.loads((platform/'.local/finalizer-fixture.json').read_text(encoding="utf-8"));checks=[]
 def check(name,value=True):assert value,name;checks.append(name);print(name,'PASS',flush=True)
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True);context=browser.new_context(viewport={'width':1440,'height':1000},reduced_motion='reduce')

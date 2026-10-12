@@ -93,7 +93,7 @@ def test_dates_serials_price_and_junk_are_not_games():
 
 
 def _handler():
-    tree = ast.parse((BASE / 'ticket_panel.py').read_text())
+    tree = ast.parse((BASE / 'ticket_panel.py').read_text(encoding="utf-8"))
     node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef)
                 and n.name == 'purchases_import_ocr')
     node.decorator_list = []
@@ -133,7 +133,7 @@ def test_websocket_preview_or_incomplete_import_never_touches_storage(preview, r
 
 
 def test_photo_preview_and_explicit_save_share_the_atomic_save_path():
-    core = (BASE / 'www/lotto-panel-core.js').read_text()
+    core = (BASE / 'www/lotto-panel-core.js').read_text(encoding="utf-8")
     assert 'preview:true' in core
     assert '아직 저장하지 않았어요' in core
     assert "this.showEditorStep('edit')" in core
