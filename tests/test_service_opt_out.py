@@ -93,6 +93,24 @@ def test_setup_text_names_the_service_and_what_it_receives():
         assert data['options']['abort']['service_disabled'], path.name
 
 
+def test_setup_text_names_every_background_request():
+    # Not only the 5-minute check: renewal, catalog re-read and job polling too.
+    phrases = {
+        'en': ('status check every 5 minutes', 'renews the registration before its credential expires',
+               'formula list about once an hour', 'polls running generation jobs', 'final computation'),
+        'ko': ('5분마다 연결 상태 확인', '만료되기 전에 등록을 갱신', '약 1시간마다 공식 목록',
+               '생성 중인 작업은 끝날 때까지', '최종 산출'),
+    }
+    for path in TRANSLATIONS:
+        description = json.loads(path.read_text(encoding='utf-8'))['config']['step']['user']['description']
+        for phrase in phrases['ko' if path.name == 'ko.json' else 'en']:
+            assert phrase in description, (path.name, phrase)
+    readme = (BASE.parents[1] / 'README.md').read_text(encoding='utf-8')
+    for phrase in ('등록을 자동 갱신', '1시간이 지났으면 공식 목록', '끝날 때까지 상태를 확인',
+                   '갱신할 때마다 준비 상태', '`connection_type` 속성이 `사용 안 함`'):
+        assert phrase in readme, phrase
+
+
 def _runtime(options):
     class Store:
         async def async_load(self):
