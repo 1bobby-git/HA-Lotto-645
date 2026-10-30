@@ -1,6 +1,6 @@
 /* Authenticated HA websocket data; QR images are decoded locally with bundled jsQR. */
 import './jsQR.js';
-import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.25';
+import { panelTemplate, parseGame, numberBalls, ticketRows, renderRows, lastReviewPresentation, currentRecommendations, currentRecommendationText, renderCurrentRecommendationRows, renderReviewResultRows, formulaLinkLabels } from './lotto-panel-view.js?v=2.4.25';
 import { ticketRowsFromOcr, ticketLinesFromRows, ticketExpectedGames, singleGameTokens, retryDisagrees } from './lotto-ticket-ocr.js?v=2.4.25';
 
 // The exact repository logo selected by the user. Served by the existing HA route.
@@ -607,10 +607,11 @@ class LottoTicketPanel extends HTMLElement {
     const draw=data.draw,meta=data.result_verification||{};
     const lastPresentation=lastReviewPresentation(data);
     const currentRows=currentRecommendations(data);
-    renderCurrentRecommendationRows(this.node('current-recommendations'),currentRows,['현재 생성번호가 없습니다.','공식 선택과 서비스 연결을 확인하세요. 기존 리뷰 기록은 보존됩니다.']);
-    this.node('current-recommendations-heading').textContent=`${formatRound(data.recommendation_target)} · 현재 생성번호`;
     const serviceStatus=data.service_status;
-    this.node('current-recommendations-note').textContent=(serviceStatus==='generating'?'새 번호를 생성 중입니다. 이전 생성번호를 유지합니다. ':serviceStatus&&serviceStatus!=='ready'?`서비스 상태: ${serviceStatus} · 저장된 생성번호를 표시합니다. `:'')+'이번 회차를 위해 현재 선택된 공식이 생성한 번호입니다. 추첨 발표 후 자동으로 평가됩니다.';
+    const serviceText=currentRecommendationText(serviceStatus);
+    renderCurrentRecommendationRows(this.node('current-recommendations'),currentRows,serviceText.empty);
+    this.node('current-recommendations-heading').textContent=`${formatRound(data.recommendation_target)} · 현재 생성번호`;
+    this.node('current-recommendations-note').textContent=serviceText.note+'이번 회차를 위해 현재 선택된 공식이 생성한 번호입니다. 추첨 발표 후 자동으로 평가됩니다.';
     this._targetRound=Number(data.recommendation_target||data.draw_schedule?.round)||this._targetRound;
     const upcomingRound=Number(data.draw_schedule?.round||data.recommendation_target);
     this.node('upcoming-round').textContent=Number.isInteger(upcomingRound)?`다가오는 ${formatRound(upcomingRound)}`:'다가오는 회차 확인 중';

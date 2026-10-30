@@ -36,9 +36,11 @@ from .const import (
     CONF_ENABLE_AI,
     CONF_GAME_COUNTS,
     CONF_SELECTED_METHODS,
+    CONF_USE_SERVICE,
     DEFAULT_AI_AUTO_GENERATE,
     DEFAULT_ALLOW_OFFICIAL_FALLBACK,
     DEFAULT_ENABLE_AI,
+    DEFAULT_USE_SERVICE,
     DISCLAIMER,
     DOMAIN,
     FIRST_PRIZE_ODDS,
@@ -190,6 +192,11 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         return bool(
             self.entry.options.get(CONF_AI_AUTO_GENERATE, DEFAULT_AI_AUTO_GENERATE)
         )
+
+    @property
+    def service_enabled(self) -> bool:
+        """False when the user turned the Lotto Lab number service off."""
+        return bool(self.entry.options.get(CONF_USE_SERVICE, DEFAULT_USE_SERVICE))
 
     @property
     def configured_ai_entity_id(self) -> str | None:
@@ -802,6 +809,9 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
             and self.ai_auto_generate
             and ai_recommendation is None
             and not suppress_ai_generation
+            # A turned-off number service is the user's choice, not a failure:
+            # do not request a ticket or log a warning on every refresh.
+            and self.service_enabled
         ):
             try:
                 ai_recommendation = await self._async_create_ai_recommendation(
@@ -1018,6 +1028,11 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
         if not self.ai_enabled:
             raise AiRecommendationError(
                 "통합 옵션에서 Home Assistant AI 추천을 먼저 활성화하세요"
+            )
+        if not self.service_enabled:
+            raise AiRecommendationError(
+                "Lotto Lab 번호 생성 서비스가 꺼져 있습니다. "
+                "통합 옵션의 '추첨 공식 · AI · 데이터 소스'에서 먼저 켜세요"
             )
         if self.data is None:
             raise AiRecommendationError("로또 분석 데이터가 아직 준비되지 않았습니다")
