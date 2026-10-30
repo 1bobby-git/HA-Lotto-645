@@ -8,6 +8,7 @@ Donghaeng Lottery using at most a few sequential requests.
 
 No proxy rotation, CAPTCHA bypass, IP evasion, concurrency, or rapid retries are
 used. HTTP 403/429 stops the job immediately and the last valid mirror remains.
+A result that would end before the previous mirror is never published either.
 
 When the community archive lags, rounds the previous mirror already verified are
 kept, and each run adds at most the next official round, so a longer outage
@@ -430,6 +431,14 @@ def main() -> int:
     client = OfficialClient()
     remaining = verify_with_official(candidate, client)
     validate_contiguous(candidate)
+    if existing and candidate[-1].round < existing[-1].round:
+        # A disagreeing archive that lags by two or more rounds cannot catch up
+        # in one run; publishing it would move the mirror and the bundled seed
+        # backwards. Fail visibly instead, as before the catch-up change.
+        raise MirrorUpdateError(
+            f"updated history would end at round {candidate[-1].round}, "
+            f"before the previous mirror (round {existing[-1].round})"
+        )
     print(
         f"official verification complete; latest={candidate[-1].round}; "
         f"official requests={client.requests}"

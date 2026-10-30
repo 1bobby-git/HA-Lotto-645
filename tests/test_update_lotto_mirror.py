@@ -97,11 +97,13 @@ def test_disagreeing_previous_mirror_is_not_used_for_extension():
     assert merged[-1].round == 10
 
 
-def _run_main(monkeypatch, *, community: int, existing: int, official: int):
+def _run_main(monkeypatch, *, community, existing: int, official: int):
+    """`community` is the archive's last round, or the archive rows themselves."""
+    rows = history(community) if isinstance(community, int) else list(community)
     written = []
     client = FakeOfficial(official)
     monkeypatch.setattr(mirror, "load_existing_mirror", lambda: history(existing))
-    monkeypatch.setattr(mirror, "download_community_history", lambda: history(community))
+    monkeypatch.setattr(mirror, "download_community_history", lambda: list(rows))
     monkeypatch.setattr(mirror, "OfficialClient", lambda: client)
     monkeypatch.setattr(mirror, "write_payload", written.append)
     return mirror.run(), written, client
@@ -125,6 +127,37 @@ def test_remaining_lag_is_committed_and_reported_as_a_warning(monkeypatch, capsy
     out = capsys.readouterr().out
     assert "::warning title=Lotto history mirror::" in out and "2 round" in out
     assert "2 round" in summary.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(("archive_last", "official"), [(10, 12), (10, 13), (6, 12)])
+def test_disagreeing_lagging_archive_never_publishes_a_shorter_mirror(
+    monkeypatch, capsys, tmp_path, archive_last, official
+):
+    # The archive differs from the previous mirror on a shared round, so the
+    # previous mirror's newer rounds are not reused, and it lags by two or more
+    # rounds. One official round per run cannot reach round 12 again: the run
+    # must fail visibly and keep the previous mirror instead of shrinking it.
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    archive = history(archive_last)
+    archive[4] = make(5, shift=3)
+    code, written, client = _run_main(monkeypatch, community=archive, existing=12, official=official)
+    assert code == 1 and written == []
+    assert client.requests <= mirror.MAX_OFFICIAL_REQUESTS
+    out = capsys.readouterr().out
+    assert "::error title=Lotto history mirror::" in out
+    assert "previous mirror (round 12)" in out and "the previous mirror is kept" in out
+    assert "previous mirror is kept" in summary.read_text(encoding="utf-8")
+
+
+def test_disagreeing_archive_one_round_behind_still_reaches_the_previous_length(monkeypatch):
+    # Same disagreement, but the next official round brings the history back to
+    # the previous mirror's length, so the update is published as before.
+    archive = history(11)
+    archive[4] = make(5, shift=3)
+    code, written, _client = _run_main(monkeypatch, community=archive, existing=12, official=12)
+    assert code == 0 and written[0]["latest_round"] == 12
 
 
 def test_failure_exits_non_zero_with_a_visible_error_annotation(monkeypatch, capsys, tmp_path):
