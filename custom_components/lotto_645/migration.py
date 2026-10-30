@@ -13,6 +13,8 @@ _REMOVED_MODULES = (
     'validation_hit_history', 'validation_lifecycle',
     'analysis', 'sampling', 'consensus', 'voting_consensus', 'saju_rules',
     'formula_settings', 'formula_cache', 'generation_runtime',
+    # Unused since generation moved to the service (no import anywhere).
+    'generation', 'generation_sensor', 'constraints',
 )
 _REMOVED_SCRIPTS = (
     'lotto-panel-portfolio.js', 'lotto-panel-research.js',

@@ -378,8 +378,10 @@ class Lotto645Coordinator(ReviewState, FastResultState, DataUpdateCoordinator[Lo
                     continue
                 free = next((slot for slot in SLOTS if slot not in slots), None)
                 if free is None:
-                    # This ticket is full: continue on a new one, keeping the
-                    # numbers already registered in this press deduplicated.
+                    # This ticket is full. Save what this press added to it
+                    # first, then continue on a new ticket, keeping the numbers
+                    # already registered in this press deduplicated.
+                    flush()
                     ticket_id = None
                     slots = {}
                     free = SLOTS[0]

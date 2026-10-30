@@ -75,8 +75,9 @@ class LottoServiceConnectionSensor(Lotto645Entity, BinarySensorEntity):
         service = self.coordinator.service
         health = service.health
         source = (service.connection_manager.state or {}).get('source')
+        disabled = service.status == 'service_disabled'
         return {
-            'connection_type': CONNECTION_TYPES.get(source, '연결 정보 없음'),
+            'connection_type': '사용 안 함' if disabled else CONNECTION_TYPES.get(source, '연결 정보 없음'),
             'account_linked': source == 'member',
             'member_link': (service.member_link or {}).get('status'),
             'service_status': service.status,
@@ -85,5 +86,8 @@ class LottoServiceConnectionSensor(Lotto645Entity, BinarySensorEntity):
             'device_id': service.info.get('device_id'),
             'core_version': health.get('core_version'),
             'latest_round': health.get('latest_round'),
-            'health_check': '5분마다 Lotto Lab 서비스에 이 기기의 인증 정보로 상태 확인 요청을 보냅니다.',
+            'health_check': (
+                'Lotto Lab 서비스 사용이 꺼져 있어 요청을 보내지 않습니다.' if disabled else
+                '5분마다 Lotto Lab 서비스에 이 기기의 인증 정보로 상태 확인 요청을 보냅니다.'
+            ),
         }

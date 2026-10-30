@@ -4,7 +4,7 @@ from datetime import timedelta
 
 DOMAIN = "lotto_645"
 NAME = "Lotto 6/45 Analysis"
-VERSION = "2.4.24"
+VERSION = "2.4.25"
 
 PLATFORMS = ["sensor", "button", "binary_sensor"]
 UPDATE_INTERVAL = timedelta(hours=6)
@@ -103,3 +103,9 @@ CONF_SERVICE_URL = "service_url"
 CONF_SERVICE_TOKEN = "service_token"
 CONF_SERVICE_CERT = "service_certificate_sha256"
 CONF_PERSONAL_CONSENT = "saju_remote_consent"
+
+# Number generation runs on the Lotto Lab service (lotto.formulab.kr). It stays
+# on by default, as in every earlier release; turned off, no enrollment or
+# request is sent and draw results and saved tickets keep working locally.
+CONF_USE_SERVICE = "use_lotto_lab_service"
+DEFAULT_USE_SERVICE = True

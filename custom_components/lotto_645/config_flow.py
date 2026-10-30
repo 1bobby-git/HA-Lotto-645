@@ -13,7 +13,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
-from .const import CONF_PERSONAL_CONSENT
+from .const import CONF_PERSONAL_CONSENT, CONF_USE_SERVICE, DEFAULT_USE_SERVICE
 from .lab_client import LabServiceError
 from .managed_connection import ManagedConnection
 from .member_link import start as start_member_link, poll as poll_member_link, state_from_tokens
@@ -137,6 +137,10 @@ def _recommendation_schema(options: dict[str, Any]) -> vol.Schema:
                         DEFAULT_ALLOW_OFFICIAL_FALLBACK,
                     )
                 ),
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_USE_SERVICE,
+                default=bool(options.get(CONF_USE_SERVICE, DEFAULT_USE_SERVICE)),
             ): selector.BooleanSelector(),
         }
     )
@@ -334,11 +338,24 @@ class Lotto645ConfigFlow(ConfigFlow, domain=DOMAIN):
         return Lotto645OptionsFlow(config_entry)
 
     async def async_step_user(self, user_input=None):
-        """Create one local entry; service enrollment is automatic during setup."""
-        del user_input
+        """Explain what the automatic Lotto Lab connection sends, then create one entry.
+
+        The service stays on by default, so submitting the form unchanged sets up
+        exactly what earlier releases did. Turned off, no enrollment is sent and
+        draw results and saved tickets still work.
+        """
         if self._async_current_entries():
             return self.async_abort(reason='single_instance_allowed')
-        return self.async_create_entry(title=NAME, data={})
+        if user_input is None:
+            return self.async_show_form(
+                step_id='user',
+                data_schema=vol.Schema({
+                    vol.Required(CONF_USE_SERVICE, default=DEFAULT_USE_SERVICE): selector.BooleanSelector(),
+                }),
+            )
+        # The default stores no option at all, matching entries created before 2.4.25.
+        options = {} if user_input.get(CONF_USE_SERVICE, DEFAULT_USE_SERVICE) else {CONF_USE_SERVICE: False}
+        return self.async_create_entry(title=NAME, data={}, options=options)
 
 
 class Lotto645OptionsFlow(OptionsFlow):
@@ -365,6 +382,9 @@ class Lotto645OptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Optionally link the automatic HA installation to a Lotto Lab member."""
+        if not self._options.get(CONF_USE_SERVICE, DEFAULT_USE_SERVICE):
+            # Linking would contact the service the user turned off.
+            return self.async_abort(reason="service_disabled")
         errors: dict[str, str] = {}
         store = Store(self.hass, 1, f"{DOMAIN}.connection.{self._entry.entry_id}")
         try:

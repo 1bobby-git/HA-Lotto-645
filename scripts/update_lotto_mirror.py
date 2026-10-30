@@ -8,6 +8,11 @@ Donghaeng Lottery using at most a few sequential requests.
 
 No proxy rotation, CAPTCHA bypass, IP evasion, concurrency, or rapid retries are
 used. HTTP 403/429 stops the job immediately and the last valid mirror remains.
+
+When the community archive lags, rounds the previous mirror already verified are
+kept, and each run adds at most the next official round, so a longer outage
+catches up round by round within the same request budget. Failures and any
+remaining lag are printed as GitHub Actions annotations on the workflow run.
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ from datetime import UTC, date, datetime, timedelta
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import time
 from typing import Any
@@ -49,6 +55,22 @@ USER_AGENT = (
 
 class MirrorUpdateError(RuntimeError):
     """Mirror update failed without invalidating the previous mirror."""
+
+
+def annotate(level: str, message: str) -> None:
+    """Print a status line; inside GitHub Actions also add a visible run annotation."""
+    print(f"{level.upper()}: {message}")
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    print(f"::{level} title=Lotto history mirror::{escaped}")
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        try:
+            with open(summary, "a", encoding="utf-8") as handle:
+                handle.write(f"- **Lotto history mirror {level}**: {message}\n")
+        except OSError:
+            pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,23 +322,43 @@ def validate_contiguous(draws: list[Draw]) -> None:
         raise MirrorUpdateError("history must be contiguous from round 1")
 
 
-def verify_with_official(draws: list[Draw], client: OfficialClient) -> None:
-    """Cross-check current community tail with a tiny official request budget."""
+def extend_with_verified_mirror(community: list[Draw], existing: list[Draw]) -> list[Draw]:
+    """Keep rounds the previous mirror already verified beyond the community archive.
+
+    The community archive stays the source for every round it has. Later rounds
+    come from the previous mirror only when both agree on every shared round, so
+    a stale or abandoned archive no longer stops the mirror from advancing.
+    """
+    if len(existing) <= len(community):
+        return community
+    shared = len(community)
+    if any(
+        (left.round, left.numbers, left.bonus) != (right.round, right.numbers, right.bonus)
+        for left, right in zip(community, existing[:shared], strict=True)
+    ):
+        print("previous mirror disagrees with the community archive; its newer rounds are not reused")
+        return community
+    return [*community, *existing[shared:]]
+
+
+def verify_with_official(draws: list[Draw], client: OfficialClient) -> int:
+    """Cross-check the history tail with a tiny official request budget.
+
+    A lagging history gains only the next official round per run (one single
+    request, as before), so a longer lag catches up round by round on the next
+    scheduled runs instead of stopping the mirror. Returns the rounds still
+    missing after this run.
+    """
     official_latest = client.latest_round()
-    if official_latest != draws[-1].round:
-        if official_latest < draws[-1].round:
-            raise MirrorUpdateError(
-                f"community source is ahead of official latest ({draws[-1].round}>{official_latest})"
-            )
-        gap = official_latest - draws[-1].round
-        if gap > 1:
-            raise MirrorUpdateError(
-                f"community source is {gap} rounds behind official; keep previous mirror"
-            )
-        # A one-round publication lag can be filled with one official single request.
-        missing = client.single(official_latest)
+    if official_latest < draws[-1].round:
+        raise MirrorUpdateError(
+            f"history source is ahead of official latest ({draws[-1].round}>{official_latest})"
+        )
+    if official_latest > draws[-1].round:
+        next_round = draws[-1].round + 1
+        missing = client.single(next_round)
         if missing is None:
-            raise MirrorUpdateError("latest official round could not be read safely")
+            raise MirrorUpdateError(f"official round {next_round} could not be read safely")
         draws.append(missing)
 
     latest = draws[-1]
@@ -334,6 +376,7 @@ def verify_with_official(draws: list[Draw], client: OfficialClient) -> None:
         raise MirrorUpdateError(
             f"latest round {latest.round} disagrees with official Donghaeng Lottery data"
         )
+    return official_latest - latest.round
 
 
 def draws_hash(draws: list[Draw]) -> str:
@@ -378,16 +421,25 @@ def same_draws(existing: list[Draw], incoming: list[Draw]) -> bool:
 
 def main() -> int:
     existing = load_existing_mirror()
-    candidate = download_community_history()
-    print(f"community history through round {candidate[-1].round}")
+    community = download_community_history()
+    print(f"community history through round {community[-1].round}")
+    candidate = extend_with_verified_mirror(community, existing)
+    if candidate[-1].round > community[-1].round:
+        print(f"previous verified mirror extends history to round {candidate[-1].round}")
 
     client = OfficialClient()
-    verify_with_official(candidate, client)
+    remaining = verify_with_official(candidate, client)
     validate_contiguous(candidate)
     print(
         f"official verification complete; latest={candidate[-1].round}; "
         f"official requests={client.requests}"
     )
+    if remaining:
+        annotate(
+            "warning",
+            f"mirror is {remaining} round(s) behind official round "
+            f"{candidate[-1].round + remaining}; each scheduled run adds the next official round",
+        )
 
     if existing and same_draws(existing, candidate):
         # Keep mirror updated_at stable, but make sure the release-bundled seed exists.
@@ -406,9 +458,14 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
+def run() -> int:
+    """Entry point: a failure keeps the previous mirror and fails the run visibly."""
     try:
-        raise SystemExit(main())
+        return main()
     except MirrorUpdateError as err:
-        print(f"ERROR: {err}")
-        raise SystemExit(1) from err
+        annotate("error", f"{err}; the previous mirror is kept")
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(run())

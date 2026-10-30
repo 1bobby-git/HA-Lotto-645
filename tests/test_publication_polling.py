@@ -64,6 +64,36 @@ def test_client_deduplicates_simultaneous_checks(monkeypatch):
     asyncio.run(run())
 
 
+def test_feed_and_article_parsing_run_off_the_event_loop(monkeypatch):
+    """A 1.5 MB article took ~0.2 s to parse; that must not block Home Assistant's loop."""
+    import threading
+
+    async def run():
+        client = fast.FastResultClient(None)
+        loop_thread = threading.get_ident()
+        parsed = []
+        article = candidate()
+        async def allowed(url): return True
+        async def read(url, **kwargs): return b'<rss/>' if 'rss' in url.lower() else b'<html></html>'
+        def items(raw, publisher, target, now):
+            parsed.append(('feed', threading.get_ident()))
+            return [dict(title='1240회 로또 당첨번호', content='', url=article.url,
+                         published_at=NOW)] if publisher == 'newsis' else []
+        def report(title, content, publisher, url, published_at, target, now):
+            parsed.append(('report', threading.get_ident()))
+            return None  # forces the bounded article read as well
+        monkeypatch.setattr(client, '_allowed', allowed)
+        monkeypatch.setattr(client, '_read', read)
+        monkeypatch.setattr(fast, 'rss_items', items)
+        monkeypatch.setattr(fast, 'parse_report', report)
+        result = await client.check(1240, now=NOW)
+        assert result['status'] == 'waiting'
+        kinds = [kind for kind, _thread in parsed]
+        assert kinds.count('feed') == len(pub.FEEDS) and kinds.count('report') == 2
+        assert all(thread != loop_thread for _kind, thread in parsed)
+    asyncio.run(run())
+
+
 def test_result_poll_does_not_wait_for_mirror_or_regenerate(monkeypatch):
     async def run():
         published, release = asyncio.Event(), asyncio.Event()

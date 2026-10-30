@@ -3,15 +3,21 @@
   "config": {
     "step": {
       "user": {
-        "title": "Lotto Lab 서비스 연결",
-        "description": "통합을 추가하면 Lotto Lab 서비스(lotto.formulab.kr)에 설치별 고유 자격정보로 자동 연결됩니다. Lotto Lab 계정 로그인이나 승인 코드는 필요하지 않습니다."
+        "title": "Lotto Lab number service",
+        "description": "Number generation runs on the external Lotto Lab service (lotto.formulab.kr), so it needs this connection. With the option below on (default), Home Assistant registers a randomly created installation ID and credential with the service when you add the integration. It then sends number requests (target draw and selected formulas) and a status check every 5 minutes. As with any web request, the service can see your public IP address. Birth details for the Four Pillars formula are sent only after a separate consent. Purchased ticket numbers and ticket photos are never sent. Turn the option off to use only draw results and your saved tickets; you can change it later under Configure > Draw formulas, AI, and data source.",
+        "data": {
+          "use_lotto_lab_service": "Use the Lotto Lab number service (lotto.formulab.kr)"
+        },
+        "data_description": {
+          "use_lotto_lab_service": "Off: no registration, number request or status check is sent. Draw results, saved tickets and result alerts keep working; new numbers are not generated."
+        }
       }
     },
     "abort": {
       "single_instance_allowed": "Only one Lotto 6/45 Analysis instance can be configured."
     },
     "error": {
-      "service_connection_failed": "서버 연결 또는 인증을 확인하세요."
+      "service_connection_failed": "Check the server connection or authentication."
     }
   },
   "options": {
@@ -35,23 +41,25 @@
           "ai_task_entity_id": "AI Task entity (optional; blank uses the preferred data AI Task)",
           "ai_auto_generate": "Automatically generate AI recommendation for a new draw",
           "allow_official_direct_fallback": "Allow limited direct Donghaeng Lottery fallback",
-          "advanced_methods": "Advanced: uniform algorithms / frequency presets (optional)"
+          "advanced_methods": "Advanced: uniform algorithms / frequency presets (optional)",
+          "use_lotto_lab_service": "Use the Lotto Lab number service (lotto.formulab.kr)"
         },
         "data_description": {
           "selected_methods": "Multiple formulas can be selected. Personal Four Pillars can only be enabled after the personal profile has been saved. None of these formulas changes the mathematical winning probability. The selected-formula median consensus requires at least two other local formulas and excludes AI. Sensors for formulas removed from the selection are deleted from the entity registry after reload.",
           "enable_ai_recommendation": "AI is independent from local formulas. Manual Refresh / Regenerate does not regenerate the AI recommendation.",
           "ai_auto_generate": "Only generates AI automatically when a new official draw is detected. Manual local regeneration suppresses AI generation.",
-          "allow_official_direct_fallback": "Only used when the shared mirror is unavailable. It can fetch at most a tiny recent gap, uses sequential rate-limited requests, and never crawls the full history. Keep this disabled unless needed.",
-          "advanced_methods": "Alternative implementations/presets of existing families, not better winning strategies. Existing selections are preserved."
+          "allow_official_direct_fallback": "Only used when the shared mirror is unavailable or has not published the latest draw yet. It fetches at most two recent rounds with sequential, rate-limited requests and never crawls the full history. Keep this disabled unless needed.",
+          "advanced_methods": "Alternative implementations/presets of existing families, not better winning strategies. Existing selections are preserved.",
+          "use_lotto_lab_service": "On by default. Off: Home Assistant sends no registration, number request or status check to the service. Draw results, saved tickets and result alerts keep working; new numbers are not generated."
         }
       },
       "game_counts": {
         "title": "Games per draw formula",
-        "description": "Choose how many six-number games each selected formula produces. Only one sensor is kept per formula; the additional games become attributes of that same entity. No formula changes the first-prize probability."
+        "description": "Choose how many six-number games each selected formula produces. Each game gets its own sensor named \"formula name | 1번\", \"formula name | 2번\" and so on, and every game sensor also lists all games of its formula in the games attribute. Lowering a count removes the extra game sensors. No formula changes the first-prize probability."
       },
       "saju": {
         "title": "Personal Four Pillars profile",
-        "description": "Save personal birth information before using the Four Pillars recommendation. Birth place is selected from the 17 first-level South Korean regions and Asia/Seoul is applied automatically. Raw birth data remains local to Home Assistant.",
+        "description": "Save personal birth information before using the Four Pillars recommendation. Birth place is selected from the 17 first-level South Korean regions and Asia/Seoul is applied automatically. Birth data is stored in Home Assistant. Only when the consent below is on are the birth details needed for the calculation sent to the Lotto Lab calculation server; they are never sent to the history mirror or HA AI prompts.",
         "data": {
           "saju_calendar": "Birth calendar",
           "saju_birth_date": "Birth date (YYYY-MM-DD)",
@@ -62,7 +70,7 @@
           "saju_true_solar_time": "Use true solar time correction",
           "saju_longitude": "Birth longitude (optional)",
           "saju_lunar_standard": "Lunar calendar standard",
-          "saju_remote_consent": "사주 계산에 필요한 출생정보를 계산 서버로 전송하는 데 동의 (입력 원문은 서버에 저장하지 않음)"
+          "saju_remote_consent": "Consent to send the birth details needed for the calculation to the Lotto Lab calculation server (the raw input is not stored on the server)"
         },
         "data_description": {
           "saju_birth_date": "Example: 1982-03-15",
@@ -103,7 +111,7 @@
       "saju_profile_required": "Save the Personal Four Pillars profile from the previous menu before enabling this draw formula.",
       "invalid_saju_profile": "Check birth date, time, lunar standard/leap month, timezone and longitude. Solar-term or DST boundary ambiguity requires a known time.",
       "options_error": "An error occurred while processing the options. Check the entered values and try again.",
-      "consensus_sources_required": "합의 추천에는 합의·AI를 제외한 다른 로컬 공식이 2개 이상 필요합니다.",
+      "consensus_sources_required": "Select at least two other local formulas, excluding aggregate formulas and AI.",
       "invalid_purchase_round": "Enter a positive draw number.",
       "invalid_purchase_numbers": "Enter six distinct integers 1–45 separated by commas/spaces, or twelve zero-padded digits.",
       "purchase_games_required": "Enter at least one game, or select delete explicitly.",
@@ -112,13 +120,14 @@
       "select_korean_birthplace": "Choose one of the 17 South Korean regions.",
       "invalid_generation_rules": "Conditions conflict or a value is out of range. Check the guidance above.",
       "invalid_game_count": "Games per formula must be between 1 and 10.",
-      "service_connection_failed": "서버 주소·토큰·인증서 또는 입력 조건을 확인하세요. 기존 기록은 유지됩니다.",
+      "service_connection_failed": "The Lotto Lab service could not check this. Make sure the service option is on and connected, then check the entered values. Existing records are kept.",
       "member_waiting": "Approval is pending. Approve the connection in Lotto Lab, then submit again.",
       "member_link_failed": "Unable to link the Lotto Lab account. Try again."
     },
     "abort": {
       "purchase_integration_not_ready": "Wait for the integration to finish setup.",
-      "purchase_storage_unavailable": "Check local ticket storage. Existing records have not been overwritten."
+      "purchase_storage_unavailable": "Check local ticket storage. Existing records have not been overwritten.",
+      "service_disabled": "The Lotto Lab service is turned off. Turn it on first under Draw formulas, AI, and data source."
     }
   }
 }
