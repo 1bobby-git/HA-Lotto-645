@@ -1,6 +1,6 @@
 refresh:
-  name: Refresh data and regenerate local numbers
-  description: Refresh the shared Lotto history and regenerate every selected non-AI recommendation from a different high-scoring candidate. The AI recommendation is not regenerated.
+  name: Refresh data and regenerate numbers
+  description: Recheck the shared Lotto history and request new numbers for every selected non-AI formula from the Lotto Lab service. The AI recommendation is not regenerated. When the service is turned off or unreachable, the saved numbers are kept.
 
 generate_ai_recommendation:
   name: Generate Home Assistant AI recommendation

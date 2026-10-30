@@ -552,6 +552,9 @@ class LottoPurchasedTicketsSensor(Lotto645Entity, SensorEntity):
     _lotto_group = 'results'
     _attr_name = "내 구매번호"
     _attr_icon = "mdi:ticket-account"
+    # Purchased lines stay in the live state for templates, but are not copied
+    # into Recorder history on every refresh.
+    _unrecorded_attributes = frozenset({"games"})
 
     def __init__(self, coordinator: Lotto645Coordinator) -> None:
         super().__init__(coordinator)

@@ -10,6 +10,7 @@ import time
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from .const import DOMAIN, CONF_SERVICE_URL, CONF_SERVICE_TOKEN, CONF_SERVICE_CERT, CONF_PERSONAL_CONSENT, MAX_GAMES_PER_FORMULA
+from .const import CONF_USE_SERVICE, DEFAULT_USE_SERVICE
 from .lab_client import LottoLabClient, LabServiceError
 from .remote_generation import RemoteGeneration, retry_due
 from .managed_connection import ManagedConnection, CONNECTION_KEYS, without_user_connection
@@ -95,6 +96,13 @@ class ServiceRuntime(FinalizationRuntime):
                     install_catalog(self.catalog)
             except (ValueError, OSError):
                 pass
+        if not self.entry.options.get(CONF_USE_SERVICE, DEFAULT_USE_SERVICE):
+            # Turned off by the user: no installation identity, enrollment,
+            # catalog, generation or health request leaves Home Assistant.
+            # Saved numbers, tickets and draw results stay available.
+            self.status = 'service_disabled'
+            self._record_health(False, error=self.status)
+            return
         try:
             legacy = {**dict(self.entry.data), **dict(self.entry.options)}
             await self.connection_manager.load(legacy)

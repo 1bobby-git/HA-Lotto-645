@@ -112,6 +112,46 @@ def test_a_full_ticket_starts_a_new_one():
     assert len(owner.purchase_book.tickets) == 2
 
 
+def test_a_partly_filled_ticket_is_completed_before_a_new_one_starts():
+    """Overflowing a partly filled ticket raised KeyError and saved nothing (2.4.24)."""
+    ns = _coordinator_methods('async_register_generated_purchase', '_async_write_purchase',
+                              '_purchase_formula_links')
+    book = PurchaseBook().updated(ROUND, {
+        'game_a': '1 2 3 4 5 6', 'game_b': '2 3 4 5 6 7', 'game_c': '3 4 5 6 7 8',
+    }, now=NOW)
+    original = next(iter(book.tickets))
+    games = [(11, 13, 18, 22, 31, 32), (12, 14, 19, 23, 33, 34),
+             (15, 16, 20, 24, 35, 36), (17, 21, 25, 26, 37, 38)]
+    owner = _owner([_game(i, numbers) for i, numbers in enumerate(games, start=1)], book=book)
+    result = asyncio.run(_run(owner, ns, game_no=None))
+    assert [row['slot'] for row in result['registered']] == ['D', 'E', 'A', 'B']
+    assert result['created_tickets'] == 1 and result['skipped'] == []
+    tickets = owner.purchase_book.tickets
+    assert len(tickets) == 2
+    kept = tickets[original]['games']
+    assert [row['slot'] for row in kept] == ['A', 'B', 'C', 'D', 'E']
+    assert [row['numbers'] for row in kept[3:]] == [list(games[0]), list(games[1])]
+    assert [row['formula_links'][0]['formula_game'] for row in kept[3:]] == [1, 2]
+    new = next(ticket for key, ticket in tickets.items() if key != original)
+    assert [row['slot'] for row in new['games']] == ['A', 'B']
+    assert [row['numbers'] for row in new['games']] == [list(games[2]), list(games[3])]
+
+
+def test_one_free_slot_takes_the_first_game_and_the_rest_start_a_new_ticket():
+    ns = _coordinator_methods('async_register_generated_purchase', '_async_write_purchase',
+                              '_purchase_formula_links')
+    book = PurchaseBook().updated(ROUND, {
+        'game_a': '1 2 3 4 5 6', 'game_b': '2 3 4 5 6 7', 'game_c': '3 4 5 6 7 8',
+        'game_d': '4 5 6 7 8 9',
+    }, now=NOW)
+    owner = _owner([_game(1, (11, 13, 18, 22, 31, 32)), _game(2, (12, 14, 19, 23, 33, 34))],
+                   book=book)
+    result = asyncio.run(_run(owner, ns, game_no=None))
+    assert [row['slot'] for row in result['registered']] == ['E', 'A']
+    assert result['created_tickets'] == 1
+    assert sorted(len(ticket['games']) for ticket in owner.purchase_book.tickets.values()) == [1, 5]
+
+
 def test_the_formula_button_registers_every_game_in_order():
     ns = _coordinator_methods('async_register_generated_purchase', '_async_write_purchase',
                               '_purchase_formula_links')

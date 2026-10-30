@@ -530,6 +530,20 @@ export function currentRecommendations(data) {
     }));
 }
 
+// A number service the user turned off is a choice, not a fault: say so and
+// where to turn it back on instead of a raw status code and a connection hint.
+const SERVICE_ON_PATH="통합 구성 > 추첨 공식 · AI · 데이터 소스에서 'Lotto Lab 번호 생성 서비스 사용'을 켜세요.";
+export function currentRecommendationText(status) {
+  if(status==='service_disabled')return {
+    empty:['Lotto Lab 번호 생성 서비스가 꺼져 있어 새 번호를 만들지 않습니다.',`다시 사용하려면 ${SERVICE_ON_PATH} 당첨번호 확인과 내 복권은 계속 사용할 수 있습니다.`],
+    note:`Lotto Lab 번호 생성 서비스가 꺼져 있습니다. 저장된 생성번호만 표시합니다. 다시 사용하려면 ${SERVICE_ON_PATH} `
+  };
+  return {
+    empty:['현재 생성번호가 없습니다.','공식 선택과 서비스 연결을 확인하세요. 기존 리뷰 기록은 보존됩니다.'],
+    note:status==='generating'?'새 번호를 생성 중입니다. 이전 생성번호를 유지합니다. ':status&&status!=='ready'?`서비스 상태: ${status} · 저장된 생성번호를 표시합니다. `:''
+  };
+}
+
 export function reviewPresentation(data) {
   const report=data.review_round||{}, round=Number(report.round||data.draw_schedule?.round||data.recommendation_target);
   const evaluated=['confirmed','provisional'].includes(report.status);

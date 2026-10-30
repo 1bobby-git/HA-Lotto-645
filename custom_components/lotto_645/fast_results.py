@@ -108,6 +108,9 @@ class FastResultClient:
                 self.target = target_round
                 self.evidence.clear()
             # Parallel distinct publishers; no repeated concurrent hits to a host.
+            # XML/HTML parsing of up to ~2 MB runs in the executor so it cannot
+            # stall Home Assistant's event loop.
+            loop = asyncio.get_running_loop()
             async def source(publisher: str, url: str) -> None:
                 try:
                     if not await self._allowed(url):
@@ -117,19 +120,21 @@ class FastResultClient:
                     if raw is None:
                         self.status[publisher] = "재시도 대기"
                         return
-                    candidates = sorted(rss_items(raw, publisher, target_round, now),
-                                        key=lambda item: item["published_at"], reverse=True)
+                    items = await loop.run_in_executor(None, rss_items, raw, publisher, target_round, now)
+                    candidates = sorted(items, key=lambda item: item["published_at"], reverse=True)
                     accepted = []
                     article_requests = 0
                     for item in candidates[:3]:
-                        evidence = parse_report(item['title'], item['content'], publisher,
-                                                item['url'], item['published_at'], target_round, now)
+                        evidence = await loop.run_in_executor(
+                            None, parse_report, item['title'], item['content'], publisher,
+                            item['url'], item['published_at'], target_round, now)
                         if evidence is None and not accepted and article_requests < 2 and await self._allowed(item['url']):
                             article_requests += 1
                             article = await self._read(item['url'], limit=1_500_000)
                             if article:
-                                evidence = parse_report(item['title'], article.decode('utf-8', 'replace'),
-                                                        publisher, item['url'], item['published_at'], target_round, now)
+                                evidence = await loop.run_in_executor(
+                                    None, parse_report, item['title'], article.decode('utf-8', 'replace'),
+                                    publisher, item['url'], item['published_at'], target_round, now)
                         if evidence:
                             accepted.append(evidence)
                     for evidence in accepted:
